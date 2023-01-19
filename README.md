@@ -3,7 +3,7 @@ Argyle is a suite for formally verifying a neural network's learning in Agda.  W
 
 [TODO]
 
-Argyle is the more careful and deliberate sister of [Mod](https://github.com/ais-climber/mod).  Both share the same core features, but whereas Mod releases very quickly and is easy to use, Argyle promises to be formally verified at the cost of slow releases.
+Argyle is the more careful and deliberate sister of [à la Mode](https://github.com/ais-climber/a-la-mode).  Both share the same core features, but whereas à la Mode releases very quickly and is easy to use, Argyle promises to be formally verified at the cost of slow releases.
 
 **NOTE:** This program is currently very much in development, and many of the planned features involve significant research efforts (this is my PhD). So what the program can do right now is somewhat limited.
 
