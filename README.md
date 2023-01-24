@@ -1,7 +1,5 @@
 ## Argyle: An Agda Library for Reasoning about Learning
-Argyle is a suite for formally verifying a neural network's learning in Agda.  We do this using a succinct modal language that packs a punch.  For example, Argyle has verified the following fact about unsupervised hebbian learning:
-
-[TODO]
+Argyle is a suite for formally verifying a neural network's learning in Agda.  We do this using a succinct modal language that packs a punch.  
 
 Argyle is the more careful and deliberate sister of [à la Mode](https://github.com/ais-climber/a-la-mode).  Both share the same core features, but whereas à la Mode releases very quickly and is easy to use, Argyle promises to be formally verified at the cost of slow releases.
 
