@@ -58,7 +58,6 @@ record BFNN {n : ℕ} : Set where
             → let i = indegree node graph
               in  Nondecreasing {n} {graph} {node} activation (output {i})
 
-
 -- -- Function to make a BFNN from an ordinary neural network
 -- -- TODO: From, e.g., Pytorch.
 -- make-net : {!   !} → BFNN
