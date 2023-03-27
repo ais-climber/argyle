@@ -9,7 +9,7 @@ open Graph
 -------------------------------------------------
 -- This is a graph with ℕ nodes
 -- and Float edge weights.
-def graph : Graph ℕ Float :=
+def graphA : Graph ℕ Float :=
   ⟨#[
     ⟨0, #[⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
     ⟨1, #[⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
@@ -17,21 +17,21 @@ def graph : Graph ℕ Float :=
     ⟨3, #[]⟩
   ]⟩
 
-#check graph
-#eval graph
-#eval graph.edgeCount   -- evals to 7
-#eval graph.order       -- evals to 4
-#eval graph.toArray     -- evals to #[0, 1, 2, 3]
+#check graphA
+#eval graphA
+#eval graphA.edgeCount   -- evals to 7
+#eval graphA.order       -- evals to 4
+#eval graphA.toArray     -- evals to #[0, 1, 2, 3]
 
-#eval graph.inDegree 1      -- evals to 1
-#eval graph.outDegree 1     -- evals to 2
-#eval graph.successors 1    -- evals to #[2, 3]
-#eval graph.predecessors 1  -- evals to #[0]
+#eval graphA.inDegree 1      -- evals to 1
+#eval graphA.outDegree 1     -- evals to 2
+#eval graphA.successors 1    -- evals to #[2, 3]
+#eval graphA.predecessors 1  -- evals to #[0]
 
-#eval graph.inDegree 2      -- evals to 2
-#eval graph.outDegree 2     -- evals to 2
-#eval graph.successors 2    -- evals to #[3, 3]
-#eval graph.predecessors 2  -- evals to #[0, 1]
+#eval graphA.inDegree 2      -- evals to 2
+#eval graphA.outDegree 2     -- evals to 2
+#eval graphA.successors 2    -- evals to #[3, 3]
+#eval graphA.predecessors 2  -- evals to #[0, 1]
 
 -------------------------------------------------
 -- My own graph functions and convenience
@@ -43,19 +43,39 @@ variable {α : Type} [Inhabited α] {β : Type}
 def hasNode (g : Graph α β) (v : α) : Prop :=
   sorry
 
-def hasEdge (g : Graph α β) (u : α) (v : α) : Prop :=
+def hasEdge (g : Graph α β) (u v : α) : Prop :=
   sorry
+
+-- turn into a proper inductive definition
+-- must be a path using distinct edges and distinct verts
+def hasPath (g : Graph α β) (u v : α) : Prop :=
+  sorry
+
+def is_refl (g : Graph α β) : Prop :=
+  ∀ (u : α),
+    g.hasNode u → g.hasEdge u u
+
+def is_symm (g : Graph α β) : Prop :=
+  ∀ (u v : α),
+    g.hasEdge u v → g.hasEdge v u
+
+def is_trans (g : Graph α β) : Prop :=
+  ∀ (u v w : α),
+    g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
+
+def is_acyclic (g : Graph α β) : Prop :=
+  ∀ (u v : α),
+    g.hasPath u v → g.hasPath v u → u = v
 
 end Graph
 
-variable  (G : Graph ℕ Float)
-          (is_refl : ∀ (x : ℕ), 
-            G.hasNode x → G.hasEdge x x)
-          (is_symm : ∀ (x y : ℕ),
-            G.hasEdge x y → G.hasEdge y x)
-          (is_trans : ∀ (x y z : ℕ),
-            G.hasEdge x y → G.hasEdge y z → G.hasEdge x z)
-          (is_acyclic : sorry)
+-------------------------------------------------
+-- Example:  Our graphA is acyclic
+-------------------------------------------------
+theorem graphA_is_acyclic : graphA.is_acyclic :=
+  by
+    sorry
+
 
 -------------------------------------------------
 -- Activation functions
@@ -72,10 +92,33 @@ axiom le_not_lt_float : ∀ (x y : Float), x ≤ y → ¬ (y < x)
 axiom lt_le_lt_float : ∀ (x y z : Float), x < y → y ≤ z → x < z
 axiom zero_le_one : 0.0 ≤ 1.0
 
+theorem binary_step_is_binary (x : Float) :
+    (binary_step x = 0.0) ∨ (binary_step x = 1.0) :=
+    by
+      -- simp [binary_step]
+
+      cases (lt_or_ge_float 0.0 x) with
+
+      -- Case 1: 0.0 < x
+      | inl case1 =>
+          have (h : binary_step x = 1.0) :=
+            by
+              simp only [binary_step]
+              rw [(if_pos case1)]
+          exact Or.inr h
+
+      -- Case 2: ¬ (0.0 < x)
+      | inr case2 =>
+          have (h : binary_step x = 0.0) := 
+            by 
+              simp only [binary_step]
+              rw [(if_neg (le_not_lt_float x 0.0 case2))]
+          exact Or.inl h
+
 -- Proof that binary_step is nondecreasing
 -- This is also a 'hello world' to see if I can
 -- reason about a branching program.
-theorem binary_step_nondecr {x₁ x₂ : Float} (hyp : x₁ ≤ x₂) :
+theorem binary_step_nondecr (x₁ x₂ : Float) (hyp : x₁ ≤ x₂) :
   (binary_step x₁ ≤ binary_step x₂) := 
   by
     -- Simplify by applying the definition of binary_step.
@@ -115,17 +158,26 @@ structure Net where
   graph : Graph ℕ Float
   activation : Float → Float
 
-def net : Net :=
-  ⟨graph, binary_step⟩
-
 structure BFNN extends Net where 
   binary : ∀ (x : Float), 
     (activation x = 0.0) ∨ (activation x = 1.0)
   
-  acyclic : sorry
+  acyclic : graph.is_acyclic
   
   activ_nondecr : ∀ (x₁ x₂ : Float),
     x₁ ≤ x₂ → activation x₁ ≤ activation x₂
 
--- TODO: 
---   How to make Feedforward net and BFNN inherit from Net?
+def myBFNN : BFNN :=
+  {
+    graph := graphA
+    activation := binary_step
+
+    binary := binary_step_is_binary
+    acyclic := graphA_is_acyclic
+    activ_nondecr := binary_step_nondecr
+  }
+
+
+-- TODO Next: Define graph reachability and propagate
+-- Prove that the above BFNN is acyclic, just to make sure
+-- we have the right tools for the job.
