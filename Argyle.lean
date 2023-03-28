@@ -60,7 +60,13 @@ inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
 theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
 
-  sorry
+  intro (h₁ : hasPath g u v)
+  intro (h₂ : hasPath g v w)
+
+  induction h₂
+  case trivial => exact h₁
+  case from_path huv hvw => 
+    exact hasPath.from_path hvw huv
 
 
 def is_refl (g : Graph α β) : Prop :=
