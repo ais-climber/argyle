@@ -373,6 +373,7 @@ theorem reach_is_extens (net : BFNN) : ∀ (S : Set ℕ),
   intro (S : Set ℕ)
   intro (n : ℕ)
   intro (h₁ : n ∈ S)
+
   have (h₂ : hasPath net.toNet.graph n n) := hasPath.trivial
   exact ⟨n, ⟨h₁, h₂⟩⟩
   
@@ -383,7 +384,6 @@ theorem reach_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
   intro (S : Set ℕ)
   
   exact Set.ext (fun (n : ℕ) =>
-
     -- ⊆ direction (the easy direction; just apply 'extensive')
     ⟨(fun (h₁ : n ∈ reachable net S) => 
       let S_reach := reachable net S
@@ -403,10 +403,14 @@ theorem reach_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
 theorem reach_is_monotone (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
   S₁ ⊆ S₂ → reachable net S₁ ⊆ reachable net S₂ := by
 
-  sorry
+  intro (S₁ : Set ℕ)
+  intro (S₂ : Set ℕ)
+  intro (h₁ : S₁ ⊆ S₂)
+  intro (n : ℕ)
+  intro (h₂ : n ∈ reachable net S₁)
 
-
-
+  exact match h₂ with
+    | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
 
 
 
