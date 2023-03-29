@@ -421,7 +421,8 @@ def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ)
       curr_activ = 1.0
     else
       propagateₚ net S n xs
-  
+termination_by sorry
+decreasing_by sorry
 
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
   let topol_sorted := (topSortUnsafe net.graph).toList
