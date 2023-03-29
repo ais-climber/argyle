@@ -4,6 +4,7 @@ import Lean.Parser.Tactic
 import Graph.Graph
 import Graph.TopologicalSort
 import Mathlib.Init.Set
+import Mathlib.Data.List.Defs
 
 open Graph
 open Set
@@ -56,6 +57,7 @@ inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
   | from_path {u v w : ℕ} : 
       hasPath g u v → hasEdge g v w → hasPath g u w
   -- deriving DecidableEq
+  
 
 theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
@@ -65,8 +67,8 @@ theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
 
   induction h₂
   case trivial => exact h₁
-  case from_path huv hvw => 
-    exact hasPath.from_path hvw huv
+  case from_path x y path_vx edge_xy path_ux => 
+    exact hasPath.from_path path_ux edge_xy
 
 
 def is_refl (g : Graph α β) : Prop :=
@@ -155,10 +157,26 @@ end TopologicalSort
 -------------------------------------------------
 -- Example:  Our graphA is acyclic
 -------------------------------------------------
-theorem graphA_is_acyclic : graphA.is_acyclic :=
-  by
-    sorry
+theorem graphA_is_acyclic : graphA.is_acyclic := by
+  intro (u : ℕ) (v : ℕ)
+        (path_uv : hasPath graphA u v)
+        (path_vu : hasPath graphA v u)
 
+  sorry
+
+  -- TODO: Is there a way to just do cases on the specific
+  -- elements of 'graphA'?  Probably if I restrict it to 'Fin'...
+
+  -- induction path_uv
+  -- case trivial => rfl
+  -- case from_path x₁ y₁ path_ux₁ edge_x₁y₁ IH₁ => 
+    
+  --   induction path_vu
+  --   case trivial => rfl
+  --   case from_path x₂ y₂ path_y₁x₂ edge_x₂y₂ IH₂ => 
+  --     sorry
+
+-- exact have (path_xu : hasPath graphA x u) := sorry
 
 -------------------------------------------------
 -- Activation functions
@@ -350,19 +368,74 @@ ordering on the acyclic graph.
 How to do this???
 -/
 
+/-
+Example of induction I got right:
 
+inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
+  | trivial {u : ℕ} :
+      hasPath g u u
+  | from_path {u v w : ℕ} : 
+      hasPath g u v → hasEdge g v w → hasPath g u w
+-/
 
-def propagate_bool (net : BFNN) (S : Set ℕ) (n : ℕ) : Bool :=
-  sorry
-  -- match sorry with
-  -- | _ => sorry
-  -- | _ => sorry
+open Classical
+
+def weighted_sum (weights : List Float) (lst : List Float) : Float :=
+  List.sum sorry
+
+-- For a single node, propagateₚ holds iff that node is n ∈ S. 
+-- Otherwise, check if we are looking at n.  If so,
+-- propagateₚ holds iff either:
+--   1. n ∈ S, or
+--   2. The nodes m preceding n activate n.
+--      (We check their activation values via propagateₚ on m)
+-- If we aren't looking at n, just continue recursively.
+-- 
+-- This is recursion on the topological ordering of the graph!!!
+-- (We can only do this because the graph is acyclic, but
+--  that fact is implicit if we use topSortUnsafe.)
+-- 
+-- TODO: Make this computable!!!
+-- change return type to 'Bool' instead of 'Prop'
+-- and change 'Set' to be a finite set
+-- and change net.graph to be finite as well!
+def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) 
+               (topol_sorted : List ℕ) : Prop :=
+  match topol_sorted with
+  | [] => false
+
+  | x :: [] => 
+    if x = n then n ∈ S else false
+
+  | x :: xs => 
+    if x = n then
+      n ∈ S ∨ -- check this first!
+
+      -- Otherwise, compute the current activation from the previous 
+      -- activation of all the predecessors of n.
+      let preds := (predecessors net.graph n).toList
+      let prev_activ := sorry -- list [propagateₚ S m _ for all m in preds]
+      let weights := sorry -- weights of the preceding edges
+      let weight_sum := sorry -- weighted sum of this list
+      let curr_activ := net.activation weight_sum
+      curr_activ = 1.0
+    else
+      propagateₚ net S n xs
+  
 
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
-  {n : ℕ | propagate_bool net S n}
+  let topol_sorted := (topSortUnsafe net.graph).toList
+  {n : ℕ | propagateₚ net S n topol_sorted}
 
 
-
+#check propagate myBFNN {n : ℕ | n ≤ 4}
+-- #eval propagate myBFNN {n : ℕ | n ≤ 4}
+-- need to make sets finite in order to evaluate???
+-- 
+-- It's important for everything to be evaluatable, since:
+-- 1) I will want to verify that a *specific*
+--    neural network has certain properties
+-- 2) #eval helps me debug errors
 
 
 -------------------------------------------------
