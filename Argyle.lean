@@ -8,6 +8,47 @@ import Mathlib.Data.List.Defs
 
 open Graph
 open Set
+open Classical
+
+-------------------------------------------------
+-- Goofing about with inductive types
+-------------------------------------------------
+
+inductive my_lte : ℕ → ℕ → Prop where
+  | trivial {n : ℕ} :
+      my_lte n n
+  | from_path {m x n : ℕ} : 
+      my_lte m x → n = x + 1 → my_lte m n
+
+#eval my_lte 1 3
+
+
+
+-------------------------------------------------
+-- List comprehensions,
+-- courtesy of lovettchris
+-- See: 
+--   https://github.com/leanprover/lean4-samples/blob/main/ListComprehension/ListComprehension.lean
+-------------------------------------------------
+
+declare_syntax_cat compClause
+syntax "for " term " in " term : compClause
+syntax "if " term : compClause
+
+syntax "[" term " | " compClause,* "]" : term
+
+def List.map' (xs : List α) (f : α → β) : List β := List.map f xs
+
+macro_rules
+  | `([$t:term |]) => `([$t])
+  | `([$t:term | for $x in $xs]) => `(List.map' $xs  (λ $x => $t))
+  | `([$t:term | if $x]) => `(if $x then [$t] else [])
+  | `([$t:term | $c, $cs,*]) => `(List.join [[$t | $cs,*] | $c])
+
+def prod_comprehens (xs : List α) (ys : List β) : List (α × β) := 
+  [(x, y) | for x in xs, for y in ys]
+
+#eval [(x, y) | for x in [1, 2], for y in [3, 4]]
 
 -------------------------------------------------
 -- Graphs
@@ -51,13 +92,17 @@ def hasNode (g : Graph α β) (v : ℕ) : Prop :=
 def hasEdge (g : Graph α β) (u v : ℕ) : Prop :=
   (g.successors u).contains v
 
+def getEdgeWeight (g : Graph α β) (u v : ℕ) : β :=
+  sorry
+
 inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
       hasPath g u u
   | from_path {u v w : ℕ} : 
       hasPath g u v → hasEdge g v w → hasPath g u w
   -- deriving DecidableEq
-  
+  -- TODO: Make graph computable so that we can execute this code:
+  -- #eval hasPath graphA 1 3
 
 theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
@@ -329,59 +374,16 @@ example : ∀ (S : Set α), S ∈ 𝒫 S := by
 -- Forward propagation in a net
 -------------------------------------------------
 
--- should I define this as an inductive data type,
--- or just as a recursive function (that outputs Bool)???
--- 
--- Can I extract the output from an inductive data type?
--- 
--- inductive Propagate (net : BFNN) (S : Set ℕ) (n : ℕ) where
---   | constr1 : Propagate net S n
---   | constr2 : Propagate net S n
-
--- def propagate (net : BFNN) (S : Set ℕ) (n : ℕ)
-
-/-
-I could do something like:
-
-1. Define an inductive type definition of an ordering
-   on an acyclic graph.  (Maybe, the layers???)
-
-2. Define propagateᵇ, the boolean, evaluatable propagate
-
-  def propagateᵇ (net : BFNN) (S : Set ℕ) (n : ℕ) : Bool :=
-    match net.graph with
-    | _ => true if ... false ow
-    | _ => true if ... false ow
-
-3. Unit-test propagateᵇ with #eval!
-
-4. Wrap it in a function that returns a set.
-
-  def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
-    {n : ℕ | propagateᵇ net S n = true}
-    -- = true here might be optional -- Lean is pretty forgiving.
-
-5. Unit-test propagate with #eval!
-
-FIRST, I need an inductive type definition of an
-ordering on the acyclic graph.
-How to do this???
--/
-
-/-
-Example of induction I got right:
-
-inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
-  | trivial {u : ℕ} :
-      hasPath g u u
-  | from_path {u v w : ℕ} : 
-      hasPath g u v → hasEdge g v w → hasPath g u w
--/
-
-open Classical
-
 def weighted_sum (weights : List Float) (lst : List Float) : Float :=
-  List.sum sorry
+  List.sum [w * x | for w in weights, for x in lst]
+
+#eval weighted_sum [] []
+#eval weighted_sum [1.0] [3.0]
+#eval weighted_sum [1.0, 2.0, 3.0] [5.0, 5.0, 5.0]
+
+-- Not well-defined behavior (we expect the weights and lst to be of equal size,
+-- but this is left implicit.)
+#eval weighted_sum [1.0, 2.0] [3.0]
 
 -- For a single node, propagateₚ holds iff that node is n ∈ S. 
 -- Otherwise, check if we are looking at n.  If so,
@@ -399,34 +401,35 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 -- change return type to 'Bool' instead of 'Prop'
 -- and change 'Set' to be a finite set
 -- and change net.graph to be finite as well!
-def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) 
-               (topol_sorted : List ℕ) : Prop :=
-  match topol_sorted with
-  | [] => false
+-- 
+-- Then unit-test all this with #eval!
 
+-- Can I make this into an inductive type, and then do
+-- induction over it?  (That gives me an IH; match does not.)
+def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) 
+               (topol_sorted_reverse : List ℕ) : Prop :=
+  match topol_sorted_reverse with
+  | [] => false -- n is not a node in the graph
   | x :: [] => 
     if x = n then n ∈ S else false
-
+    
   | x :: xs => 
     if x = n then
-      n ∈ S ∨ -- check this first!
-
       -- Otherwise, compute the current activation from the previous 
       -- activation of all the predecessors of n.
       let preds := (predecessors net.graph n).toList
-      let prev_activ := sorry -- list [propagateₚ S m _ for all m in preds]
-      let weights := sorry -- weights of the preceding edges
-      let weight_sum := sorry -- weighted sum of this list
+      let prev_activ := [if propagateₚ net S m xs then 1.0 else 0.0 | for m in preds]
+      let weights := [net.graph.getEdgeWeight m n | for m in preds]
+      let weight_sum := weighted_sum weights prev_activ
       let curr_activ := net.activation weight_sum
-      curr_activ = 1.0
+      n ∈ S ∨ curr_activ = 1.0
     else
       propagateₚ net S n xs
-termination_by sorry
-decreasing_by sorry
+
 
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
-  let topol_sorted := (topSortUnsafe net.graph).toList
-  {n : ℕ | propagateₚ net S n topol_sorted}
+  let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
+  {n : ℕ | propagateₚ net S n topol_sorted_reverse}
 
 
 #check propagate myBFNN {n : ℕ | n ≤ 4}
@@ -438,6 +441,19 @@ def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
 --    neural network has certain properties
 -- 2) #eval helps me debug errors
 
+-------------------------------------------------
+-- Properties of propagation
+-------------------------------------------------
+
+theorem propag_is_extens (net : BFNN) : ∀ (S : Set ℕ),
+  S ⊆ propagate net S := by
+
+  intro (S : Set ℕ)
+  intro (n : ℕ)
+  intro (h₁ : n ∈ S)
+  let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
+
+  sorry
 
 -------------------------------------------------
 -- Graph-reachability
