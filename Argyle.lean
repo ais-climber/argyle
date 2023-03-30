@@ -15,12 +15,10 @@ open Classical
 -------------------------------------------------
 
 inductive my_lte : ℕ → ℕ → Prop where
-  | trivial {n : ℕ} :
-      my_lte n n
-  | from_path {m x n : ℕ} : 
-      my_lte m x → n = x + 1 → my_lte m n
+  | reflexive : my_lte n n
+  | from_succ : my_lte m x → (n = x + 1) → my_lte m n
 
-#eval my_lte 1 3
+-- #eval my_lte 1 3
 
 
 
@@ -86,11 +84,15 @@ def graphA : Graph ℕ Float :=
 namespace Graph
 variable {α : Type} [Inhabited α] {β : Type}
 
-def hasNode (g : Graph α β) (v : ℕ) : Prop :=
+def hasNode (g : Graph α β) (v : ℕ) : Bool :=
   g.getAllVertexIDs.contains v
 
-def hasEdge (g : Graph α β) (u v : ℕ) : Prop :=
+def hasEdge (g : Graph α β) (u v : ℕ) : Bool :=
   (g.successors u).contains v
+
+#eval hasEdge graphA 1 2
+#eval hasEdge graphA 1 3
+#eval hasEdge graphA 4 2
 
 def getEdgeWeight (g : Graph α β) (u v : ℕ) : β :=
   sorry
@@ -100,6 +102,35 @@ inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
       hasPath g u u
   | from_path {u v w : ℕ} : 
       hasPath g u v → hasEdge g v w → hasPath g u w
+
+instance decPath : Decidable (hasPath g u v) :=
+  sorry -- this should implement BFS!!!
+  -- if h : u = v then
+  --   isTrue (Eq.subst h hasPath.trivial)
+  -- else if h : hasEdge g u v then
+  --   isTrue (hasPath.from_path (hasPath.trivial) h)
+  -- else
+  --   sorry
+
+/-
+instance decLte : Decidable (my_lte m n) :=
+  if h : m = n then
+    .isTrue (h ▸ .trivial)
+  else
+    match n with
+    | x + 1 =>
+      have := @decLte m x
+      decidable_of_iff (my_lte m x) ⟨(.from_path · rfl), fun h => by
+        cases h with
+        | trivial => cases h rfl
+        | from_path h e => exact Nat.succ.inj e ▸ h⟩
+    | 0 => .isFalse fun h => by
+      cases h with
+      | trivial => exact h rfl
+      | from_path h e => cases e
+-/
+
+
   -- deriving DecidableEq
   -- TODO: Make graph computable so that we can execute this code:
   -- #eval hasPath graphA 1 3
@@ -370,6 +401,14 @@ example : ∀ (S : Set α), S ∈ 𝒫 S := by
 -- Prove that the above BFNN is acyclic, just to make sure
 -- we have the right tools for the job.
 
+
+theorem setExample : 3 ∈ setC := by 
+  have (h₁ : 3 ≤ 4) := by native_decide
+  constructor
+  exact h₁
+
+
+
 -------------------------------------------------
 -- Forward propagation in a net
 -------------------------------------------------
@@ -409,10 +448,7 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) 
                (topol_sorted_reverse : List ℕ) : Prop :=
   match topol_sorted_reverse with
-  | [] => false -- n is not a node in the graph
-  | x :: [] => 
-    if x = n then n ∈ S else false
-    
+  | [] => n ∈ S
   | x :: xs => 
     if x = n then
       -- Otherwise, compute the current activation from the previous 
@@ -421,7 +457,7 @@ def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ)
       let prev_activ := [if propagateₚ net S m xs then 1.0 else 0.0 | for m in preds]
       let weights := [net.graph.getEdgeWeight m n | for m in preds]
       let weight_sum := weighted_sum weights prev_activ
-      let curr_activ := net.activation weight_sum
+      let curr_activ := net.activation weight_sum 
       n ∈ S ∨ curr_activ = 1.0
     else
       propagateₚ net S n xs
@@ -452,8 +488,53 @@ theorem propag_is_extens (net : BFNN) : ∀ (S : Set ℕ),
   intro (n : ℕ)
   intro (h₁ : n ∈ S)
   let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
+  
+  have (lem₁ : propagateₚ net S n topol_sorted_reverse) := by
+    induction topol_sorted_reverse
 
-  sorry
+    -- Base Case
+    case nil => exact h₁
+    
+    -- Inductive Case
+    case cons x xs IH =>
+      simp only [propagateₚ]
+      split_ifs
+      -- Case: x = n (we're looking at n)
+      case inl h₂ => exact Or.inl h₁
+      -- Otherwise, just recur
+      case inr h₂ => exact IH
+  exact lem₁
+
+theorem propag_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
+  propagate net S = propagate net (propagate net S) := by
+
+  intro (S : Set ℕ)
+  let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
+
+  exact Set.ext (fun (n : ℕ) =>
+    -- TODO: Can I clean this up using tactic language???
+    
+    -- ⊆ direction (the easy direction; just apply 'extensive')
+    ⟨(fun (h₁ : n ∈ propagate net S) => 
+      let S_prop := propagate net S
+      propag_is_extens net S_prop h₁),
+
+    -- ⊇ direction
+    (fun (h₁ : n ∈ propagate net (propagate net S)) =>
+      
+      have (lem₁ : propagateₚ net S n topol_sorted_reverse) := by
+        induction topol_sorted_reverse
+
+        -- Base Case
+        case nil => sorry
+
+        -- Inductive Case
+        case cons x xs IH =>
+          simp only [propagateₚ]
+          split_ifs
+          case inl h₂ => sorry
+          case inr h₂ => exact IH
+      h₁)
 
 -------------------------------------------------
 -- Graph-reachability
