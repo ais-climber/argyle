@@ -424,6 +424,39 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 -- but this is left implicit.)
 #eval weighted_sum [1.0, 2.0] [3.0]
 
+-- Function that gives n's activation value *immediately* 
+-- following its predecessor's activation values, under set S.
+-- (Compute the current activation from the previous 
+-- activation of all the predecessors of n.
+def activ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
+  let preds := (predecessors net.graph n).toList
+  let prev_activ := [if m ∈ S then 1.0 else 0.0 | for m in preds]
+  let weights := [net.graph.getEdgeWeight m n | for m in preds]
+  let weight_sum := weighted_sum weights prev_activ
+  let curr_activ := net.activation weight_sum
+  curr_activ = 1.0
+
+-- If S₁ and S₂ agree on all the predecessors of n,
+-- then they agree on n.
+theorem activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+  let preds := (predecessors net.graph n).toList
+  List.all preds (fun m => activ net S₁ n ↔ activ net S₂ n) -- how to say S₁ and S₂ agree on *all* m ∈ preds??? 
+  → (activ net S₁ n ↔ activ net S₂ n) := by
+
+  intro preds
+  intro h₁
+  apply Iff.intro
+  -- Forward Direction
+  { intro h₂
+    sorry
+  }
+
+  -- Backwards Direction
+  { intro h₂
+    sorry
+  }
+
+
 -- For a single node, propagateₚ holds iff that node is n ∈ S. 
 -- Otherwise, check if we are looking at n.  If so,
 -- propagateₚ holds iff either:
@@ -451,22 +484,85 @@ def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ)
   | [] => n ∈ S
   | x :: xs => 
     if x = n then
-      -- Otherwise, compute the current activation from the previous 
-      -- activation of all the predecessors of n.
-      let preds := (predecessors net.graph n).toList
-      let prev_activ := [if propagateₚ net S m xs then 1.0 else 0.0 | for m in preds]
-      let weights := [net.graph.getEdgeWeight m n | for m in preds]
-      let weight_sum := weighted_sum weights prev_activ
-      let curr_activ := net.activation weight_sum 
-      n ∈ S ∨ curr_activ = 1.0
+      n ∈ S ∨ activ net {m | (propagateₚ net S m xs)} n
     else
       propagateₚ net S n xs
-
 
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
   let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
   {n : ℕ | propagateₚ net S n topol_sorted_reverse}
 
+-------------------------------------------------
+-- Properties of propagation, using function
+-- notation
+-------------------------------------------------
+
+def topol_sort (g : Graph ℕ Float) :=
+  (topSortUnsafe g).toList.reverse
+
+theorem propagateₚ_is_extens (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
+  let sort := (topol_sort net.graph)
+  n ∈ S → propagateₚ net S n sort := by
+  
+  intro (S : Set ℕ)
+  intro (n : ℕ)
+  intro sort
+  intro (h₁ : n ∈ S)
+
+  induction sort
+  case nil => exact h₁
+  case cons x xs IH => 
+    -- Inductive Step
+    simp only [propagateₚ]
+    
+    split_ifs
+    case inl _ => exact Or.inl h₁
+    case inr _ => exact IH
+
+theorem propagateₚ_is_idempotent (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
+  let sort := (topol_sort net.graph)
+  propagateₚ net S n sort ↔ 
+    propagateₚ net {n : ℕ | propagateₚ net S n sort} n sort := by
+
+  intro (S : Set ℕ)
+  intro (n : ℕ)
+  intro sort
+  
+  induction sort generalizing n
+  case nil => exact ⟨fun x => x, fun x => x⟩
+  case cons x xs IH => 
+    -- Inductive Step
+    apply Iff.intro
+
+    -- Forward Direction (do the same thing we did for 'extensive')
+    { intro h₁
+      simp only [propagateₚ]
+      
+      split_ifs
+      case inl _ => exact Or.inl h₁
+      case inr _ => sorry
+      -- need to substitute if x = n then n ∈ S ∨ activ net { m | propagateₚ net S m xs }
+      -- and then it's just our IH.
+    }
+    -- Backwards Direction
+    { simp only [propagateₚ]
+
+      split_ifs
+      case inl x_eq_n =>
+        intro h₁
+        apply Or.inr _
+        -- This is the actually tricky part!
+        sorry
+      case inr x_not_n =>
+        intro h₁
+        sorry
+        -- need to substitute if x = n then n ∈ S ∨ activ net { m | propagateₚ net S m xs }
+      -- and then it's just our IH.
+    }
+
+-------------------------------------------------
+-- Properties of propagation, using set notation
+-------------------------------------------------
 
 #check propagate myBFNN {n : ℕ | n ≤ 4}
 -- #eval propagate myBFNN {n : ℕ | n ≤ 4}
@@ -477,64 +573,22 @@ def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
 --    neural network has certain properties
 -- 2) #eval helps me debug errors
 
--------------------------------------------------
--- Properties of propagation
--------------------------------------------------
-
 theorem propag_is_extens (net : BFNN) : ∀ (S : Set ℕ),
-  S ⊆ propagate net S := by
+  S ⊆ propagate net S := 
 
-  intro (S : Set ℕ)
-  intro (n : ℕ)
-  intro (h₁ : n ∈ S)
-  let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
-  
-  have (lem₁ : propagateₚ net S n topol_sorted_reverse) := by
-    induction topol_sorted_reverse
-
-    -- Base Case
-    case nil => exact h₁
-    
-    -- Inductive Case
-    case cons x xs IH =>
-      simp only [propagateₚ]
-      split_ifs
-      -- Case: x = n (we're looking at n)
-      case inl h₂ => exact Or.inl h₁
-      -- Otherwise, just recur
-      case inr h₂ => exact IH
-  exact lem₁
+  fun (S : Set ℕ) => fun (n : ℕ) => 
+    propagateₚ_is_extens net S n
 
 theorem propag_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
   propagate net S = propagate net (propagate net S) := by
-
+  
   intro (S : Set ℕ)
-  let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
+  apply ext _
+  intro (n : ℕ)
+  apply Iff.intro
 
-  exact Set.ext (fun (n : ℕ) =>
-    -- TODO: Can I clean this up using tactic language???
-    
-    -- ⊆ direction (the easy direction; just apply 'extensive')
-    ⟨(fun (h₁ : n ∈ propagate net S) => 
-      let S_prop := propagate net S
-      propag_is_extens net S_prop h₁),
-
-    -- ⊇ direction
-    (fun (h₁ : n ∈ propagate net (propagate net S)) =>
-      
-      have (lem₁ : propagateₚ net S n topol_sorted_reverse) := by
-        induction topol_sorted_reverse
-
-        -- Base Case
-        case nil => sorry
-
-        -- Inductive Case
-        case cons x xs IH =>
-          simp only [propagateₚ]
-          split_ifs
-          case inl h₂ => sorry
-          case inr h₂ => exact IH
-      h₁)
+  case mp => exact (propagateₚ_is_idempotent net S n).mp
+  case mpr => exact (propagateₚ_is_idempotent net S n).mpr
 
 -------------------------------------------------
 -- Graph-reachability

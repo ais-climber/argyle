@@ -1,5 +1,12 @@
+import Mathlib.Tactic.LibrarySearch
 
-variable (a b : Nat) in
-#synth Decidable (a ≤ b) -- Nat.decLe a b
+-- Minimum working example for doing induction on
+-- a more complicated expression
 
-#check Nat.decLe -- you can see how they did it in Lean
+mutual def even odd
+with even : ℕ → Bool
+| 0     => tt
+| (a+1) => odd a
+with odd : ℕ → Bool
+| 0     => ff
+| (a+1) => even a
