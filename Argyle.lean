@@ -439,9 +439,9 @@ def activ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
 
 -- If S₁ and S₂ agree on all the predecessors of n,
 -- then they agree on n.
-theorem activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
   let preds := (predecessors net.graph n).toList
-  List.all preds (fun m => activ net S₁ n ↔ activ net S₂ n) -- how to say S₁ and S₂ agree on *all* m ∈ preds??? 
+  List.all preds (fun m => activ net S₁ m ↔ activ net S₂ m) -- how to say S₁ and S₂ agree on *all* m ∈ preds??? 
   → (activ net S₁ n ↔ activ net S₂ n) := by
 
   intro preds
@@ -456,7 +456,14 @@ theorem activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
   { intro h₂
     sorry
   }
+/-
+Activ Agree lemma in practice:
 
+Have: activ net { m | m ∈ propagate_helper net S₁ xs } n
+Goal: activ net { m | m ∈ propagate_helper net S₂ xs } n
+
+(rewrite the lemma so that this is how it gets used!)
+-/
 
 -- For a single node, propagateₚ holds iff that node is n ∈ S. 
 -- Otherwise, check if we are looking at n.  If so,
@@ -479,178 +486,193 @@ theorem activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
 
 -- Can I make this into an inductive type, and then do
 -- induction over it?  (That gives me an IH; match does not.)
-def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) 
-               (topol_sorted_reverse : List ℕ) : Prop :=
-  match topol_sorted_reverse with
-  | [] => n ∈ S
-  | x :: xs => 
-    if x = n then
-      n ∈ S ∨ activ net {m | (propagate_helper net S m xs)} n
-    else
-      propagate_helper net S n xs
 
-def propagate (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
-  let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
-  propagate_helper net S n topol_sorted_reverse
+-- Note that Set ℕ is just defined as ℕ → Prop!
+-- This simplifies our definitions.
+def propagate (net : BFNN) (S : Set ℕ) (sort : List ℕ) : Set ℕ :=
+  fun (n : ℕ) =>
+    match sort with
+    | [] => n ∈ S
+    | x :: xs => 
+      if x = n then
+        n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n
+      else
+        n ∈ propagate net S xs
 
--- OLD propagate code!
-  -- let topol_sorted_reverse := (topSortUnsafe net.graph).toList.reverse
-  -- {n : ℕ | propagateₚ net S n topol_sorted_reverse}
+def topol_sort (g : Graph ℕ Float) :=
+  (topSortUnsafe g).toList.reverse
 
-def propagate_helper (net : BFNN) (S : Set ℕ)
-               (topol_sorted_reverse : List ℕ) : Set ℕ :=
-  {n : ℕ | 
-    match topol_sorted_reverse with
-      | [] => n ∈ S
-      | x :: xs => 
-        if x = n then
-          n ∈ S ∨ activ net {m | (propagateₚ net S m xs)} n
-        else
-          propagateₚ net S n xs 
-  }
+-- def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
+--   let sort := topol_sort net.graph
+--   propagate_helper net S sort
 
-def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
+@[simp] lemma simp_propagate : 
+  propagate net S xs =
+  (fun n => 
+    if x = n then 
+      n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n 
+    else n ∈ propagate net S xs) := by
+  
+  sorry
+  -- induction xs
+  -- case nil => 
+  --   simp [propagate]
+  --   sorry
+  -- case cons x xs IH => sorry
 
 -------------------------------------------------
 -- Properties of propagation, using function
 -- notation
 -------------------------------------------------
 
-def topol_sort (g : Graph ℕ Float) :=
-  (topSortUnsafe g).toList.reverse
-
-theorem propagateₚ_is_extens (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
-  let sort := (topol_sort net.graph)
-  n ∈ S → propagateₚ net S n sort := by
+theorem propagate_is_extens (net : BFNN) : ∀ (S : Set ℕ),
+  let sort := topol_sort net.graph
+  S ⊆ propagate net S sort := by
   
   intro (S : Set ℕ)
-  intro (n : ℕ)
-  intro sort
-  intro (h₁ : n ∈ S)
-
+        sort
+        (n : ℕ) (h₁ : n ∈ S)
+  
   induction sort
   case nil => exact h₁
-  case cons x xs IH => 
+  case cons x xs IH =>
     -- Inductive Step
-    simp only [propagateₚ]
-    
+    simp [propagate, Membership.mem, Set.Mem]
+
     split_ifs
     case inl _ => exact Or.inl h₁
     case inr _ => exact IH
 
-theorem propagateₚ_is_idempotent (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
+theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
   let sort := (topol_sort net.graph)
-  propagateₚ net S n sort ↔ 
-    propagateₚ net {t : ℕ | propagateₚ net S t sort} n sort := by
+  propagate net S sort = 
+    propagate net (propagate net S sort) sort := by
 
   intro (S : Set ℕ)
-  intro (n : ℕ)
   intro sort
-  
-  induction sort -- generalizing n
+  apply ext
+  intro (n : ℕ)
+
+  induction sort
   case nil => exact ⟨fun x => x, fun x => x⟩
   case cons x xs IH => 
     -- Inductive Step
     apply Iff.intro
 
-    -- Forward Direction (do the same thing we did for 'extensive')
-    { simp only [propagateₚ]
-      
-      split_ifs
-      case inl x_eq_n => 
-        intro h₁
-        
-        cases h₁
-        case inl h₂ =>
-          apply Or.inl
-          simp [Membership.mem, Set.Mem, setOf]
-          rw [(if_pos x_eq_n)]
-          exact Or.inl h₂
-        case inr h₂ =>
-          apply Or.inr
-          sorry
-      case inr x_not_n =>
-        intro h₁
-        simp [Membership.mem, Set.Mem, setOf]
-        sorry
-        -- a lot harder to show than I thought!
-    }
-    -- Backwards Direction
-    { simp only [propagateₚ]
+    -- Forward Direction (just do what we did for Extensive)
+    -- Question: Can we replace this all with a call to Extensive?
+    { intro h₁
+      simp [propagate, Membership.mem, Set.Mem]
+      simp [propagate, Membership.mem, Set.Mem] at h₁
 
       split_ifs
       case inl x_eq_n =>
-        intro h₁
-        apply Or.inr _
-        -- This is the actually tricky part!
-        apply (activ_agree net S {m | propagateₚ net S m xs} n _).mp
-        
-        -- First, show that n is active in S
-        {sorry}
-        {sorry}
-      case inr x_not_n =>
-        intro h₁
-        apply IH.mpr
-        sorry
+        rw [(if_pos x_eq_n)] at h₁
+        exact Or.inl h₁
+      case inr x_ne_n =>
+        rw [(if_neg x_ne_n)] at h₁
+        convert (IH.mp h₁)
+        apply iff_of_eq
+        congr
+        exact symm simp_propagate
     }
 
-theorem propagateₚ_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ) (n : ℕ),
+    -- Backwards Direction
+    { intro h₁
+      simp [propagate, Membership.mem, Set.Mem]
+      simp [propagate, Membership.mem, Set.Mem] at h₁
+      
+      split_ifs
+      case inl x_eq_n => 
+        rw [(if_pos x_eq_n)] at h₁
+        apply Or.inr
+        sorry -- TODO: activ lemma!
+              -- m ∈ S iff m ∈ propagate net S xs
+              -- (for all m left in xs)
+      case inr x_ne_n => 
+        rw [(if_neg x_ne_n)] at h₁
+        apply IH.mpr
+        exact (congrArg 
+          (fun e => n ∈ propagate net e xs) simp_propagate)
+          ▸ h₁
+    }
+
+theorem propagate_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
   let sort := (topol_sort net.graph)
-  S₁ ⊆ S₂ 
-  → (n ∈ S₂ → propagateₚ net S₁ n sort)
-  → (propagateₚ net S₁ n sort ↔ propagateₚ net S₂ n sort) := by
+  S₁ ⊆ S₂
+  → S₂ ⊆ propagate net S₁ sort
+  → propagate net S₁ sort = propagate net S₂ sort := by
 
-  intro (S₁ : Set ℕ)
-  intro (S₂ : Set ℕ)
-  intro (n : ℕ)
-  intro sort
+  intro (S₁ : Set ℕ) (S₂ : Set ℕ)
+        sort 
+        (h₁ : S₁ ⊆ S₂)
 
-  intro (h₁ : S₁ ⊆ S₂)
-  
   induction sort
-  case nil =>
-    intro (h₂ : n ∈ S₂ → propagateₚ net S₁ n [])
-    exact ⟨fun x => h₁ (h₂ (h₁ x)), fun x => h₂ (h₁ (h₂ x))⟩ 
-  case cons x xs IH => 
+  case nil => 
+    intro h₂
+    apply ext
+    intro (n : ℕ)
+    exact ⟨fun x => h₁ x, fun x => h₂ x⟩
+  case cons x xs IH =>
     -- Inductive Step
     intro h₂
-    apply Iff.intro
-    -- intro h₃
+    apply ext
+    intro (n : ℕ)
 
-    -- Forward direction
-    { simp only [propagateₚ]
-      intro h₃
+    have h₃ : S₂ ⊆ propagate net S₁ xs := by
+      -- intro (t : ℕ)
+      -- intro (h₄ : t ∈ S₂)
+      -- have h₅ : t ∈ propagate net S₁ (x :: xs) := h₂ h₄
+      sorry
+
+    apply Iff.intro
+    -- Forward Direction
+    case mp =>
+      intro h₄
+      simp [propagate, Membership.mem, Set.Mem]
+      simp [propagate, Membership.mem, Set.Mem] at h₄
 
       split_ifs
-      case inl cond =>
-        apply Or.inr
-        apply (activ_agree net {m | propagateₚ net S₁ m xs} {m | propagateₚ net S₂ m xs} n _).mp
+      case inl x_eq_n =>
+        rw [(if_pos x_eq_n)] at h₄
         
-        -- First, we show that n is actually active in
-        -- {m | propagateₚ net S₁ m xs}
-        {sorry}
+        cases h₄
+        case inl h₅ => exact Or.inl (h₁ h₅)
+        case inr h₅ =>
+          apply Or.inr
+          -- TODO: Use the 'activ' lemma!
+          sorry-- Eq.subst (congrArg (fun e => activ net { m | e } n) _) _
+      
+      case inr x_ne_n =>
+        rw [(if_neg x_ne_n)] at h₄
+        exact IH h₃ ▸ h₄
+    
+    -- Backwards Direction
+    case mpr =>
+      intro h₄
+      simp [propagate, Membership.mem, Set.Mem]
+      simp [propagate, Membership.mem, Set.Mem] at h₄
 
-        {sorry}
-      case inr cond =>
-        have h₄ : n ∈ S₂ → propagateₚ net S₁ n xs := by
-          intro (h₆ : n ∈ S₂)
-          
-
-        have h₅ : propagateₚ net S₁ n xs := by
+      split_ifs
+      case inl x_eq_n => 
+        rw [(if_pos x_eq_n)] at h₄
+        
+        cases h₄
+        case inl h₅ =>
+          apply Or.inr
+          -- TODO: Use the 'activ' lemma, along with hyp h₂!
           sorry
-        sorry
-        -- exact (IH h₄).mp h₅
-    }
+        case inr h₅ =>
+          apply Or.inr
+          -- TODO: Use the 'activ' lemma!
+          sorry
 
-    -- Backwards direction
-    { sorry
-    }
+      case inr x_ne_n => 
+        rw [(if_neg x_ne_n)] at h₄
+        exact IH h₃ ▸ h₄
 
--------------------------------------------------
--- Properties of propagation, using set notation
--------------------------------------------------
 
-#check propagate myBFNN {n : ℕ | n ≤ 4}
+-- #check propagate myBFNN {n : ℕ | n ≤ 4}
 -- #eval propagate myBFNN {n : ℕ | n ≤ 4}
 -- need to make sets finite in order to evaluate???
 -- 
@@ -659,56 +681,19 @@ theorem propagateₚ_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ) (n :
 --    neural network has certain properties
 -- 2) #eval helps me debug errors
 
-theorem propag_is_extens (net : BFNN) : ∀ (S : Set ℕ),
-  S ⊆ propagate net S := 
-
-  fun (S : Set ℕ) => fun (n : ℕ) => 
-    propagateₚ_is_extens net S n
-
-theorem propag_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
-  propagate net S = propagate net (propagate net S) := by
-  
-  intro (S : Set ℕ)
-  apply ext _
-  intro (n : ℕ)
-  
-  apply Iff.intro
-  case mp => exact (propagateₚ_is_idempotent net S n).mp
-  case mpr => exact (propagateₚ_is_idempotent net S n).mpr
-
-theorem propag_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
-  S₁ ⊆ S₂ 
-  → S₂ ⊆ propagate net S₁ 
-  → propagate net S₁ = propagate net S₂ := by
-
-  intro (S₁ : Set ℕ)
-  intro (S₂ : Set ℕ)
-  intro (h₁ : S₁ ⊆ S₂ )
-  intro (h₂ : S₂ ⊆ propagate net S₁)
-  apply ext _
-  intro (n : ℕ)
-
-  have h₃ : n ∈ S₂ → propagateₚ net S₁ n (topol_sort net.toNet.graph) :=
-    fun x => h₂ x
-
-  apply Iff.intro
-  case mp => exact (propagateₚ_is_cumulative net S₁ S₂ n h₁ h₃).mp
-  case mpr => exact (propagateₚ_is_cumulative net S₁ S₂ n h₁ h₃).mpr
-
 -------------------------------------------------
 -- Graph-reachability
 -------------------------------------------------
 
 def reachable (net : BFNN) (S : Set ℕ) : Set ℕ :=
-  {n : ℕ | ∃ (m : ℕ), (m ∈ S ∧ net.graph.hasPath m n) }
-
+  fun (n : ℕ) =>
+    ∃ (m : ℕ), (m ∈ S ∧ net.graph.hasPath m n)
 
 theorem reach_is_extens (net : BFNN) : ∀ (S : Set ℕ),
   S ⊆ reachable net S := by
   
   intro (S : Set ℕ)
-  intro (n : ℕ)
-  intro (h₁ : n ∈ S)
+        (n : ℕ) (h₁ : n ∈ S)
 
   have (h₂ : hasPath net.toNet.graph n n) := hasPath.trivial
   exact ⟨n, ⟨h₁, h₂⟩⟩
@@ -739,11 +724,9 @@ theorem reach_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
 theorem reach_is_monotone (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
   S₁ ⊆ S₂ → reachable net S₁ ⊆ reachable net S₂ := by
 
-  intro (S₁ : Set ℕ)
-  intro (S₂ : Set ℕ)
-  intro (h₁ : S₁ ⊆ S₂)
-  intro (n : ℕ)
-  intro (h₂ : n ∈ reachable net S₁)
+  intro (S₁ : Set ℕ) (S₂ : Set ℕ)
+        (h₁ : S₁ ⊆ S₂)
+        (n : ℕ) (h₂ : n ∈ reachable net S₁)
 
   exact match h₂ with
     | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
