@@ -1,12 +1,13 @@
-import Mathlib.Tactic.LibrarySearch
+import Mathlib
 
--- Minimum working example for doing induction on
--- a more complicated expression
+-- Minimum working example for a question about convert
 
-mutual def even odd
-with even : ℕ → Bool
-| 0     => tt
-| (a+1) => odd a
-with odd : ℕ → Bool
-| 0     => ff
-| (a+1) => even a
+-- Tactic proof
+example (x y : α) (Pred : α → Prop) (f g h : α → α) : 
+  x = y
+  → Pred (f (g (h x)))
+  → Pred (f (g (h y))) := by
+
+  intro h₁ h₂
+  convert h₂ using 4
+  exact symm h₁

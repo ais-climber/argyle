@@ -6,6 +6,7 @@ import Graph.Graph
 import Graph.TopologicalSort
 import Mathlib.Init.Set
 import Mathlib.Data.List.Defs
+import Mathlib.Init.Propext
 
 open Graph
 open Set
@@ -441,21 +442,31 @@ def activ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
 -- then they agree on n.
 lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
   let preds := (predecessors net.graph n).toList
-  List.all preds (fun m => activ net S₁ m ↔ activ net S₂ m) -- how to say S₁ and S₂ agree on *all* m ∈ preds??? 
-  → (activ net S₁ n ↔ activ net S₂ n) := by
+  (∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+  → activ net S₁ n
+  → activ net S₂ n := by
 
   intro preds
-  intro h₁
-  apply Iff.intro
-  -- Forward Direction
-  { intro h₂
-    sorry
-  }
+        (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+        (h₂ : activ net S₁ n)
 
-  -- Backwards Direction
-  { intro h₂
-    sorry
-  }
+  -- The two are definitionally equal; just go in and
+  -- substitute all of the preceding m's 
+  simp [activ] at *
+  convert ← h₂ using 6
+  -- TODO: Intro m : ℕ!
+  -- exact h₁ _ _
+  sorry
+  
+  -- Is there an easy way in Lean to just "go in and substitute"
+  -- the inner part of a huge expression?
+  -- i.e. "these two things are obviously equal, since we can
+  -- substitute equal things for equal things!"
+  --
+  -- USE convert!!!
+
+
+  
 /-
 Activ Agree lemma in practice:
 
@@ -463,7 +474,11 @@ Have: activ net { m | m ∈ propagate_helper net S₁ xs } n
 Goal: activ net { m | m ∈ propagate_helper net S₂ xs } n
 
 (rewrite the lemma so that this is how it gets used!)
+
+-- S₁ and S₂ agree on all predecessors of n
+m ∈ preds → activ net S₁ m ↔ activ net S₂ m
 -/
+
 
 -- For a single node, propagateₚ holds iff that node is n ∈ S. 
 -- Otherwise, check if we are looking at n.  If so,
@@ -506,19 +521,6 @@ def topol_sort (g : Graph ℕ Float) :=
 --   let sort := topol_sort net.graph
 --   propagate_helper net S sort
 
-@[simp] lemma simp_propagate : 
-  propagate net S xs =
-  (fun n => 
-    if x = n then 
-      n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n 
-    else n ∈ propagate net S xs) := by
-  
-  sorry
-  -- induction xs
-  -- case nil => 
-  --   simp [propagate]
-  --   sorry
-  -- case cons x xs IH => sorry
 
 -------------------------------------------------
 -- Properties of propagation, using function
@@ -555,8 +557,17 @@ theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
 
   induction sort
   case nil => exact ⟨fun x => x, fun x => x⟩
-  case cons x xs IH => 
+  case cons x xs IH =>
     -- Inductive Step
+    have simp_propagate : 
+      propagate net S xs =
+      (fun n => 
+        if x = n then 
+          n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n 
+        else n ∈ propagate net S xs) := by
+  
+      sorry
+
     apply Iff.intro
 
     -- Forward Direction (just do what we did for Extensive)
@@ -574,7 +585,9 @@ theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
         convert (IH.mp h₁)
         apply iff_of_eq
         congr
-        exact symm simp_propagate
+        -- This is false, actually!
+        sorry
+        -- exact symm simp_propagate
     }
 
     -- Backwards Direction
@@ -592,8 +605,9 @@ theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
       case inr x_ne_n => 
         rw [(if_neg x_ne_n)] at h₁
         apply IH.mpr
+        -- This is false, actually!
         exact (congrArg 
-          (fun e => n ∈ propagate net e xs) simp_propagate)
+          (fun e => n ∈ propagate net e xs) sorry)
           ▸ h₁
     }
 
@@ -640,9 +654,14 @@ theorem propagate_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
         case inl h₅ => exact Or.inl (h₁ h₅)
         case inr h₅ =>
           apply Or.inr
-          -- TODO: Use the 'activ' lemma!
-          sorry-- Eq.subst (congrArg (fun e => activ net { m | e } n) _) _
-      
+
+          -- Apply the Activ Lemma!
+          let preds := (predecessors net.toNet.graph n).toList
+          have agree_on_m : ∀ (m : ℕ), m ∈ preds → (propagate net S₁ xs m ↔ propagate net S₂ xs m) :=
+            fun m _ => Iff.of_eq (congrFun (IH h₃) m)
+          exact activ_agree net { m | propagate net S₁ xs m } { m | propagate net S₂ xs m } n 
+            agree_on_m h₅
+          
       case inr x_ne_n =>
         rw [(if_neg x_ne_n)] at h₄
         exact IH h₃ ▸ h₄
@@ -660,8 +679,14 @@ theorem propagate_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
         cases h₄
         case inl h₅ =>
           apply Or.inr
-          -- TODO: Use the 'activ' lemma, along with hyp h₂!
-          sorry
+          
+          -- Apply the Activ Lemma!
+          let preds := (predecessors net.toNet.graph n).toList
+          have agree_on_m : ∀ (m : ℕ), m ∈ preds → (propagate net S₂ xs m ↔ propagate net S₁ xs m) :=
+            sorry
+          exact activ_agree net { m | propagate net S₂ xs m } { m | propagate net S₁ xs m } n 
+            agree_on_m sorry
+            
         case inr h₅ =>
           apply Or.inr
           -- TODO: Use the 'activ' lemma!
