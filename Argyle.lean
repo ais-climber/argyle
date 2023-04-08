@@ -452,20 +452,18 @@ lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
   intro preds
         (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
         (h₂ : activ net S₁ n)
-
   
   -- The two are definitionally equal; just go in and
   -- substitute all of the preceding m's 
   simp only [activ]
   simp only [activ] at h₂
+  convert ← h₂ using 6
+  rename_i m
+  
+  have h₂ : m ∈ preds := sorry 
+    -- List comprehension should tell us m ∈ preds! 
+  exact h₁ m h₂
 
-  convert ← h₂ using 4 -- Note that if we go too far and use 6
-                       -- Lean isn't smart enough to intro the variable
-  apply funext
-  intro (m : ℕ)
-  congr 1
-
-  exact (h₁ m sorry).to_eq -- List comprehension should tell us m ∈ preds! 
 
   -- Is there an easy way in Lean to just "go in and substitute"
   -- the inner part of a huge expression?
