@@ -429,14 +429,34 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 -- but this is left implicit.)
 #eval weighted_sum [1.0, 2.0] [3.0]
 
+variable {α : Type} [Inhabited α]
+
+-- WARNING:
+-- This is actually FALSE!  For infinite sets, l[i] is not provably
+-- in l (as far as I can figure.)
+-- TODO: In the future, when making all this computable, I will
+-- be using finite sets, and then I can use get instead of get!,
+-- and get_mem in the standard library.
+axiom get!_mem : ∀ (l : List α) i, (l.get! i) ∈ l
+
 -- Function that gives n's activation value *immediately* 
 -- following its predecessor's activation values, under set S.
 -- (Compute the current activation from the previous 
 -- activation of all the predecessors of n.
 def activ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
   let preds := (predecessors net.graph n).toList
-  let prev_activ := [if m ∈ S then 1.0 else 0.0 | for m in preds]
-  let weights := [net.graph.getEdgeWeight m n | for m in preds]
+  -- We use 'do' to do a list comprehension.
+  -- Notice that we're collecting the *indices*.  This gives
+  -- us more information later;
+  -- to prove m ∈ preds, we can instead prove preds[i] ∈ preds.
+  let prev_activ := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if m ∈ S then 1.0 else 0.0
+  let weights := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return net.graph.getEdgeWeight m n
   let weight_sum := weighted_sum weights prev_activ
   let curr_activ := net.activation weight_sum
   curr_activ = 1.0
@@ -452,28 +472,18 @@ lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
   intro preds
         (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
         (h₂ : activ net S₁ n)
-  
+
   -- The two are definitionally equal; just go in and
   -- substitute all of the preceding m's 
   simp only [activ]
   simp only [activ] at h₂
-  convert ← h₂ using 6
-  rename_i m
+  convert ← h₂ using 7
   
-  have h₂ : m ∈ preds := sorry 
-    -- List comprehension should tell us m ∈ preds! 
-  exact h₁ m h₂
+  rename_i i
+  let m := preds.get! i
+  have h₃ : m ∈ preds := get!_mem preds i
+  exact h₁ m h₃
 
-
-  -- Is there an easy way in Lean to just "go in and substitute"
-  -- the inner part of a huge expression?
-  -- i.e. "these two things are obviously equal, since we can
-  -- substitute equal things for equal things!"
-  --
-  -- USE convert!!!
-
-
-  
 /-
 Activ Agree lemma in practice:
 
