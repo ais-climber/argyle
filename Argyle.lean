@@ -554,12 +554,13 @@ lemma propag_sub_sort (n : ℕ) (x_ne_n : ¬ x = n) :
 -- Properties of propagation
 -------------------------------------------------
 
-theorem propagate_is_extens (net : BFNN) : ∀ (S : Set ℕ),
-  let sort := topol_sort net.graph
+--   let sort := topol_sort net.graph
+
+theorem propagate_is_extens (net : BFNN) (sort : List ℕ) : 
+  ∀ (S : Set ℕ),
   S ⊆ propagate net S sort := by
   
   intro (S : Set ℕ)
-        sort
         (n : ℕ) (h₁ : n ∈ S)
   
   induction sort
@@ -572,13 +573,12 @@ theorem propagate_is_extens (net : BFNN) : ∀ (S : Set ℕ),
     case inl _ => exact Or.inl h₁
     case inr _ => exact IH
 
-theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
-  let sort := (topol_sort net.graph)
+theorem propagate_is_idempotent (net : BFNN) (sort : List ℕ): 
+  ∀ (S : Set ℕ),
   propagate net S sort = 
     propagate net (propagate net S sort) sort := by
 
   intro (S : Set ℕ)
-  intro sort
   apply ext
   intro (n : ℕ)
 
@@ -588,26 +588,13 @@ theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
     -- Inductive Step
     apply Iff.intro
 
-    -- Forward Direction (just do what we did for Extensive)
-    -- Question: Can we replace this all with a call to Extensive?
-    { intro h₁
-      simp only [propagate, Membership.mem, Set.Mem]
-      simp only [propagate, Membership.mem, Set.Mem] at h₁
-
-      split_ifs
-      case inl x_eq_n =>
-        rw [(if_pos x_eq_n)] at h₁
-        exact Or.inl h₁
-      case inr x_ne_n =>
-        rw [(if_neg x_ne_n)] at h₁
-        convert (IH.mp h₁)
-        apply iff_of_eq
-        congr
-        sorry
-    }
+    -- Forward Direction (this is just Extensive).
+    case mp => exact fun h₁ => 
+      propagate_is_extens net (x :: xs) (propagate net S (x :: xs)) h₁
 
     -- Backwards Direction
-    { intro h₁
+    case mpr =>
+      intro h₁
       simp [propagate, Membership.mem, Set.Mem]
       simp [propagate, Membership.mem, Set.Mem] at h₁
       
@@ -620,7 +607,15 @@ theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
         case inl h₂ =>
           rw [(if_pos x_eq_n)] at h₂
           cases h₂
-          case inl h₃ => sorry
+          case inl h₃ =>
+            sorry
+            -- -- Apply the Activ Lemma!
+            -- let preds := (predecessors net.toNet.graph n).toList
+            -- have agree_on_m : ∀ (m : ℕ), m ∈ preds → 
+            --   (m ∈ propagate net {m | m ∈ propagate net S xs ↔ m ∈ propagate net S xs} xs) :=
+            --   sorry
+            -- exact activ_agree net _ _ n agree_on_m _
+
           case inr h₃ => exact h₃
         case inr h₂ => 
           
@@ -639,11 +634,9 @@ theorem propagate_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
         exact (congrArg 
           (fun e => n ∈ propagate net e xs) sorry)
           ▸ h₁
-    }
 
-theorem propagate_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
-  let sort := (topol_sort net.graph)
-  S₁ ⊆ S₂
+theorem propagate_is_cumulative (net : BFNN) (sort : List ℕ) : 
+  ∀ (S₁ S₂ : Set ℕ), S₁ ⊆ S₂
   → S₂ ⊆ propagate net S₁ sort
   → propagate net S₁ sort = propagate net S₂ sort := by
 
@@ -677,28 +670,10 @@ theorem propagate_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
         cases h₄
         case inl h₅ => exact Or.inl (h₁ h₅)
         case inr h₅ => sorry
-          -- We can't actually apply the lemma in this case,
-          -- it looks like!
-
-        --   apply Or.inr
-
-        --   have h₃ : S₂ ⊆ propagate net S₁ xs :=
-        --     Subset.trans h₂ (fun m => propag_sub_sort m sorry)
-
-        --   -- Apply the Activ Lemma!
-        --   have agree_on_m : ∀ (m : ℕ), m ∈ preds → 
-        --     (propagate net S₁ xs m ↔ propagate net S₂ xs m) :=
-        --     fun m _ => Iff.of_eq (congrFun (IH h₃) m)
-        --   exact activ_agree net _ _ n agree_on_m h₅
           
       case inr x_ne_n =>
         rw [(if_neg x_ne_n)] at h₄
-
-        -- FIX THIS ONE FIRST!!!
-        have h₃ : S₂ ⊆ propagate net S₁ xs := 
-          fun m h₅ => sorry 
-          -- Subset.trans h₂ (fun m => propag_sub_sort m sorry)
-        exact IH h₃ ▸ h₄
+        sorry
     
     -- Backwards Direction
     case mpr =>
@@ -713,32 +688,25 @@ theorem propagate_is_cumulative (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
         cases h₄
         case inl h₅ =>
           apply Or.inr
-          have h₃ : S₂ ⊆ propagate net S₁ xs :=
-            Subset.trans h₂ (fun m => propag_sub_sort m sorry)
           
           -- Apply the Activ Lemma!
           have agree_on_m : ∀ (m : ℕ), m ∈ preds → 
             (propagate net S₂ xs m ↔ propagate net S₁ xs m) :=
-            fun m _ => Set.ext_iff.mp (symm (IH h₃)) m
+            fun m _ => Set.ext_iff.mp (symm (IH sorry)) m
           exact activ_agree net _ _ n agree_on_m sorry
             
         case inr h₅ =>
           apply Or.inr
-          have h₃ : S₂ ⊆ propagate net S₁ xs :=
-            Subset.trans h₂ (fun m => propag_sub_sort m sorry)
 
           -- Apply the Activ Lemma!
           have agree_on_m : ∀ (m : ℕ), m ∈ preds → 
             (propagate net S₂ xs m ↔ propagate net S₁ xs m) :=
-            fun m a => Set.ext_iff.mp (symm (IH h₃)) m
+            fun m a => Set.ext_iff.mp (symm (IH sorry)) m
           exact activ_agree net _ _ n agree_on_m h₅
 
       case inr x_ne_n =>
-        have h₃ : S₂ ⊆ propagate net S₁ xs :=
-          Subset.trans h₂ (fun m => propag_sub_sort m sorry)
-
         rw [(if_neg x_ne_n)] at h₄
-        exact IH h₃ ▸ h₄
+        exact IH sorry ▸ h₄
 
 
 -- #check propagate myBFNN {n : ℕ | n ≤ 4}
