@@ -525,6 +525,7 @@ def topol_sort (g : Graph ℕ Float) :=
 -------------------------------------------------
 
 -- If we aren't currently looking at n, then just skip x.
+-- NOTE: NO LONGER USED!
 lemma propag_sub_sort (n : ℕ) (x_ne_n : ¬ x = n) : 
   n ∈ propagate net S₁ (x :: xs) → n ∈ propagate net S₁ xs := by
   
@@ -548,6 +549,50 @@ lemma propag_sub_sort (n : ℕ) (x_ne_n : ¬ x = n) :
       simp [Membership.mem, Set.Mem] at h₁
       split_ifs at h₁
       exact h₁
+
+-- I don't think this is true, but I don't
+-- know what else to do!?
+lemma reduce_sort_idempotent :
+  S₁ ⊆ S₂
+  → S₂ ⊆ propagate net S₁ (x :: xs)
+  → S₂ ⊆ propagate net S₁ xs := by
+
+  intro (h₁ : S₁ ⊆ S₂)
+  intro (h₂ : S₂ ⊆ propagate net S₁ (x :: xs))
+  intro (n : ℕ)
+  intro (h₃ : n ∈ S₂)
+
+  induction xs
+  case nil =>
+    have h₄ : n ∈ propagate net S₁ [x] := h₂ h₃
+    simp [Membership.mem, Set.Mem, propagate] at *
+    split_ifs at h₄
+    case inl _ => sorry
+    case inr _ => sorry
+
+    -- cases h₄
+    -- case inl h₅ => exact h₅
+    -- case inr h₅ => exact h₄
+    -- sorry
+  case cons a as IH => 
+    have h₄ : n ∈ propagate net S₁ (x :: a :: as) := h₂ h₃
+    simp [Membership.mem, Set.Mem, propagate] at *
+    split_ifs at h₄
+    
+    cases h₄
+    case inl h₅ => 
+      split_ifs
+      case inl _ => exact Or.inl h₅
+      case inr _ => sorry
+    case inr h₅ =>
+      split_ifs
+      case inl _ => sorry
+      case inr _ => sorry
+    sorry
+    sorry
+    -- split_ifs
+    -- case inl _ => sorry
+    -- case inr _ => sorry 
 
 -------------------------------------------------
 -- Properties of propagation
@@ -671,6 +716,7 @@ theorem propagate_is_cumulative (net : BFNN) (sort : List ℕ) :
         split_ifs
         sorry
         -- have: S₂ ⊆ propagate net S₁ (x :: xs)
+        --       S₁ ⊆ S₂
         -- need: S₂ ⊆ propagate net S₁ xs
         -- ...
     
