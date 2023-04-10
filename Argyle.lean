@@ -538,29 +538,6 @@ def topol_sort (g : Graph ℕ Float) :=
 -- propagate and activ
 -------------------------------------------------
 
--- If n ∉ S, but n ∈ propagate(S), then n *must* have been 
--- activated by its predecessors.
-lemma propagate_activ (net : BFNN) :
-  n ∉ S
-  → (n ∈ propagate net S sort
-  ↔ activ net {m | m ∈ propagate net S sort} n) := by
-
-  intro (h₂ : n ∉ S)
-  sorry
-  -- intro (h₁ : n ∈ propagate net S sort)
-
-  -- induction sort
-  -- case nil => contradiction
-  -- case cons x xs IH => 
-  --   simp [Membership.mem, Set.Mem, propagate]
-  --   simp [Membership.mem, Set.Mem, propagate] at h₁
-
-  --   split_ifs at h₁
-  --   case inl _ => sorry
-  --   case inr _ => 
-  --     sorry
-
-
 -------------------------------------------------
 -- Properties of propagation
 -------------------------------------------------
@@ -637,6 +614,46 @@ theorem propagate_is_idempotent (sort : List ℕ):
         -- unfold propagate
 
 -- A lemma I will need first:
+-- If n ∉ S, but n ∈ propagate(S), then n *must* have been 
+-- activated by its predecessors.
+lemma propagate_activ (net : BFNN) :
+  n ∉ S
+  → n ∈ propagate net S sort
+  → activ net {m | m ∈ propagate net S sort} n := by
+
+  intro (h₁ : n ∉ S)
+  intro (h₂ : n ∈ propagate net S sort)
+
+  induction sort generalizing n
+  case nil => contradiction
+  case cons x xs IH => 
+    -- Inductive Step
+    simp [Membership.mem, Set.Mem, propagate]
+    simp [Membership.mem, Set.Mem, propagate] at h₂
+    
+    -- There's gotta be a cleaner way to do this...
+    split_ifs at h₂
+    case inl _ =>
+      cases h₂
+      case inl h₃ => contradiction
+      case inr h₃ =>
+        convert h₃
+        rename_i m
+        apply Iff.intro
+        case mp =>
+          intro h₄
+          split_ifs at h₄
+          case inl _ => sorry
+          case inr _ => exact h₄
+        case mpr => 
+          intro h₄
+          split_ifs
+          case inl _ => exact Or.inr (IH sorry sorry)
+          case inr _ => exact h₄
+    case inr _ =>
+      sorry
+
+-- Another lemma I will need first:
 lemma cumul_precondition : 
     S₂ ⊆ propagate net S₁ (x :: xs)
   → S₂ ⊆ propagate net S₁ xs := by
@@ -656,7 +673,7 @@ lemma cumul_precondition :
     case inl _ =>
       cases h₃
       case inl h₄ => exact propagate_is_extens net xs S₁ h₄
-      case inr h₄ => exact (propagate_activ net h).mpr h₄
+      case inr h₄ => sorry
     case inr _ => exact h₃
 
 theorem propagate_is_cumulative (sort : List ℕ) : 
@@ -729,7 +746,7 @@ theorem propagate_is_cumulative (sort : List ℕ) :
           cases h₃
           case inl h₅ =>
             apply Or.inr
-            apply (propagate_activ net h).mp
+            apply propagate_activ net h
             apply (IH (@cumul_precondition net S₂ S₁ x xs h₂) n).mpr
             exact propagate_is_extens net xs S₂ h₅
           case inr h₅ =>
