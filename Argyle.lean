@@ -556,6 +556,95 @@ def propagate (net : BFNN) (S : Set ℕ) (sort : List ℕ) : Set ℕ :=
 def topol_sort (g : Graph ℕ Float) :=
   (topSortUnsafe g).toList.reverse
 
+-------------------------------------------------
+-- Some helper lemmas
+-- (just to clean up the monstrous proofs ahead!)
+-- 
+-- TODO: Clean these up with nicer @simp lemmas about
+-- propagate and activ
+-------------------------------------------------
+
+-- Definition of propagate, in the case where
+-- n ∉ S and x = n.
+lemma simp_propagate₁ (net : BFNN) :
+  n ∉ S
+  → x = n
+  → (propagate net S (x :: xs) n =
+    activ net {m | m ∈ propagate net S xs} n) := by
+
+  intro (h₁ : n ∉ S)
+  intro (h₂ : x = n)
+  apply Iff.to_eq
+  apply Iff.intro
+
+  -- Forward direction
+  case mp => 
+    intro h₃
+    simp [Membership.mem, Set.Mem, propagate] at h₃
+    rw [if_pos h₂] at h₃
+    
+    cases h₃
+    case inl h₄ => contradiction
+    case inr h₄ => exact h₄
+
+  -- Backwards direction
+  case mpr => 
+    intro h₃
+    simp [Membership.mem, Set.Mem, propagate]
+    rw [if_pos h₂]
+    exact Or.inr h₃
+
+
+-- Same lemma, but this time the case where x ≠ n. 
+lemma simp_propagate₂ (net : BFNN) :
+  x ≠ n
+  → (propagate net S (x :: xs) n =
+    propagate net S xs n) := by
+
+  intro (h₂ : x ≠ n)
+  apply Iff.to_eq
+  apply Iff.intro
+
+  -- Forward direction
+  case mp => 
+    intro h₃
+    simp [Membership.mem, Set.Mem, propagate] at h₃
+    rw [if_neg h₂] at h₃
+    exact h₃
+
+  -- Backwards direction
+  case mpr =>
+    intro h₃
+    simp [Membership.mem, Set.Mem, propagate]
+    rw [if_neg h₂]
+    exact h₃
+
+
+-- Another lemma I will need first:
+-- Simplify by requiring n ∉ S as an assumption!
+-- What other assumptions will I need here???
+lemma reduce_env :
+  sorry
+  → (propagate net S (x :: xs) n =
+  propagate net S xs n) := by
+
+  -- intro (h₁ : n ∉ S)
+  -- intro (h₂ : n ∈ propagate net S (x :: xs))
+
+  -- induction xs
+  -- case nil => 
+  --   sorry
+    
+  -- case cons a as IH => sorry
+  sorry
+
+
+-------------------------------------------------
+-- Properties of propagation
+-------------------------------------------------
+
+--   let sort := topol_sort net.graph
+
 -- We need this property *first*
 theorem propagate_is_extens (sort : List ℕ) : 
   ∀ (S : Set ℕ),
@@ -574,137 +663,6 @@ theorem propagate_is_extens (sort : List ℕ) :
     split_ifs
     case inl _ => exact Or.inl h₁
     case inr _ => exact IH
-
--------------------------------------------------
--- Some helper lemmas
--- (just to clean up the monstrous proofs ahead!)
--- 
--- TODO: Clean these up with nicer @simp lemmas about
--- propagate and activ
--------------------------------------------------
-
--- If n ∉ S, but n ∈ propagate(S), then n *must* have been 
--- activated by its predecessors.
-lemma propagate_activ (net : BFNN) :
-  n ∉ S
-  → (n ∈ propagate net S sort) =
-  match sort with
-  | [] => False
-  | x :: xs => activ net {m | m ∈ propagate net S xs} n := by
-  
-  intro (h₁ : n ∉ S)
-  apply Iff.to_eq
-
-  induction sort generalizing n
-  case nil =>
-    simp
-    exact h₁
-  case cons x xs IH =>
-    -- Inductive Step 
-    simp [Membership.mem, Set.Mem]
-    
-    apply Iff.intro
-    -- Forward direction
-    case mp => 
-      intro h₂
-      split_ifs at h₂
-      case inl _ => 
-        cases h₂
-        case inl h₃ => exact absurd h₃ h₁
-        case inr h₃ => exact h₃
-          
-      case inr _ =>
-        -- This is where we will have to apply the IH!
-        have h₃ := (IH h₁).mp h₂
-        
-        -- Split on the resulting match
-        split at h₃
-        case _ => exact False.elim h₃
-        case _ xs a as => sorry  
-
-      
-    -- Backwards direction
-    case mpr =>
-      intro h₂
-      split_ifs
-      case inl _ => exact Or.inr h₂
-      case inr _ => 
-        -- This is where we will have to apply the IH!
-        apply (IH h₁).mpr
-          
-        -- Split on the resulting match
-        split
-        case _ => sorry
-        case _ xs a as => sorry
-
-lemma idempotent_helper :
-  n ∉ S
-  → (n ∈ propagate net (propagate net S (x :: xs)) xs ↔ 
-  n ∈ propagate net (propagate net S xs) xs) := by
-
-  intro (h₁ : n ∉ S)
-  apply Iff.intro
-  case mp =>
-    intro h₂
-    sorry
-    
-  case mpr =>
-    intro h₂
-    sorry
-  -- congr
-  -- apply funext
-  -- sorry
-
--- Another lemma I will need first:
--- Simplify by requiring n ∉ S as an assumption!
-lemma cumul_precondition :
-    S₂ ⊆ propagate net S₁ (x :: xs)
-  → S₂ ⊆ propagate net S₁ xs := by
-  
-  intro (h₁ : S₂ ⊆ propagate net S₁ (x :: xs))
-  intro (m : ℕ)
-  intro (h₂ : m ∈ S₂)
-  
-  have h₃ : m ∈ propagate net S₁ (x :: xs) := h₁ h₂
-  simp [Membership.mem, Set.Mem, propagate] at h₃
-
-  -- Proof by cases: either m ∈ S₁ or m ∉ S₁.
-  -- We then 
-  by_cases (m ∈ S₁)
-  case pos => exact propagate_is_extens net xs S₁ h
-  case neg =>
-    split_ifs at h₃
-    case inl _ =>
-      cases h₃
-      case inl h₄ => exact propagate_is_extens net xs S₁ h₄
-      case inr h₄ => 
-        rw [propagate_activ net h]
-        split
-        case _ =>
-          have h₅ : m ∈ propagate net S₁ [x] := h₁ h₂
-          rw [propagate_activ net h] at h₅
-          split at h₅
-          case _ => exact h₅
-          case _ a b as => sorry
-        case _ heq₁ xs a as => 
-          have h₅ : m ∈ propagate net S₁ (x :: a :: as) := h₁ h₂
-          rw [propagate_activ net h] at h₅
-          
-          split at h₅
-          case _ => contradiction
-          case _ b bs heq₂ =>
-            convert h₅
-            sorry
-    case inr _ => exact h₃
-
-
-
-
--------------------------------------------------
--- Properties of propagation
--------------------------------------------------
-
---   let sort := topol_sort net.graph
 
 theorem propagate_is_idempotent (sort : List ℕ): 
   ∀ (S : Set ℕ),
@@ -733,39 +691,51 @@ theorem propagate_is_idempotent (sort : List ℕ):
       -- do it just like cumulative.
       intro h₁
       -- Proof by cases: either n ∈ S or n ∉ S
-      -- Then by contradiction, suppose n ∉ propagate net S.
+      -- Then, either n ∈ propagate S or n ∉ propagate S.
       by_cases (n ∈ S)
       case pos => exact (propagate_is_extens net _ S) h
       case neg =>
-        apply Classical.by_contradiction
-        intro (h₂ : ¬n ∈ propagate net S (x :: xs))
+        by_cases (n ∈ propagate net S (x :: xs))
+        case pos => exact h
+        case neg =>
+          -- By cases again: Either x = n or x ≠ n.
+          by_cases (x = n)
+          case pos =>
+            -- Just boring technical simplifications 
+            -- until we apply our IH
+            rename_i n_not_in_propS
+            rename_i n_not_in_S
+            simp only [Membership.mem, Set.Mem] at h₁
+            rw [simp_propagate₁ net n_not_in_propS h] at h₁
+            simp only [Membership.mem, Set.Mem]
+            rw [simp_propagate₁ net n_not_in_S h]
 
-        rw [propagate_activ net h₂] at h₁
-        rw [propagate_activ net h] at h₂
-
-        -- At this point it's just boring technical details
-        -- until we apply the IH
-        split at h₁
-        case _ => contradiction
-        case _ a as has => 
-          split at h₂
-          case _ => contradiction
-          case _ b bs hbs => 
-            apply h₂
             convert h₁ using 4
             rename_i m
 
             -- Apply the inductive hypothesis!
-            convert IH m using 2
-            {exact congrArg (fun e => propagate net S e) 
-              (List.tail_eq_of_cons_eq (symm hbs))} -- bs = xs
-            { sorry
-              -- exact (congrArg 
-              --   (fun e => propagate net (propagate net S (x :: xs)) e node ↔ 
-              --     propagate net (propagate net S xs) e node) 
-              --   (List.tail_eq_of_cons_eq (symm has)))
-              --  ▸ idempotent_helper}
-            }
+            -- exact IH m
+            -- TODO: do the environment drop!
+            -- convert IH m using 3 ???
+            sorry
+
+
+
+          case neg =>
+            -- Just boring technical simplifications 
+            -- until we apply our IH
+            rename_i n_not_in_S
+            rename_i n_not_in_propS
+            simp only [Membership.mem, Set.Mem] at h₁
+            rw [simp_propagate₂ net h] at h₁
+            simp only [Membership.mem, Set.Mem]
+            rw [simp_propagate₂ net h]
+            
+            -- Apply the inductive hypothesis!
+            -- exact IH n
+            -- TODO: do the environment drop!
+            sorry
+
 
 -- This is essentially Hannes' proof.
 theorem propagate_is_cumulative (sort : List ℕ) : 
@@ -789,35 +759,54 @@ theorem propagate_is_cumulative (sort : List ℕ) :
     -- Forward Direction
     case mp => 
       intro h₃
-      -- Proof by cases: either n ∈ S₁ or n ∉ S₁.
+      
+      -- Again, proof by cases: either n ∈ S₁ or n ∉ S₁.
       -- Similarly for n ∈ S₂.
-      -- (This is the big insight that makes the proof work!)
       by_cases n ∈ S₁
       case pos => exact propagate_is_extens net (x :: xs) S₂ (h₁ h)
       case neg =>
         by_cases n ∈ S₂
         case pos => exact propagate_is_extens net (x :: xs) S₂ h
-        case neg =>
-          rename_i n_not_in_S₁
-          -- We use our IH to swap S₂ with S₁ in the
-          -- definition of propagation (where n ∉ S₁)
-          rw [propagate_activ net n_not_in_S₁] at h₃
-          rw [propagate_activ net h]
+        case neg => 
+          -- By cases: either x = n or x ≠ n
+          by_cases x = n
+          case pos => 
+            -- Just boring technical simplifications 
+            -- until we apply our IH
+            rename_i n_not_in_S₂
+            rename_i n_not_in_S₁
+            simp only [Membership.mem, Set.Mem]
+            simp only [Membership.mem, Set.Mem] at h₃
+            rw [simp_propagate₁ net n_not_in_S₂ h]
+            rw [simp_propagate₁ net n_not_in_S₁ h] at h₃
+            simp [activ]
+            simp [activ] at h₃
 
-          -- At this point it's just boring technical details
-          -- until we apply the IH
-          split
-          case _ h₄ => contradiction
-          case _ a as has =>
-            split at h₃
-            case _ h₅ => contradiction
-            case _ b bs hbs =>
-              convert h₃ using 4
-              rename_i m
-              -- Apply the inductive hypothesis!
-              convert (symm (IH (cumul_precondition net h₂) m).to_eq).to_iff
-              {exact List.tail_eq_of_cons_eq (symm has)} -- as = xs
-              {exact List.tail_eq_of_cons_eq (symm hbs)} -- bs = xs
+            convert h₃ using 9
+            rename_i i
+            generalize hgen : (predecessors net.toNet.graph n).data.get! i = m
+
+            -- Apply the inductive hypothesis!
+            have precond : S₂ ⊆ propagate net S₁ xs :=
+              fun a hyp => sorry
+            exact (symm (IH precond m).to_eq).to_iff
+
+          case neg => 
+            -- Just boring technical simplifications 
+            -- until we apply our IH
+            rename_i n_not_in_S₂
+            rename_i n_not_in_S₁
+            simp only [Membership.mem, Set.Mem]
+            simp only [Membership.mem, Set.Mem] at h₃
+            rw [simp_propagate₂ net h]
+            rw [simp_propagate₂ net h] at h₃
+            simp
+            simp at h₃
+
+            -- Apply the inductive hypothesis!
+            have precond : S₂ ⊆ propagate net S₁ xs :=
+              fun a hyp => sorry
+            exact (IH precond n).mp h₃
               
     -- Backwards Direction
     -- Pretty much the same as the forward case.
@@ -831,27 +820,48 @@ theorem propagate_is_cumulative (sort : List ℕ) :
       case neg =>
         by_cases n ∈ S₂
         case pos => exact h₂ h
-        case neg =>
-          rename_i n_not_in_S₁
-          -- We use our IH to swap S₂ with S₁ in the
-          -- definition of propagation (where n ∉ S₁)
-          rw [propagate_activ net h] at h₃
-          rw [propagate_activ net n_not_in_S₁]
+        case neg => 
+          -- By cases: either x = n or x ≠ n
+          by_cases x = n
+          case pos => 
+            -- Just boring technical simplifications 
+            -- until we apply our IH
+            rename_i n_not_in_S₂
+            rename_i n_not_in_S₁
+            simp only [Membership.mem, Set.Mem]
+            simp only [Membership.mem, Set.Mem] at h₃
+            rw [simp_propagate₁ net n_not_in_S₁ h]
+            rw [simp_propagate₁ net n_not_in_S₂ h] at h₃
+            simp [activ]
+            simp [activ] at h₃
 
-          -- At this point it's just boring technical details
-          -- until we apply the IH
-          split
-          case _ h₄ => contradiction
-          case _ a as has =>
-            split at h₃
-            case _ h₅ => contradiction
-            case _ b bs hbs =>
-              convert h₃ using 4
-              rename_i m
-              -- -- Apply the inductive hypothesis!
-              convert IH (cumul_precondition net h₂) m
-              {exact List.tail_eq_of_cons_eq (symm has)} -- as = xs
-              {exact List.tail_eq_of_cons_eq (symm hbs)} -- bs = xs
+            convert h₃ using 9
+            rename_i i
+            generalize hgen : (predecessors net.toNet.graph n).data.get! i = m
+
+            -- Apply the inductive hypothesis!
+            have precond : S₂ ⊆ propagate net S₁ xs :=
+              fun a hyp => sorry
+            exact IH precond m
+
+          case neg => 
+            -- Just boring technical simplifications 
+            -- until we apply our IH
+            rename_i n_not_in_S₂
+            rename_i n_not_in_S₁
+            simp only [Membership.mem, Set.Mem]
+            simp only [Membership.mem, Set.Mem] at h₃
+            rw [simp_propagate₂ net h]
+            rw [simp_propagate₂ net h] at h₃
+            simp
+            simp at h₃
+
+            -- Apply the inductive hypothesis!
+            have precond : S₂ ⊆ propagate net S₁ xs :=
+              fun a hyp => sorry
+            exact (IH precond n).mpr h₃
+
+
 
 -- #check propagate myBFNN {n : ℕ | n ≤ 4}
 -- #eval propagate myBFNN {n : ℕ | n ≤ 4}
