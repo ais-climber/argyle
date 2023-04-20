@@ -1,15 +1,13 @@
 import Mathlib
 
--- Minimum working example for a question about reasoning about 'do'
+-- Minimum working example for a question about reasoning about
+-- mutual inductive types
 
-def lst : List ℕ := [1, 2, 3, 4, 5]
-
-def evens : List Bool := do
-  let n <- lst
-  return Even n
-
-example (n : ℕ) : evens.contains (Even n) → lst.contains n := by
-  intro (h : evens.contains (Even n))
+def f : Set ℕ → ℕ :=
   sorry
 
-
+-- Either n ∈ S or 
+inductive Propagation (net : BFNN) (S : Set ℕ) : ℕ → Prop where
+  | in_signal : n ∈ S → Propagation net S n 
+  | activ_by : 
+    activ net {m | Propagation net S m} n → Propagation net S n 
