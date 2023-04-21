@@ -347,10 +347,7 @@ structure BFNN extends Net where
     (activation x = 0.0) ∨ (activation x = 1.0)
 
   -- Our graph is acyclic
-  -- acyclic : graph.is_acyclic
-  -- For now, instead of acyclic I will offer 'sort',
-  -- which is a reverse topological sort of the nodes of the net.
-  sort : List ℕ := (topSortUnsafe graph).toList.reverse
+  acyclic : graph.is_acyclic
 
   -- The activation function is nondecreasing
   activ_nondecr : ∀ (x₁ x₂ : Float),
@@ -366,10 +363,15 @@ def myBFNN : BFNN :=
 
     binary := binary_step_is_binary
     -- sort := (topSortUnsafe graphA).toList.reverse
-    -- acyclic := graphA_is_acyclic
+    acyclic := graphA_is_acyclic
     activ_nondecr := binary_step_nondecr
     activ_pos := sorry
   }
+
+-- inductive Layer (net : BFNN) : List ℕ → Prop where
+--   | initial_layer : Layer net N₀
+--   | next_layer : ∀ (n : ℕ), (n ∈ N → 
+--     ∃ (m : ℕ), m ∈ Nᵢ ∧ Layer net Nᵢ) → Layer net N
 
 variable (net : BFNN)
 
@@ -461,54 +463,54 @@ def preds (net : BFNN) (n : ℕ): List ℕ :=
 --   | from_path {u v w : ℕ} : 
 --       hasPath g u v → hasEdge g v w → hasPath g u w
 
--- OLD ACTIV FUNCTION
-noncomputable
-def activ (S : Set ℕ) (n : ℕ) : Bool :=
-  let preds := preds net n
-  -- We use 'do' to do a list comprehension.
-  -- Notice that we're collecting the *indices*.  This gives
-  -- us more information later;
-  -- to prove m ∈ preds, we can instead prove preds[i] ∈ preds.
-  let prev_activ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if m ∈ S then 1.0 else 0.0
-  let weights := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return net.graph.getEdgeWeight m n
-  let weight_sum := weighted_sum weights prev_activ
-  let curr_activ := net.activation weight_sum
-  if curr_activ = 1.0 then 
-    true
-  else false
+-- -- OLD ACTIV FUNCTION
+-- noncomputable
+-- def activ (S : Set ℕ) (n : ℕ) : Bool :=
+--   let preds := preds net n
+--   -- We use 'do' to do a list comprehension.
+--   -- Notice that we're collecting the *indices*.  This gives
+--   -- us more information later;
+--   -- to prove m ∈ preds, we can instead prove preds[i] ∈ preds.
+--   let prev_activ := do
+--     let i <- List.range preds.length
+--     let m := preds.get! i
+--     return if m ∈ S then 1.0 else 0.0
+--   let weights := do
+--     let i <- List.range preds.length
+--     let m := preds.get! i
+--     return net.graph.getEdgeWeight m n
+--   let weight_sum := weighted_sum weights prev_activ
+--   let curr_activ := net.activation weight_sum
+--   if curr_activ = 1.0 then 
+--     true
+--   else false
 
--- We need another lemma about 'activ'...!
+-- -- We need another lemma about 'activ'...!
 
--- If S₁ and S₂ agree on all the predecessors of n, then they agree on n.
--- TODO: We don't seem to need this lemma anymore!
-lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
-  let preds := preds net n
-  (∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
-  → activ net S₁ n
-  → activ net S₂ n := by
+-- -- If S₁ and S₂ agree on all the predecessors of n, then they agree on n.
+-- -- TODO: We don't seem to need this lemma anymore!
+-- lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+--   let preds := preds net n
+--   (∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+--   → activ net S₁ n
+--   → activ net S₂ n := by
 
-  intro preds
-        (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
-        (h₂ : activ net S₁ n)
+--   intro preds
+--         (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+--         (h₂ : activ net S₁ n)
 
-  -- The two are definitionally equal; just go in and
-  -- substitute all of the preceding m's 
-  simp only [activ]
-  simp only [activ] at h₂
-  convert ← h₂ using 7
+--   -- The two are definitionally equal; just go in and
+--   -- substitute all of the preceding m's 
+--   simp only [activ]
+--   simp only [activ] at h₂
+--   convert ← h₂ using 7
   
-  rename_i i
-  let m := preds.get! i
-  have h₃ : m ∈ preds := get!_mem preds i
-  congr 2
-  apply Iff.to_eq
-  exact h₁ m h₃
+--   rename_i i
+--   let m := preds.get! i
+--   have h₃ : m ∈ preds := get!_mem preds i
+--   congr 2
+--   apply Iff.to_eq
+--   exact h₁ m h₃
 
 
 -- OLD PROPAGATION
@@ -547,19 +549,70 @@ lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
 --       else
 --         n ∈ propagate net S xs
 
+
+
+-- EXPERIMENTAL:
+noncomputable
+def activ (S : Set ℕ) (n : ℕ) : Bool :=
+  let preds := preds net n
+  -- We use 'do' to do a list comprehension.
+  -- Notice that we're collecting the *indices*.  This gives
+  -- us more information later;
+  -- to prove m ∈ preds, we can instead prove preds[i] ∈ preds.
+  let prev_activ := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if m ∈ S then 1.0 else 0.0
+  let weights := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return net.graph.getEdgeWeight m n
+  let weight_sum := weighted_sum weights prev_activ
+  let curr_activ := net.activation weight_sum
+  if curr_activ = 1.0 then 
+    true
+  else false
+
+-- mutual
+-- inductive Propagation (net : BFNN) (S : List ℕ) : ℕ → Prop where
+--   | in_signal : n ∈ S → Propagation net S n 
+--   | activ_by : (xs : List_Propagation net S) → 
+--     activ net {m | Propagation net S m} n → Propagation net S n 
+
+-- inductive List_Propagation (net : BFNN) (S : List ℕ) : ℕ → Prop where
+--   | nil : List_Propagation net S n
+--   | cons : Propagation net S _ → List_Propagation net S _ →
+--     List_Propagation net S _
+-- end
+
+/-
+mutual
+inductive E₃ : Ty → Type
+| cst {ty : Ty} : ty.type → E₃ ty
+| eq {ty : Ty} : E₃ ty → E₃ ty → E₃ Ty.bool
+| app {ty : Ty} : (op : String) → (args : List_E₃ ty) → E₃ ty
+
+inductive List_E₃ : Ty → Type
+| nil : List_E₃ ty
+| cons : E₃ ty → List_E₃ ty → List_E₃ ty
+end
+-/
+
+-- decreasing_by sorry
+
 -- @[simp]
-def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
-  fun (n : ℕ) =>
-    match net.sort with
-    | [] => n ∈ S
-    | x :: xs => 
-      if x = n then
-        n ∈ S ∨ activ net {m | propagate net S m} n
-      else
-        n ∈ propagate net S
-termination_by propagate net S n => 
-  WellFoundedRelation.mk (fun (a b : ℕ) => (net.sort.indexOf a) < (net.sort.indexOf b))
-decreasing_by sorry
+-- def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
+--   fun (n : ℕ) =>
+--     match net.sort with
+--     | [] => n ∈ S
+--     | x :: xs => 
+--       if x = n then
+--         n ∈ S ∨ activ net {m | propagate net S m} n
+--       else
+--         n ∈ propagate net S
+-- termination_by propagate net S n => 
+--   WellFoundedRelation.mk (fun (a b : ℕ) => (net.sort.indexOf a) < (net.sort.indexOf b))
+-- decreasing_by sorry
 -- It would be nice if I could figure out an inductive type for
 -- propagation!
 -- (then I could skip all the induction on the topological sort)
@@ -696,7 +749,7 @@ theorem propagate_is_idempotent (sort : List ℕ):
   case nil => exact ⟨fun x => x, fun x => x⟩
   case cons x xs IH =>
     -- Inductive Step
-    let preds := preds net x
+    let preds := preds net n
     apply Iff.intro
 
     -- Forward Direction (this is just Extensive).
@@ -729,11 +782,22 @@ theorem propagate_is_idempotent (sort : List ℕ):
             simp only [Membership.mem, Set.Mem]
             rw [simp_propagate₁ net n_not_in_S h]
             
-            -- make this into a lemma:
             have h₂ : ∀ (m : ℕ), m ∈ preds →
-              (m ∈ propagate net S (x :: xs) ↔ 
-                m ∈ propagate net S xs)
-            sorry
+              (m ∈ propagate net (propagate net S (x :: xs)) xs ↔ 
+              m ∈ propagate net S xs) := by
+              
+              intro (m : ℕ)
+              intro (h₃ : m ∈ preds)
+              rw [h]
+              apply Iff.intro
+              case mp => 
+                intro h₄
+                simp [propagate] at h₄
+                sorry
+              case mpr => sorry
+
+            
+            exact activ_agree net _ _ n h₂ h₁
             -- -- Apply the inductive hypothesis!
             -- have h₂ : ∀ (m : ℕ), m ∈ preds → 
             --   (m ∈ propagate net (propagate net S (x :: xs)) xs ↔ 
@@ -747,8 +811,6 @@ theorem propagate_is_idempotent (sort : List ℕ):
               -- case mpr => sorry
 
               -- convert IH m using 0
-
-            sorry
             -- exact activ_agree net _ _ n sorry h₁
             
           case neg =>
