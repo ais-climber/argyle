@@ -536,17 +536,30 @@ lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
 
 -- Note that Set ℕ is just defined as ℕ → Prop!
 -- This simplifies our definitions.
-@[simp]
-def propagate (net : BFNN) (S : Set ℕ) (sort : List ℕ) : Set ℕ :=
+-- @[simp]
+-- def propagate (net : BFNN) (S : Set ℕ) (sort : List ℕ) : Set ℕ :=
+--   fun (n : ℕ) =>
+--     match sort with
+--     | [] => n ∈ S
+--     | x :: xs => 
+--       if x = n then
+--         n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n
+--       else
+--         n ∈ propagate net S xs
+
+-- @[simp]
+def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
-    match sort with
+    match net.sort with
     | [] => n ∈ S
     | x :: xs => 
       if x = n then
-        n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n
+        n ∈ S ∨ activ net {m | propagate net S m} n
       else
-        n ∈ propagate net S xs
-
+        n ∈ propagate net S
+termination_by propagate net S n => 
+  WellFoundedRelation.mk (fun (a b : ℕ) => (net.sort.indexOf a) < (net.sort.indexOf b))
+decreasing_by sorry
 -- It would be nice if I could figure out an inductive type for
 -- propagation!
 -- (then I could skip all the induction on the topological sort)
