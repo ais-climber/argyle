@@ -586,8 +586,11 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
 
 -- termination_by propagate_helper net S n => layer net n
 -- decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+
+-- Accumulator variation of propagate
+-- (We accumulate the layer of the net that n is in)
 @[simp]
-def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
+def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
   match L with
   | Nat.zero => n ∈ S
   | Nat.succ k =>
@@ -596,7 +599,7 @@ def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
     let prev_activ := do
       let i <- List.range preds.length
       let m := preds.get! i
-      return if propagate_helper net S m (layer net m) then 1.0 else 0.0
+      return if propagate_acc net S m (layer net m) then 1.0 else 0.0
     let weights := do
       let i <- List.range preds.length
       let m := preds.get! i
@@ -608,13 +611,13 @@ def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
     -- its predecessors.
     n ∈ S ∨ curr_activ = 1.0
 
-termination_by propagate_helper net S n L => layer net n
+termination_by propagate_acc net S n L => layer net n
 decreasing_by exact preds_decreasing net m n (get!_mem preds i)
 
 -- Set variation of propagate
 @[simp]
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
-  fun n => propagate_helper net S n (layer net n)
+  fun n => propagate_acc net S n (layer net n)
 
 -- @[simp]
 -- def topol_sort (g : Graph ℕ Float) :=
@@ -627,6 +630,24 @@ def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
 -- TODO: Clean these up with nicer @simp lemmas about
 -- propagate and activ
 -------------------------------------------------
+
+lemma simp_propagate (net : BFNN) :
+  n ∉ S
+  → propagate_acc net S n L =
+  let preds := preds net n
+  let prev_activ := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc net S m (layer net m) then 1.0 else 0.0
+  let weights := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return net.graph.getEdgeWeight m n
+  let weight_sum := weighted_sum weights prev_activ
+  let curr_activ := net.activation weight_sum
+  curr_activ = 1.0 := by
+
+  sorry
 
 -- -- Definition of propagate, in the case where
 -- -- n ∉ S and x = n.
@@ -708,22 +729,7 @@ def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
 -- Properties of propagation
 -------------------------------------------------
 
---   let sort := topol_sort net.graph
-
--- We need this property *first*
-theorem propagate_is_extens : 
-  ∀ (S : Set ℕ),
-  S ⊆ propagate net S := by
-  
-  intro (S : Set ℕ)
-        (n : ℕ) (h₁ : n ∈ S)
-  simp [Membership.mem, Set.Mem]
-  
-  -- By induction on the layer of the net containing n
-  induction layer net n
-  case zero => simp [h₁]
-  case succ k IH => simp [Or.inl h₁]
-
+-- OLD PROOFS OF PROPERTIES
 
 -- -- We need this property *first*
 -- theorem propagate_is_extens (sort : List ℕ) : 
@@ -743,6 +749,62 @@ theorem propagate_is_extens :
 --     split_ifs
 --     case inl _ => exact Or.inl h₁
 --     case inr _ => exact IH
+
+
+-- We need this property *first*
+lemma propagate_acc_is_extens :
+  ∀ (S : Set ℕ),
+  n ∈ S → propagate_acc net S n L := by
+
+  intro (S : Set ℕ)
+  intro (h₁ : n ∈ S)
+
+  -- By induction on the layer of the net containing n
+  induction L
+  case zero => simp [h₁]
+  case succ k IH => simp [Or.inl h₁]
+
+theorem propagate_is_extens : 
+  ∀ (S : Set ℕ),
+  S ⊆ propagate net S := by
+  
+  intro (S : Set ℕ)
+        (n : ℕ) (h₁ : n ∈ S)
+  simp [Membership.mem, Set.Mem]
+  exact @propagate_acc_is_extens net _ _ _ h₁
+
+lemma propagate_acc_is_idempotent : 
+  ∀ (S : Set ℕ),
+  propagate_acc net S n L ↔ 
+    propagate_acc net ({m | propagate_acc net S m (layer net m)}) n L := by
+  
+  intro (S : Set ℕ)
+
+  -- By induction on the layer of the net containing n
+  induction L
+  case zero => sorry 
+  case succ k IH => 
+    apply Iff.intro
+    case mp =>
+      -- Easy direction; just apply extensive twice 
+      intro h₂ -- (layer net n)
+      have h₁ : propagate_acc net S n (layer net n) := 
+        sorry
+      exact @propagate_acc_is_extens net _ _ _ h₁
+    case mpr => 
+      intro h₁
+      
+      by_cases n ∈ S
+      case pos => exact @propagate_acc_is_extens net _ _ _ h
+      case neg => 
+        rw [simp_propagate net h]
+        sorry
+
+
+      -- by_cases n ∈ S
+      -- case pos => exact @propagate_acc_is_extens net _ _ _ h
+      -- case neg => sorry
+      -- simp only [propagate_acc] at h₁
 
 -- TODO: Rewrite statement in 'Set' notation,
 -- maybe using a special 'setified' propagate function!
