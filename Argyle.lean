@@ -563,8 +563,32 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
   → layer net m < layer net n := by
   sorry
 
-def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
-  match layer net n with
+-- def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
+--   match layer net n with
+--   | Nat.zero => n ∈ S
+--   | Nat.succ k =>
+--     -- Calculate the activation from preceding nodes
+--     let preds := preds net n
+--     let prev_activ := do
+--       let i <- List.range preds.length
+--       let m := preds.get! i
+--       return if propagate_helper net S m then 1.0 else 0.0
+--     let weights := do
+--       let i <- List.range preds.length
+--       let m := preds.get! i
+--       return net.graph.getEdgeWeight m n
+--     let weight_sum := weighted_sum weights prev_activ
+--     let curr_activ := net.activation weight_sum
+
+--     -- Either n is active in S or n was activated by 
+--     -- its predecessors.
+--     n ∈ S ∨ curr_activ = 1.0
+
+-- termination_by propagate_helper net S n => layer net n
+-- decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+@[simp]
+def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
+  match L with
   | Nat.zero => n ∈ S
   | Nat.succ k =>
     -- Calculate the activation from preceding nodes
@@ -572,7 +596,7 @@ def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
     let prev_activ := do
       let i <- List.range preds.length
       let m := preds.get! i
-      return if propagateₚ net S m then 1.0 else 0.0
+      return if propagate_helper net S m (layer net m) then 1.0 else 0.0
     let weights := do
       let i <- List.range preds.length
       let m := preds.get! i
@@ -584,13 +608,13 @@ def propagateₚ (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
     -- its predecessors.
     n ∈ S ∨ curr_activ = 1.0
 
-termination_by propagateₚ net S n => layer net n
+termination_by propagate_helper net S n L => layer net n
 decreasing_by exact preds_decreasing net m n (get!_mem preds i)
 
 -- Set variation of propagate
 @[simp]
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
-  fun n => propagateₚ net S n
+  fun n => propagate_helper net S n (layer net n)
 
 -- @[simp]
 -- def topol_sort (g : Graph ℕ Float) :=
@@ -694,16 +718,12 @@ theorem propagate_is_extens :
   intro (S : Set ℕ)
         (n : ℕ) (h₁ : n ∈ S)
   simp [Membership.mem, Set.Mem]
-  rw [propagateₚ]
   
+  -- By induction on the layer of the net containing n
   induction layer net n
-  case zero => exact h₁
-  case succ k IH =>
-    -- Why do I have to do induction on k here???
-    -- Is this the replacement for the 'activ' lemma? 
-    induction k
-    case zero => exact Or.inl h₁
-    case succ _ _ => exact IH
+  case zero => simp [h₁]
+  case succ k IH => simp [Or.inl h₁]
+
 
 -- -- We need this property *first*
 -- theorem propagate_is_extens (sort : List ℕ) : 
@@ -735,8 +755,32 @@ theorem propagate_is_idempotent :
   apply ext
   intro (n : ℕ)
   
-  simp [Membership.mem, Set.Mem, propagate]
-  sorry
+  simp [Membership.mem, Set.Mem]
+  -- By induction on the layer of the net containing n
+  induction layer net n
+  case zero => exact ⟨fun x => sorry, fun x => sorry⟩
+  case succ k IH => 
+    apply Iff.intro
+    case mp => 
+      -- This direction should just be easy inclusion!
+      -- I should probably prove each property for the 'helper'
+      -- variant *first*!
+      intro h₁
+      simp [Membership.mem, Set.Mem]
+      simp [Membership.mem, Set.Mem] at h₁
+
+      cases h₁
+      case inl h₂ => sorry
+      case inr h₂ => 
+        apply Or.inr
+        -- convert h₂ using 2
+        sorry
+      -- exact Or.inl h₁
+    case mpr => 
+      intro h₁
+      simp [Membership.mem, Set.Mem]
+      simp [Membership.mem, Set.Mem] at h₁
+      sorry
   -- unfold propagateₚ
 
   -- induction layer net n
