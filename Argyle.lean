@@ -563,29 +563,16 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
   → layer net m < layer net n := by
   sorry
 
--- def propagate_helper (net : BFNN) (S : Set ℕ) (n : ℕ) : Prop :=
---   match layer net n with
---   | Nat.zero => n ∈ S
---   | Nat.succ k =>
---     -- Calculate the activation from preceding nodes
---     let preds := preds net n
---     let prev_activ := do
---       let i <- List.range preds.length
---       let m := preds.get! i
---       return if propagate_helper net S m then 1.0 else 0.0
---     let weights := do
---       let i <- List.range preds.length
---       let m := preds.get! i
---       return net.graph.getEdgeWeight m n
---     let weight_sum := weighted_sum weights prev_activ
---     let curr_activ := net.activation weight_sum
-
---     -- Either n is active in S or n was activated by 
---     -- its predecessors.
---     n ∈ S ∨ curr_activ = 1.0
-
--- termination_by propagate_helper net S n => layer net n
--- decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+noncomputable
+def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
+  let preds := preds net n
+  let weights := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return net.graph.getEdgeWeight m n
+  let weight_sum := weighted_sum weights prev_activ
+  let curr_activ := net.activation weight_sum
+  curr_activ = 1.0
 
 -- Accumulator variation of propagate
 -- (We accumulate the layer of the net that n is in)
@@ -594,25 +581,15 @@ def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
   match L with
   | Nat.zero => n ∈ S
   | Nat.succ k =>
-    -- Calculate the activation from preceding nodes
     let preds := preds net n
     let prev_activ := do
       let i <- List.range preds.length
       let m := preds.get! i
       return if propagate_acc net S m (layer net m) then 1.0 else 0.0
-    let weights := do
-      let i <- List.range preds.length
-      let m := preds.get! i
-      return net.graph.getEdgeWeight m n
-    let weight_sum := weighted_sum weights prev_activ
-    let curr_activ := net.activation weight_sum
-
-    -- Either n is active in S or n was activated by 
-    -- its predecessors.
-    n ∈ S ∨ curr_activ = 1.0
-
+    n ∈ S ∨ activ net prev_activ n
 termination_by propagate_acc net S n L => layer net n
 decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+
 
 -- Set variation of propagate
 @[simp]
@@ -631,23 +608,43 @@ def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
 -- propagate and activ
 -------------------------------------------------
 
-lemma simp_propagate (net : BFNN) :
+lemma simp_propagate_acc (net : BFNN) :
   n ∉ S
-  → propagate_acc net S n L =
+  → propagate_acc net S n (Nat.succ L) =
   let preds := preds net n
   let prev_activ := do
     let i <- List.range preds.length
     let m := preds.get! i
     return if propagate_acc net S m (layer net m) then 1.0 else 0.0
-  let weights := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return net.graph.getEdgeWeight m n
-  let weight_sum := weighted_sum weights prev_activ
-  let curr_activ := net.activation weight_sum
-  curr_activ = 1.0 := by
+  activ net prev_activ n := by
 
-  sorry
+  intro (h₁ : n ∉ S)
+  apply Iff.to_eq
+  apply Iff.intro
+
+  case mp => 
+    intro h₂
+    simp only [propagate_acc]
+    simp only [propagate_acc] at h₂
+    
+    cases h₂
+    case inl h₃ => contradiction
+    case inr h₃ => exact h₃ 
+  
+  case mpr => 
+    intro h₂
+    simp only [propagate_acc]
+    simp only [propagate_acc] at h₂
+    exact Or.inr h₂
+
+
+-- -- If S₁ and S₂ agree on all the predecessors of n, then they agree on n.
+-- -- TODO: We don't seem to need this lemma anymore!
+-- lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+--   let preds := preds net n
+--   (∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+--   → activ net S₁ n
+--   → activ net S₂ n := by
 
 -- -- Definition of propagate, in the case where
 -- -- n ∉ S and x = n.
@@ -773,38 +770,29 @@ theorem propagate_is_extens :
   simp [Membership.mem, Set.Mem]
   exact @propagate_acc_is_extens net _ _ _ h₁
 
-lemma propagate_acc_is_idempotent : 
-  ∀ (S : Set ℕ),
-  propagate_acc net S n L ↔ 
-    propagate_acc net ({m | propagate_acc net S m (layer net m)}) n L := by
-  
-  intro (S : Set ℕ)
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+--------------------------------------------------------------------
 
-  -- By induction on the layer of the net containing n
-  induction L
-  case zero => sorry 
-  case succ k IH => 
-    apply Iff.intro
-    case mp =>
-      -- Easy direction; just apply extensive twice 
-      intro h₂ -- (layer net n)
-      have h₁ : propagate_acc net S n (layer net n) := 
-        sorry
-      exact @propagate_acc_is_extens net _ _ _ h₁
-    case mpr => 
-      intro h₁
-      
-      by_cases n ∈ S
-      case pos => exact @propagate_acc_is_extens net _ _ _ h
-      case neg => 
-        rw [simp_propagate net h]
-        sorry
+-- lemma propagate_is_idempotent_helper :
+--   ∀ (S : Set ℕ),
+--   propagate_acc net (fun m => propagate_acc net S m (layer net m)) n (layer net n) 
+--   → propagate_acc net S n (layer net n) := by
 
+--   intro (S : Set ℕ)
+--   -- intro h₁
 
-      -- by_cases n ∈ S
-      -- case pos => exact @propagate_acc_is_extens net _ _ _ h
-      -- case neg => sorry
-      -- simp only [propagate_acc] at h₁
+--   -- By induction on the layer of the net containing n
+--   induction (layer net n)
+--   case zero => 
+--     intro h₁
+--     simp only [Membership.mem, Set.Mem, propagate_acc] at h₁
+--     simp only [propagate_acc]
+    
+--     unfold propagate_acc at h₁
+--     sorry
+--   case succ k IH => sorry
+
 
 -- TODO: Rewrite statement in 'Set' notation,
 -- maybe using a special 'setified' propagate function!
@@ -817,32 +805,88 @@ theorem propagate_is_idempotent :
   apply ext
   intro (n : ℕ)
   
-  simp [Membership.mem, Set.Mem]
-  -- By induction on the layer of the net containing n
-  induction layer net n
-  case zero => exact ⟨fun x => sorry, fun x => sorry⟩
-  case succ k IH => 
-    apply Iff.intro
-    case mp => 
-      -- This direction should just be easy inclusion!
-      -- I should probably prove each property for the 'helper'
-      -- variant *first*!
-      intro h₁
-      simp [Membership.mem, Set.Mem]
-      simp [Membership.mem, Set.Mem] at h₁
+  simp only [Membership.mem, Set.Mem, propagate]
 
-      cases h₁
-      case inl h₂ => sorry
-      case inr h₂ => 
-        apply Or.inr
-        -- convert h₂ using 2
-        sorry
-      -- exact Or.inl h₁
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L generalizing n
+
+  -- Base Step
+  case zero =>
+    simp only [Membership.mem, Set.Mem, propagate_acc]
+    conv in (layer net n) => rw [hL]
+    simp only [propagate_acc]
+    exact ⟨fun x => x, fun x => x⟩
+  
+  -- Inductive Step
+  case succ k IH =>
+    apply Iff.intro
+    
+    -- Forward direction is easy, just apply extensive
+    case mp => 
+      conv in (Nat.succ k) => rw [symm hL]
+      exact fun h₁ => @propagate_acc_is_extens net _ _ _ h₁
+      
+    -- Backwards direction is trickier
     case mpr => 
       intro h₁
-      simp [Membership.mem, Set.Mem]
-      simp [Membership.mem, Set.Mem] at h₁
-      sorry
+      
+      by_cases n ∈ S
+      case pos => exact @propagate_acc_is_extens net _ _ _ h
+      case neg => 
+        rw [simp_propagate_acc net h]
+        
+        -- This is where we need an 'activ_agrees' lemma!!!
+        sorry
+
+
+  -- -- Forward direction is easy, just apply extensive
+  -- case mp => exact fun h => @propagate_acc_is_extens net _ _ _ h
+
+  -- -- Backwards direction is trickier; see lemma above
+  -- case mpr => 
+  --   simp only [Membership.mem, Set.Mem, propagate]
+    
+  --   -- By induction on the layer of the net containing n
+  --   induction (layer net n)
+  --   case zero =>
+  --     intro h₁
+  --     simp only [propagate_acc]
+  --     simp only [propagate_acc] at h₁
+  --     sorry -- (layer net n) should reduce to 0 here!!!
+  --   case succ k IH => 
+  --     sorry -- Our IH should be even stronger here!!!
+
+  -- intro (S : Set ℕ)
+  -- apply ext
+  -- intro (n : ℕ)
+  
+  -- simp [Membership.mem, Set.Mem]
+  -- -- By induction on the layer of the net containing n
+  -- induction layer net n
+  -- case zero => exact ⟨fun x => sorry, fun x => sorry⟩
+  -- case succ k IH => 
+  --   apply Iff.intro
+  --   case mp => 
+  --     -- This direction should just be easy inclusion!
+  --     -- I should probably prove each property for the 'helper'
+  --     -- variant *first*!
+  --     intro h₁
+  --     simp [Membership.mem, Set.Mem]
+  --     simp [Membership.mem, Set.Mem] at h₁
+
+  --     cases h₁
+  --     case inl h₂ => sorry
+  --     case inr h₂ => 
+  --       apply Or.inr
+  --       -- convert h₂ using 2
+  --       sorry
+  --     -- exact Or.inl h₁
+  --   case mpr => 
+  --     intro h₁
+  --     simp [Membership.mem, Set.Mem]
+  --     simp [Membership.mem, Set.Mem] at h₁
+  --     sorry
   -- unfold propagateₚ
 
   -- induction layer net n
