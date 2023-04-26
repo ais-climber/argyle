@@ -119,52 +119,41 @@
           <tabular|<tformat|<cwith|2|-1|1|1|cell-halign|c>|<cwith|1|1|1|-1|cell-halign|c>|<cwith|1|1|1|-1|cell-tborder|0ln>|<cwith|1|1|1|-1|cell-bborder|1ln>|<cwith|2|2|1|-1|cell-tborder|1ln>|<cwith|1|1|1|1|cell-lborder|0ln>|<cwith|1|1|2|2|cell-rborder|0ln>|<cwith|2|2|1|-1|cell-tsep|0.25em>|<twith|table-width|1par>|<twith|table-hmode|exact>|<cwith|1|1|2|2|cell-halign|l>|<cwith|1|-1|2|2|cell-lsep|0.5em>|<cwith|5|5|2|2|cell-hyphen|t>|<cwith|6|6|2|2|cell-hyphen|t>|<cwith|7|7|2|2|cell-hyphen|t>|<table|<row|<cell|<text|<with|font-series|bold|Syntax>>>|<cell|<with|font-series|bold|<text|Neural
           Net Semantics>>>>|<row|<cell|p>|<cell|<text|a (fuzzy) set of
           neurons>>>|<row|<cell|A\<wedge\>B>|<cell|A\<cup\>B>>|<row|<cell|A\<rightarrow\>B>|<cell|A\<supseteq\>B>>|<row|<cell|<value|Know>A>|<\cell>
-            <text|the set of neurons graph-reachable from >A
+            the set of <text|neurons graph-reachable from >A
           </cell>>|<row|<cell|<value|Typ>A>|<\cell>
             <text|the set of neurons activated by >A
           </cell>>|<row|<cell|<around*|[|A|]>B>|<\cell>
-            <text|after repeated Hebbian update, >B<text| holds>
+            <text|after repeated Hebbian update, >B
           </cell>>>>>
         </equation*>
 
-        <\note*>
-          You might expect <math|\<wedge\>> to be <math|\<cap\>>,
-          <math|\<rightarrow\>> to be <math|\<subseteq\>>. If we \Pflip\Q the
-          semantics this way, <math|<value|Know>>,<value|Typ> get replaced by
-          their duals <math|<value|diaKnow>>,<math|<value|diaTyp>>.
-          Otherwise, exactly the same axioms hold.
-        </note*>
+        <\small>
+          <\note*>
+            You might expect <math|\<wedge\>> to be <math|\<cap\>>,
+            <math|\<rightarrow\>> to be <math|\<subseteq\>>. If we \Pflip\Q
+            the semantics this way, <math|<value|Know>>,<value|Typ> get
+            replaced by their duals <math|<value|diaKnow>>,<math|<value|diaTyp>>.
+            Otherwise, exactly the same axioms hold.
+          </note*>
+        </small>
       </framed-titled-block>
 
       \;
 
       <\framed-titled-block|Static Net Axioms>
-        <\description-compact>
-          <item*|A>d
-
-          <item*|B>
-
-          <item*|C>
-
-          <item*|D>
-
-          <item*|E>
-
-          <item*|F>
-
-          <item*|G>
-
-          <item*|H>
-        </description-compact>
+        <\equation*>
+          <tabular|<tformat|<cwith|1|1|1|1|cell-row-span|1>|<cwith|1|1|1|1|cell-col-span|2>|<twith|table-width|1par>|<twith|table-hmode|exact>|<cwith|1|1|1|-1|cell-tborder|0ln>|<cwith|1|1|1|-1|cell-bborder|1ln>|<cwith|2|2|1|1|cell-tborder|1ln>|<cwith|1|1|1|-1|cell-rborder|0ln>|<cwith|1|1|1|-1|cell-lborder|0ln>|<cwith|6|6|1|1|cell-row-span|1>|<cwith|6|6|1|1|cell-col-span|2>|<cwith|6|6|1|-1|cell-tborder|0ln>|<cwith|5|5|1|1|cell-bborder|0ln>|<cwith|6|6|1|-1|cell-bborder|1ln>|<cwith|7|7|1|1|cell-tborder|1ln>|<cwith|6|6|1|-1|cell-rborder|0ln>|<cwith|6|6|1|-1|cell-lborder|0ln>|<cwith|2|2|1|-1|cell-tsep|0.5em>|<cwith|7|7|1|-1|cell-tsep|0.5em>|<cwith|6|6|1|1|cell-tsep|0.75em>|<cwith|10|10|2|2|cell-hyphen|t>|<cwith|10|10|1|1|cell-valign|t>|<table|<row|<cell|<text|<with|font-series|bold|Properties
+          of ><value|Know>>>|<cell|<text|<with|font-series|bold|Basic Modal
+          Axioms>>>>|<row|<cell|<text|Refl>>|<cell|<value|Know>A\<rightarrow\>A>>|<row|<cell|<text|Trans>>|<cell|<value|Know>A\<rightarrow\><value|Know><value|Know>A>>|<row|<cell|<text|Acyclic>>|<cell|<value|Know><around*|(|<value|Know><around*|(|A\<rightarrow\><value|Know>A|)>\<rightarrow\>A|)>\<rightarrow\>A>>|<row|<cell|<text|Monotone>>|<cell|<value|Know><around*|(|A\<rightarrow\>B|)>\<rightarrow\><around*|(|<value|Know>A\<rightarrow\><value|Know>B|)>>>|<row|<cell|<text|<with|font-series|bold|Properties
+          of ><value|Typ>>>|<cell|>>|<row|<cell|<text|Refl>>|<cell|<value|Typ>A\<rightarrow\>A>>|<row|<cell|<text|Trans>>|<cell|<value|Typ>A\<rightarrow\><value|Typ><value|Typ>A>>|<row|<cell|<text|Interact>>|<cell|<value|Know>A\<rightarrow\><value|Typ>A>>|<row|<cell|<text|Loop>>|<\cell>
+            <tabular|<tformat|<table|<row|<cell|<around*|(|<value|Typ>A<rsub|1>\<rightarrow\>A<rsub|2>|)>\<ldots\><around*|(|<value|Typ>A<rsub|n>\<rightarrow\>A<rsub|1>|)>>>|<row|<cell|<space|1em>\<rightarrow\><around*|(|<value|Typ>A<rsub|i>\<leftrightarrow\>A<rsub|j>|)>>>>>>
+          </cell>>>>>
+        </equation*>
 
         \;
       </framed-titled-block>
     </cell>|<\cell>
       <\framed-titled-block|Neural Net Model Building>
-        \;
-
-        \;
-
         \;
 
         \;
@@ -214,9 +203,13 @@
         blah blah blah more text more text here's some more text blah blah
         blah more text more text here's some more text blah blah blah more
         text more text here's some more text blah blah blah more text more
-        text here's some more text blah\ 
+        text here's some more text blah
 
-        kjl;j;ljkl;jl; lkj l;jkl;
+        \;
+
+        \;
+
+        \ 
 
         \;
       </framed-titled-block>
@@ -240,13 +233,12 @@
 
         \;
 
-        \;
-
-        \;
-
-        \;
-
-        \;
+        <\small>
+          <\acknowledgments*>
+            This work was funded by the US Department of Defense (Contract
+            W52P1J2093009).<nbsp> Thank you for your support!
+          </acknowledgments*>
+        </small>
       </framed-titled-block>
     </cell>>|<row|<\cell>
       \;
@@ -270,10 +262,16 @@
 <\initial>
   <\collection>
     <associate|bg-color|white>
+    <associate|enunciation-sep|<macro|. >>
+    <associate|font|frak=TeX Gyre Pagella,cal=TeX Gyre Termes,roman>
     <associate|font-base-size|24>
+    <associate|font-family|ss>
     <associate|font-shape|right>
     <associate|item-hsep|<macro|1fn>>
     <associate|item-vsep|<macro|0.1fn>>
+    <associate|large-padding-above|0.1fn>
+    <associate|large-padding-below|0fn>
+    <associate|math-font|math-termes>
     <associate|page-height|36in>
     <associate|page-medium|paper>
     <associate|page-type|user>

@@ -767,8 +767,6 @@ theorem propagate_is_idempotent :
         rw [simp_propagate_acc net h]
         intro preds
         intro prev_activ₁
-
-
         
         -- Just try to prove it and turn it into an 'activ_agree'
         -- lemma later!
