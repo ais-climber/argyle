@@ -16,6 +16,8 @@ open Set
 open Tactic
 open Classical
 
+-- set_option maxHeartbeats 2000000
+
 -------------------------------------------------
 -- Goofing about with inductive types
 -------------------------------------------------
@@ -649,36 +651,120 @@ lemma simp_propagate_acc (net : BFNN) :
 
 -- If S₁ and S₂ agree on all the predecessors of n, then they agree on n.
 --------------------------------------------------------------------
-lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
-  let preds := preds net n
-  let prev₁ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if m ∈ S₁ then 1.0 else 0.0
-  let prev₂ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if m ∈ S₂ then 1.0 else 0.0
+-- lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+--   let preds := preds net n
+--   let prev₁ := do
+--     let i <- List.range preds.length
+--     let m := preds.get! i
+--     return if m ∈ S₁ then 1.0 else 0.0
+--   let prev₂ := do
+--     let i <- List.range preds.length
+--     let m := preds.get! i
+--     return if m ∈ S₂ then 1.0 else 0.0
 
-  (∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
-  → activ net prev₁ n
-  → activ net prev₂ n := by
---------------------------------------------------------------------
-  -- let preds := preds net n
-  intro preds
-  intro prev₁
-  intro prev₂
-  intro (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
-  intro (h₂ : activ net prev₁ n)
+--   (∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+--   → activ net prev₁ n
+--   → activ net prev₂ n := by
+-- --------------------------------------------------------------------
+--   -- let preds := preds net n
+--   intro preds
+--   intro prev₁
+--   intro prev₂
+--   intro (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ S₁ ↔ m ∈ S₂))
+--   intro (h₂ : activ net prev₁ n)
   
-  simp only [activ]
-  simp only [activ] at h₂
-  convert ← h₂ using 7
+--   simp only [activ]
+--   simp only [activ] at h₂
+--   convert ← h₂ using 7
 
-  rename_i i
-  let m := preds.get! i
-  have h₃ : m ∈ preds := get!_mem preds i
-  exact h₁ m h₃
+--   rename_i i
+--   let m := preds.get! i
+--   have h₃ : m ∈ preds := get!_mem preds i
+--   exact h₁ m h₃
+
+-- If S₁ and S₂ agree on all the predecessors of n, then they agree on n.
+--------------------------------------------------------------------
+-- lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+--   (∀ (m : ℕ), layer net m ≤ layer net n → (m ∈ S₁ ↔ m ∈ S₂))
+  
+--   → (let preds := preds net n
+--   let prev_activ := do
+--     let i <- List.range preds.length
+--     let m := preds.get! i
+--     return if m ∈ S₁ then 1.0 else 0.0
+--   activ net prev_activ n)
+  
+--   → (let preds := preds net n
+--   let prev_activ := do
+--     let i <- List.range preds.length
+--     let m := preds.get! i
+--     return if m ∈ S₂ then 1.0 else 0.0
+--   activ net prev_activ n) := by
+-- --------------------------------------------------------------------
+--   -- Just go in and subsitute m ∈ S₁ for m ∈ S₂.
+--   intro (h₁ : ∀ (m : ℕ), layer net m ≤ layer net n → (m ∈ S₁ ↔ m ∈ S₂))
+--   intro h₂
+  
+--   simp
+--   simp at h₂
+--   convert h₂ using 5
+--   rename_i i
+--   generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+--   -- generalize hLm : layer net m = Lm
+
+--   have h₃ : m ∈ preds net n := by
+--     rw [symm hm]
+--     simp [preds]
+--     exact get!_mem (predecessors net.toNet.graph n).data i
+--   have h₄ : layer net m ≤ layer net n := by
+--     apply le_of_lt
+--     exact preds_decreasing net m n h₃
+--   exact (symm (h₁ m h₄).to_eq).to_iff
+
+-- If S₁ and S₂ agree on all the predecessors of n, 
+-- then the corresponding activ's agree on n.
+-- lemma activ_agree (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+--   (∀ (m : ℕ), layer net m ≤ layer net n → (m ∈ S₁ ↔ m ∈ S₂))
+  
+--   → (activ net
+--       (List.bind (List.range (preds net n).length) fun i =>
+--         pure (if propagate_acc net 
+--               (fun n => propagate_acc net S n (layer net n)) ((preds net n).get! i)
+--                     (layer net ((preds net n).get! i)) 
+--               then 1.0 else 0.0)) n)
+  
+--   → (activ net
+--       (List.bind (List.range (List.length (preds net n))) fun i =>
+--         pure (if propagate_acc net S ((preds net n).get! i)
+--               (layer net ((preds net n).get! i)) 
+--               then 1.0 else 0.0)) n) := by
+-- --------------------------------------------------------------------
+--   intro (h₁ : ∀ (m : ℕ), layer net m ≤ layer net n → (m ∈ S₁ ↔ m ∈ S₂))
+--   intro h₂
+
+--   convert h₂ using 5
+--   rename_i i
+--   generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+--   sorry
+  -- -- Just go in and subsitute m ∈ S₁ for m ∈ S₂.
+  -- intro (h₁ : ∀ (m : ℕ), layer net m ≤ layer net n → (m ∈ S₁ ↔ m ∈ S₂))
+  -- intro h₂
+  
+  -- simp
+  -- simp at h₂
+  -- convert h₂ using 5
+  -- rename_i i
+  -- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+  -- -- generalize hLm : layer net m = Lm
+
+  -- have h₃ : m ∈ preds net n := by
+  --   rw [symm hm]
+  --   simp [preds]
+  --   exact get!_mem (predecessors net.toNet.graph n).data i
+  -- have h₄ : layer net m ≤ layer net n := by
+  --   apply le_of_lt
+  --   exact preds_decreasing net m n h₃
+  -- exact (symm (h₁ m h₄).to_eq).to_iff
 
 /-══════════════════════════════════════════════════════════════════
   Properties of Propagation
@@ -777,11 +863,17 @@ theorem propagate_is_idempotent :
           have h₂ : ¬n ∈ propagate net S := h
           simp [propagate] at h₂
           rw [simp_propagate_acc net h₂] at h₁
+          simp
+          simp at h₁
 
-          -- Just try to prove it and turn it into an 'activ_agree'
-          -- lemma later!
-          -- Go into 'prev_activ' and substitute using our IH.
-          -- Then try to prove what's left.
+          -- -- Apply the inductive hypothesis!
+          -- have h₃ : ∀ (m : ℕ), layer net m ≤ layer net n → 
+          --   ((fun n => propagate_acc net S n (layer net n)) m ↔ S m) := by
+          --   sorry
+          -- exact activ_agree net _ _ n h₃ h₁
+
+          
+          -- TODO: Having lots of trouble with the activ_agrees lemma atm...
           simp
           simp at h₁
           convert h₁ using 5
