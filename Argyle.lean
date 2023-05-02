@@ -732,19 +732,19 @@ theorem propagate_is_idempotent :
   intro (n : ℕ)
   simp only [Membership.mem, Set.Mem, propagate]
 
-  -- By induction on the layer of the net containing n
+  -- By strong induction on the layer of the net containing n
   generalize hL : layer net n = L
-  induction L generalizing n
+  induction L using Nat.case_strong_induction_on generalizing n
 
   -- Base Step
-  case zero =>
+  case h.hz =>
     simp only [Membership.mem, Set.Mem, propagate_acc]
     conv in (layer net n) => rw [hL]
     simp only [propagate_acc]
     exact ⟨fun x => x, fun x => x⟩
   
   -- Inductive Step
-  case succ k IH =>
+  case h.hi k IH =>
     apply Iff.intro
     
     -- Forward direction is easy, just apply extensive
@@ -764,21 +764,45 @@ theorem propagate_is_idempotent :
         rw [symm hL]
         exact @propagate_acc_is_extens net _ _ h
       case neg => 
-        rw [simp_propagate_acc net h]
-        intro preds
-        intro prev_activ₁
+        -- rw [simp_propagate_acc net h]
+        -- intro preds
+        -- intro prev_activ₁
         
         -- Just try to prove it and turn it into an 'activ_agree'
         -- lemma later!
         -- Go into 'prev_activ' and substitute using our IH.
         -- Then try to prove what's left.
 
-        -- conv at prev_activ in (propagate_acc net S m (layer net m)) =>
-        --   rw []
-        simp only [propagate_acc] at h₁
-        cases h₁
-        case inl h₂ => sorry
-        case inr h₂ => sorry -- convert h₂
+        by_cases propagate_acc net S n (layer net n)
+        case pos => 
+          rw [symm hL]
+          exact h
+        case neg => 
+          rename_i n_not_in_S
+          rw [simp_propagate_acc net n_not_in_S]
+          have h₂ : ¬n ∈ fun n => propagate_acc net S n (layer net n) := sorry
+          rw [simp_propagate_acc net h₂] at h₁
+
+          -- This is where we actually go into prev_activ and
+          -- substitute using our IH.
+
+          simp
+          simp at h₁
+          convert h₁ using 5
+          rename_i i
+          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hLm : layer net m = Lm
+
+          -- (get!_mem preds i)
+          have h₃ : m ∈ preds net n := by
+            rw [symm hm]
+            sorry
+          have h₄ : Lm ≤ k := by
+            rw [symm hLm]
+            apply Nat.lt_succ.mp
+            rw [symm hL]
+            exact preds_decreasing net m n h₃
+          exact (IH Lm h₄ m hLm)
 
 
 -- This is essentially Hannes' proof.
