@@ -737,14 +737,14 @@ theorem propagate_is_idempotent :
   induction L using Nat.case_strong_induction_on generalizing n
 
   -- Base Step
-  case h.hz =>
+  case hz =>
     simp only [Membership.mem, Set.Mem, propagate_acc]
     conv in (layer net n) => rw [hL]
     simp only [propagate_acc]
     exact ⟨fun x => x, fun x => x⟩
   
   -- Inductive Step
-  case h.hi k IH =>
+  case hi k IH =>
     apply Iff.intro
     
     -- Forward direction is easy, just apply extensive
@@ -777,7 +777,7 @@ theorem propagate_is_idempotent :
           have h₂ : ¬n ∈ propagate net S := h
           simp [propagate] at h₂
           rw [simp_propagate_acc net h₂] at h₁
-          
+
           -- Just try to prove it and turn it into an 'activ_agree'
           -- lemma later!
           -- Go into 'prev_activ' and substitute using our IH.
@@ -799,7 +799,7 @@ theorem propagate_is_idempotent :
             apply Nat.lt_succ.mp
             rw [symm hL]
             exact preds_decreasing net m n h₃
-          exact (IH Lm h₄ m hLm)
+          exact IH Lm h₄ m hLm
 
 
 -- This is essentially Hannes' proof.
@@ -819,10 +819,10 @@ theorem propagate_is_cumulative :
 
   -- By induction on the layer of the net containing n
   generalize hL : layer net n = L
-  induction L generalizing n
+  induction L using Nat.case_strong_induction_on generalizing n
 
   -- Base Step
-  case zero =>
+  case hz =>
     simp only [propagate_acc]
     apply Iff.intro
     case mp => exact fun h₃ => h₁ h₃
@@ -834,23 +834,52 @@ theorem propagate_is_cumulative :
       exact h₄
 
   -- Inductive Step
-  case succ k IH => 
+  case hi k IH => 
     apply Iff.intro
 
     -- Forward Direction
     case mp => 
       intro h₃
 
-      -- By cases; either n ∈ S₂ or n ∉ S₂
+      -- By cases; either n ∈ S₂ or n ∉ S₂.
+      -- Similarly, either n ∈ S₁ or n ∉ S₁. 
       by_cases n ∈ S₂
       case pos =>
         rw [symm hL]
         exact @propagate_acc_is_extens net _ _ h -- TODO: replace acc variation
-      case neg => 
-        rw [simp_propagate_acc net h]
-        intro preds
-        intro prev_activ
-        sorry
+      case neg =>
+        by_cases n ∈ S₁
+        case pos => 
+          rename_i n_not_in_S₂ 
+          exact absurd (h₁ h) n_not_in_S₂
+        case neg => 
+          -- Just some simplifications and rewriting definitions
+          rename_i n_not_in_S₂
+          rw [simp_propagate_acc net h] at h₃
+          rw [simp_propagate_acc net n_not_in_S₂]
+
+          -- Just try to prove it and turn it into an 'activ_agree'
+          -- lemma later!
+          -- Go into 'prev_activ' and substitute using our IH.
+          -- Then try to prove what's left.
+          simp
+          simp at h₃
+          convert h₃ using 5
+          rename_i i
+          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hLm : layer net m = Lm
+
+          -- Apply the inductive hypothesis!
+          have h₃ : m ∈ preds net n := by
+            rw [symm hm]
+            simp [preds]
+            exact get!_mem (predecessors net.toNet.graph n).data i
+          have h₄ : Lm ≤ k := by 
+            rw [symm hLm]
+            apply Nat.lt_succ.mp
+            rw [symm hL]
+            exact preds_decreasing net m n h₃
+          exact (symm (IH Lm h₄ m hLm).to_eq).to_iff
 
     -- Backwards Direction (should be very similar)
     case mpr => 
@@ -862,10 +891,39 @@ theorem propagate_is_cumulative :
         rw [symm hL]
         exact @propagate_acc_is_extens net _ _ h -- TODO: replace acc variation
       case neg => 
-        rw [simp_propagate_acc net h]
-        intro preds
-        intro prev_activ
-        sorry
+        by_cases n ∈ S₂
+        case pos => 
+          rename_i n_not_in_S₁
+          rw [symm hL]
+          exact h₂ h
+        case neg => 
+          -- Just some simplifications and rewriting definitions
+          rename_i n_not_in_S₁
+          rw [simp_propagate_acc net h] at h₃
+          rw [simp_propagate_acc net n_not_in_S₁]
+
+          -- Just try to prove it and turn it into an 'activ_agree'
+          -- lemma later!
+          -- Go into 'prev_activ' and substitute using our IH.
+          -- Then try to prove what's left.
+          simp
+          simp at h₃
+          convert h₃ using 5
+          rename_i i
+          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hLm : layer net m = Lm
+
+          -- Apply the inductive hypothesis!
+          have h₃ : m ∈ preds net n := by
+            rw [symm hm]
+            simp [preds]
+            exact get!_mem (predecessors net.toNet.graph n).data i
+          have h₄ : Lm ≤ k := by 
+            rw [symm hLm]
+            apply Nat.lt_succ.mp
+            rw [symm hL]
+            exact preds_decreasing net m n h₃
+          exact IH Lm h₄ m hLm
 
 
 -- #check propagate myBFNN {n : ℕ | n ≤ 4}
