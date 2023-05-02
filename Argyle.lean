@@ -759,33 +759,29 @@ theorem propagate_is_idempotent :
       intro h₁
       
       -- By cases; either n ∈ S or n ∉ S
+      -- Again; either n ∈ propagate S or n ∉ propagate S 
       by_cases n ∈ S
       case pos => 
         rw [symm hL]
         exact @propagate_acc_is_extens net _ _ h
       case neg => 
-        -- rw [simp_propagate_acc net h]
-        -- intro preds
-        -- intro prev_activ₁
-        
-        -- Just try to prove it and turn it into an 'activ_agree'
-        -- lemma later!
-        -- Go into 'prev_activ' and substitute using our IH.
-        -- Then try to prove what's left.
-
         by_cases propagate_acc net S n (layer net n)
         case pos => 
           rw [symm hL]
           exact h
-        case neg => 
+        case neg =>
+          -- Just some simplifications and rewriting definitions
           rename_i n_not_in_S
           rw [simp_propagate_acc net n_not_in_S]
-          have h₂ : ¬n ∈ fun n => propagate_acc net S n (layer net n) := sorry
+          
+          have h₂ : ¬n ∈ propagate net S := h
+          simp [propagate] at h₂
           rw [simp_propagate_acc net h₂] at h₁
-
-          -- This is where we actually go into prev_activ and
-          -- substitute using our IH.
-
+          
+          -- Just try to prove it and turn it into an 'activ_agree'
+          -- lemma later!
+          -- Go into 'prev_activ' and substitute using our IH.
+          -- Then try to prove what's left.
           simp
           simp at h₁
           convert h₁ using 5
