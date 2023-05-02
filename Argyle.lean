@@ -789,10 +789,11 @@ theorem propagate_is_idempotent :
           generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
           generalize hLm : layer net m = Lm
 
-          -- (get!_mem preds i)
+          -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
-            sorry
+            simp [preds]
+            exact get!_mem (predecessors net.toNet.graph n).data i
           have h₄ : Lm ≤ k := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
