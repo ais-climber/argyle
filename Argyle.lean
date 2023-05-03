@@ -901,6 +901,7 @@ theorem propagate_is_idempotent :
           exact IH Lm h₄ m hLm
 
 
+
 -- This is essentially Hannes' proof.
 --------------------------------------------------------------------
 theorem propagate_is_cumulative :
