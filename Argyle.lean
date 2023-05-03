@@ -1078,6 +1078,160 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
   exact match h₂ with
     | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
 
+
+/-══════════════════════════════════════════════════════════════════
+  Reach-Prop Interaction Properties
+══════════════════════════════════════════════════════════════════-/
+
+--------------------------------------------------------------------
+theorem reach_in_propagate (net : BFNN) : ∀ (S : Set ℕ),
+  propagate net S ⊆ reachable net S := by
+--------------------------------------------------------------------
+  intro (S : Set ℕ)
+  intro (n : ℕ)
+  intro (h₁ : n ∈ propagate net S)
+
+  simp only [Membership.mem, Set.Mem, propagate] at h₁
+  simp only [Membership.mem, Set.Mem]
+
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+
+  -- Base Step
+  case hz => 
+    rw [hL] at h₁
+    simp [propagate_acc] at h₁
+    exact reach_is_extens net _ h₁
+
+  -- Inductive Step
+  case hi k IH => 
+    -- By cases; either n ∈ S or n ∉ S.
+    by_cases n ∈ S
+    case pos => exact reach_is_extens net _ h
+    case neg => 
+      -- Just some simplifications and rewriting definitions
+      conv at h₁ in (layer net n) => rw [hL]
+      rw [simp_propagate_acc net h] at h₁
+      
+      -- TODO:
+      -- Here I have to argue that *at least one* of the m in prev_activ
+      -- must be in propagate_acc net S!
+      sorry
+
+
+-- Is this true?
+-- I think we have to have
+--    n ∈ Reachedby S₂
+-- not
+--    n ∈ S₂
+-- in order for the inductive step to go through
+--------------------------------------------------------------------
+lemma minimal_cause_helper (net : BFNN) : ∀ (S₁ S₂ : Set ℕ), ∀ (n : ℕ),
+  n ∈ S₂
+  → (n ∈ propagate net S₁
+  ↔ n ∈ propagate net (S₁ ∩ {m | ∃ x, x ∈ S₂ ∧ x ∈ reachable net {m}})) := by
+--------------------------------------------------------------------
+  intro (S₁ : Set ℕ) (S₂ : Set ℕ)
+  intro (n : ℕ)
+  intro (h₁ : n ∈ S₂)
+  simp only [Membership.mem, Set.Mem, propagate]
+
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+  
+  -- Base Step
+  case hz => 
+    apply Iff.intro
+    case mp => 
+      intro h₂
+      simp only [propagate_acc]
+      simp only [propagate_acc] at h₂
+
+      -- Show that n ∈ S₁ (left) and trivially n is the x such that 
+      -- x ∈ S₂ and x ∈ reachable net {n} (right)
+      exact ⟨h₂, ⟨n, ⟨h₁, ⟨n, ⟨rfl, hasPath.trivial⟩⟩⟩⟩⟩
+    
+    case mpr =>
+      intro h₂
+      simp only [propagate_acc]
+      simp only [propagate_acc] at h₂
+      exact h₂.left
+    
+  -- Inductive Step
+  case hi k IH => 
+    apply Iff.intro
+
+    -- Forward Direction
+    case mp => 
+      intro h₂
+      
+      -- By cases; either n ∈ S₁ or not.
+      by_cases n ∈ S₁
+      case pos => 
+        -- This case is trivial (like our base case, but we apply Extensive)
+        rw [symm hL]
+        have h₃ : n ∈ S₁ ∩ { m | ∃ x, S₂ x ∧ reachable net {m} x } :=
+          ⟨h, ⟨n, ⟨h₁, ⟨n, ⟨rfl, hasPath.trivial⟩⟩⟩⟩⟩
+        exact @propagate_acc_is_extens net _ _ h₃
+
+      case neg => 
+        -- If n ∉ S₁, then n ∉ S₁ ∩ {m | ∃ x, S₂ x ∧ reachable net {m} x}
+        have h₃ : n ∉ S₁ ∩ {m | ∃ x, S₂ x ∧ reachable net {m} x} := 
+          fun n_in_S₁ => absurd n_in_S₁.left h
+        
+        -- Just some simplifications and rewriting definitions
+        rw [simp_propagate_acc net h] at h₂
+        rw [simp_propagate_acc net h₃]
+
+        -- TODO: This is the stuff that should go in the activ_agree
+        -- lemma!
+        simp
+        simp at h₂
+        convert h₂ using 5
+        rename_i i
+        generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+        generalize hLm : layer net m = Lm
+        
+        -- Apply the inductive hypothesis!
+        have h₄ : m ∈ preds net n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (predecessors net.toNet.graph n).data i
+        have h₅ : Lm ≤ k := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net m n h₄
+        have h₆ : m ∈ S₂ := sorry -- this is exactly why
+                                  -- I had to introduce 'Reachedby'...
+        exact (symm (IH Lm h₅ m h₆ hLm).to_eq).to_iff
+
+
+    -- Backwards Direction (should be similar)
+    case mpr => sorry
+
+
+-- This is the actual proparty I want, re-written with conditionals
+-- in mind
+--------------------------------------------------------------------
+theorem minimal_cause (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
+  S₂ ⊆ propagate net S₁
+  ↔ S₂ ⊆ propagate net (S₁ ∩ {m | ∃ x, x ∈ S₂ ∧ x ∈ reachable net {m}}) := by
+--------------------------------------------------------------------
+  intro (S₁ : Set ℕ) (S₂ : Set ℕ)
+  apply Iff.intro
+  case mp => 
+    exact fun h₁ n h₂ => (minimal_cause_helper net _ _ n h₂).mp (h₁ h₂)
+  case mpr =>
+    exact fun h₁ n h₂ => (minimal_cause_helper net _ _ n h₂).mpr (h₁ h₂)
+
+
+/-══════════════════════════════════════════════════════════════════
+  Naive (Unstable) Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
 -- *hebb* -- The easiest thing to do is to give some 'infinite'
 --  weight value, and then update the weights to be that.
 
