@@ -1039,11 +1039,6 @@ theorem propagate_is_cumulative :
   Properties of Graph-reachability
 ══════════════════════════════════════════════════════════════════-/
 
-/-
--- NOTE: I think we only need *reverse* graph-reachability,
--- and adding in graph-reachability only makes things complicated
--- in the logic.
-
 def reachable (net : BFNN) (S : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
     ∃ (m : ℕ), (m ∈ S ∧ net.graph.hasPath m n)
@@ -1090,7 +1085,7 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
 
   exact match h₂ with
     | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
--/
+
 
 /-══════════════════════════════════════════════════════════════════
   Properties of Reverse Graph-reachability ("reached by")
@@ -1268,7 +1263,7 @@ lemma minimal_cause_helper (net : BFNN) : ∀ (S₁ S₂ : Set ℕ), ∀ (n : �
         exact IH Lm h₅ m h₆ hLm
 
 
--- This is the actual proparty I want, re-written with conditionals
+-- This is the actual property I want, re-written with conditionals
 -- in mind
 --------------------------------------------------------------------
 theorem minimal_cause (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
@@ -1286,35 +1281,114 @@ theorem minimal_cause (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- *hebb* -- The easiest thing to do is to give some 'infinite'
---  weight value, and then update the weights to be that.
+-- A single step of Hebbian update.
+-- Propagate S through the net, and then increase the weights
+-- of all the edges x₁ ⟶ x₂ involved in that propagation
+-- by η * x₁ * x₂.
+def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
+{
+  graph := sorry
+  activation := net.activation
 
--- We need an 'infinity' value for Floats,
--- that is greater than all other Floats.
-axiom inf : Float
+  binary := net.binary
+  acyclic := sorry
+  activ_nondecr := net.activ_nondecr
+  activ_pos := net.activ_pos
+}
 
--- Propagate S through the net, and then update the weights
--- of all the edges involved in that propagation.
+-- Takes a neural network update function 'f' (e.g. 'hebb')
+-- and iterates it 'no_times' times.
+-- netᵢ and Sᵢ are the initial inputs.
+def iterate (f : BFNN -> Set ℕ -> BFNN) (no_times : ℕ) 
+  (netᵢ : BFNN) (Sᵢ : Set ℕ) : BFNN :=
+  match no_times with
+  | Nat.zero => netᵢ
+  | Nat.succ k => f (iterate f k netᵢ Sᵢ) Sᵢ
+
+
+-- This is the exact number of iterations of Hebbian learning
+-- on 'net' and 'S' that we need to make the network unstable,
+-- i.e. any activation involved within Prop(S) simply goes through.
 -- 
--- We update the weights *maximally*, i.e. rather than
--- incrementing them we just set them to a value that
--- is *guaranteed* to activate the next one.
--- 
--- (actually, this value is just the one given by activ_pos)
-
-def max_weight (net : BFNN) : Float := 
+-- This is the trickiest part to get right -- we actually need
+-- to *construct* this number, based on the net's activation
+-- function and the edge weights within Prop(S)!
+def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
   sorry
 
-def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
-  {
-    graph := sorry
-    activation := net.activation
 
-    binary := net.binary
-    acyclic := sorry
-    activ_nondecr := net.activ_nondecr
-    activ_pos := net.activ_pos
-  }
+-- Iterated hebbian update, up to a certain fixed point.
+-- We implement this as 'hebb' iterated 'hebb_unstable_point'
+-- number of times.
+def hebb_star (net : BFNN) (S : Set ℕ) : BFNN := 
+  iterate hebb (hebb_unstable_point net S) net S
+
+
+-- A net net₁ is a subnet of net₂ (net₁ ≼ net₂) iff for all
+-- sets S, every node activated in the propagation of S
+-- in net₁ is activated in the propagation of S in net₂.
+-- (They both have the same *propagation structure*)
+def subnet (net₁ net₂ : BFNN) : Prop :=
+  ∀ (S : Set ℕ), propagate net₁ S ⊆ propagate net₂ S
+
+infixl:65   " ≼ " => subnet
+
+
+-- Two nets are equivalent if they have the same 
+-- *propagation structure* (i.e. if their propagations agree 
+-- for every set S)
+def net_eq (net₁ net₂ : BFNN) : Prop :=
+  net₁ ≼ net₂ ∧ net₂ ≼ net₁
+
+infixl:65   " ≡ " => net_eq
+
+
+-- A super easy example, just to briefly test ≼ and ≡
+example : example_net ≡ example_net :=
+  ⟨fun S n h => h, fun S n h => h⟩  
+
+
+-- propagate_N (S) = propagate_hebb(N, S) (S)
+-- This essentially says that repeated hebbian update
+-- is well-defined; *after* updating on S, we can update
+-- on S again and increase weights within the same propagation.
+-- (The propagation of S doesn't suddenly change, which is
+--  something we might be worried about.)
+--------------------------------------------------------------------
+theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
+  propagate (hebb net S) S = propagate net S := by
+--------------------------------------------------------------------
+  sorry
+
+
+-- This says that 'hebb_star' is a fixed point of 'hebb'
+-- (with respect to ≡).  i.e. in the following sense, f(X) = X:
+--   hebb(X, S) ≡ X,
+-- where X = hebb_star net S
+-- 
+-- I may need additional lemmas (e.g. an activation function
+-- within Prop(S) in hebb_star will simply go through.)
+--------------------------------------------------------------------
+theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) : 
+  hebb (hebb_star net S) S ≡ hebb_star net S := by 
+--------------------------------------------------------------------
+  sorry
+
+
+-- This is the big theorem.
+-- It explains the behavior of 'hebb_star' in terms of the net
+-- *before* update -- it turns out that we can completely
+-- reduce the dynamic behavior to the static behavior.
+--------------------------------------------------------------------
+theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
+  propagate (hebb_star net S₁) S₂ = 
+    propagate net S₂ ∪ (propagate net S₁ ∩ reachable net S₂) := by 
+--------------------------------------------------------------------
+  sorry
+
+
+
+
 
 /-
 Graph example
@@ -1331,3 +1405,29 @@ def updateVertexPayload (g : Graph α β) (id : Nat) (payload : α) : Graph α �
   g with vertices := g.vertices.modify id (λ vertex => { vertex with payload := payload })
 }
 -/
+
+-- TODO: Prove that we can unravel these nets into ordinary
+-- feedforward nets
+-- 
+-- TODO: Email David Sprunger about follow-up papers to
+-- "backprop as a functor"
+
+/-══════════════════════════════════════════════════════════════════
+  The Logic (Language and Semantics)
+══════════════════════════════════════════════════════════════════-/
+
+
+
+/-══════════════════════════════════════════════════════════════════
+  Inference Rules and Proof System
+══════════════════════════════════════════════════════════════════-/
+
+
+
+
+/-══════════════════════════════════════════════════════════════════
+  Soundness
+══════════════════════════════════════════════════════════════════-/
+
+
+
