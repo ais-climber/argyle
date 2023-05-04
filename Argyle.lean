@@ -1,6 +1,7 @@
 import Mathlib.Tactic.LibrarySearch
 import Mathlib.Tactic.NthRewrite
 import Mathlib.Mathport.Syntax
+import Std.Tactic.ShowTerm
 
 import Lean.Parser.Tactic
 import Graph.Graph
@@ -1377,7 +1378,74 @@ example : example_net ≡ example_net :=
 theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
   propagate (hebb net S) S = propagate net S := by
 --------------------------------------------------------------------
-  sorry
+  apply ext
+  intro (n : ℕ)
+  simp only [Membership.mem, Set.Mem, propagate]
+
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+
+  -- Base Step
+  case hz =>
+    apply Iff.intro
+    case mp => 
+      simp only [propagate_acc]
+      exact fun x => x
+    case mpr => 
+      simp only [propagate_acc]
+      exact fun x => x
+
+  -- Inductive Step
+  case hi k IH => 
+    apply Iff.intro
+
+    -- Forward Direction
+    case mp => 
+      intro h₁
+      simp only [propagate_acc] at h₁
+      simp only [propagate_acc]
+
+      cases h₁
+      case inl h₂ => exact Or.inl h₂
+      case inr h₂ =>
+        apply Or.inr
+
+        -- TODO: This is the stuff that should go in the activ_agree lemma!        
+        simp
+        simp at h₂
+        sorry
+        -- I do not have the tools to show this at this point.
+        -- I need a lemma about activations in the hebbian updated net.
+
+        -- show_term convert h₂
+
+
+-- TODO: This is the stuff that should go in the activ_agree lemma!
+-- simp
+-- simp at h₂
+-- convert h₂ using 5
+-- rename_i i
+-- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+-- generalize hLm : layer net m = Lm
+
+-- -- Apply the inductive hypothesis!
+-- have h₄ : m ∈ preds net n := by
+--   rw [symm hm]
+--   simp [preds]
+--   exact get!_mem (predecessors net.toNet.graph n).data i
+-- have h₅ : Lm ≤ k := by
+--   rw [symm hLm]
+--   apply Nat.lt_succ.mp
+--   rw [symm hL]
+--   exact preds_decreasing net m n h₄
+-- have h₆ : m ∈ reachedby net S₂ :=
+--   match h₁ with
+--   | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
+-- exact IH Lm h₅ m h₆ hLm
+
+    -- Backwards Direction
+    case mpr => sorry
 
 
 -- This says that 'hebb_star' is a fixed point of 'hebb'
