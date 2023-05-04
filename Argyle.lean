@@ -342,6 +342,7 @@ theorem binary_step_nondecr (x₁ x₂ : Float) (hyp : x₁ ≤ x₂) :
 structure Net where
   graph : Graph ℕ Float
   activation : Float → Float
+  rate : Float -- learning rate
 
 structure BFNN extends Net where 
   -- The activation function is binary
@@ -362,6 +363,7 @@ def myBFNN : BFNN :=
   {
     graph := graphA
     activation := binary_step
+    rate := 1.0
 
     binary := binary_step_is_binary
     -- sort := (topSortUnsafe graphA).toList.reverse
@@ -1281,20 +1283,36 @@ theorem minimal_cause (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
+-- Increase the weight on the given edge x₁ ⟶ x₂  by
+-- η * act(x₁) * act(x₂), *only if* the nodes are both within
+-- propagate net S.
+noncomputable
+def weight_update (net : BFNN) (S : Set ℕ) 
+  (x₁ : ℕ) (edge : Edge Float) : Float := 
+  let x₂ := edge.target
+  let activ₁ := if x₁ ∈ propagate net S then 1.0 else 0.0
+  let activ₂ := if x₂ ∈ propagate net S then 1.0 else 0.0
+  edge.weight + (net.rate * activ₁ * activ₂)
+
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
 -- of all the edges x₁ ⟶ x₂ involved in that propagation
 -- by η * x₁ * x₂.
+noncomputable
 def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
 {
-  graph := sorry
+  graph := { vertices := Array.map (fun v => 
+    { v with adjacencyList := Array.map (fun edge => 
+      { edge with weight := weight_update net S v.payload edge}) v.adjacencyList}) net.graph.vertices }
+  
   activation := net.activation
-
+  rate := net.rate
   binary := net.binary
   acyclic := sorry
   activ_nondecr := net.activ_nondecr
   activ_pos := net.activ_pos
 }
+
 
 -- Takes a neural network update function 'f' (e.g. 'hebb')
 -- and iterates it 'no_times' times.
@@ -1320,6 +1338,7 @@ def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
 -- Iterated hebbian update, up to a certain fixed point.
 -- We implement this as 'hebb' iterated 'hebb_unstable_point'
 -- number of times.
+noncomputable
 def hebb_star (net : BFNN) (S : Set ℕ) : BFNN := 
   iterate hebb (hebb_unstable_point net S) net S
 
@@ -1368,6 +1387,9 @@ theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) :
 -- 
 -- I may need additional lemmas (e.g. an activation function
 -- within Prop(S) in hebb_star will simply go through.)
+-- 
+-- One important lemma:  If an edge is not in the propagation of S,
+-- its weight is unaffected.
 --------------------------------------------------------------------
 theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) : 
   hebb (hebb_star net S) S ≡ hebb_star net S := by 
