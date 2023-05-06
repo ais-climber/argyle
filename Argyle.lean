@@ -1301,17 +1301,14 @@ def weight_update (net : BFNN) (S : Set ℕ)
 -- by η * x₁ * x₂.
 noncomputable
 def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
-{
+{ net with
   graph := { vertices := Array.map (fun v => 
     { v with adjacencyList := Array.map (fun edge => 
       { edge with weight := weight_update net S v.payload edge}) v.adjacencyList}) net.graph.vertices }
   
-  activation := net.activation
-  rate := net.rate
-  binary := net.binary
+  -- We have to ensure that the update doesn't create any cycles
+  -- (In this case, we're only changing the weights.)
   acyclic := sorry
-  activ_nondecr := net.activ_nondecr
-  activ_pos := net.activ_pos
 }
 
 
@@ -1419,30 +1416,6 @@ theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) :
         -- I need a lemma about activations in the hebbian updated net.
 
         -- show_term convert h₂
-
-
--- TODO: This is the stuff that should go in the activ_agree lemma!
--- simp
--- simp at h₂
--- convert h₂ using 5
--- rename_i i
--- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
--- generalize hLm : layer net m = Lm
-
--- -- Apply the inductive hypothesis!
--- have h₄ : m ∈ preds net n := by
---   rw [symm hm]
---   simp [preds]
---   exact get!_mem (predecessors net.toNet.graph n).data i
--- have h₅ : Lm ≤ k := by
---   rw [symm hLm]
---   apply Nat.lt_succ.mp
---   rw [symm hL]
---   exact preds_decreasing net m n h₄
--- have h₆ : m ∈ reachedby net S₂ :=
---   match h₁ with
---   | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
--- exact IH Lm h₅ m h₆ hLm
 
     -- Backwards Direction
     case mpr => sorry

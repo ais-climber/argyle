@@ -96,11 +96,11 @@
   </equation*>
 
   In modern logics of preference upgrade, we can formalize credibility as a
-  conditional <math|\<Rightarrow\>>, and \P<math|A> more credible\Q as a
-  dynamic modality <math|<around*|[|A|]>> that changes the interpretation of
-  the conditional. It should be fairly straightforward to find a semantics of
-  <math|\<Rightarrow\>> and <math|<around*|[|A|]>> that makes this rule
-  sound.
+  conditional <math|\<Rightarrow\>>, and \P[make] <math|A> more credible\Q as
+  a dynamic modality <math|<around*|[|A|]>> that changes the interpretation
+  of the conditional (since the sentence reads like a command). It should be
+  fairly straightforward to find a semantics of <math|\<Rightarrow\>> and
+  <math|<around*|[|A|]>> that makes this rule sound.
 
   Why did I mention induction before? Let's say <math|A> and <math|B> are
   actually predicates <math|A<around*|(|x|)>,B<around*|(|x|)>> over instances
@@ -131,19 +131,70 @@
   which upgrade operators <math|<around*|[|A|]>> work \V there probably are
   multiple answers to this!)
 
-  <paragraph|Formalizing Polya's Rule.>How do we faithfully translate Polya's
-  rule? That depends on how we interpret the dynamics of \P[make] <math|A>
-  more credible.\Q
+  <paragraph|Formalizing Polya's Rule.>Polya's inductive rule says that if
+  <math|A\<rightarrow\>B> and <math|B> is true, then we should make <math|A>
+  more credible. In other words, if we have <math|A\<rightarrow\>B> and
+  <math|B>, then any statement <math|C> that holds
+  <with|font-shape|italic|after> making <math|A> more plausible
+  (<math|<around*|[|A|]>C>) now holds <with|font-shape|italic|anyway> (i.e.
+  we can discharge the <math|<around*|[|A|]>>). So our translation into
+  dynamic logic is the following:
 
   <\equation*>
-    <frac|<around*|(|<frac|A\<rightarrow\>B<space|2em>B|C>|)>|<around*|[|A|]>C>
+    <frac|A\<rightarrow\>B<space|2em>B<space|2em><around*|[|A|]>C|C>
   </equation*>
 
-  <\equation*>
-    <around*|(|<around*|(|<around*|(|A\<rightarrow\>B|)>\<wedge\>B|)>\<rightarrow\>C|)>\<rightarrow\><around*|[|A|]>C
-  </equation*>
+  <paragraph|The Plan.>
 
-  ???
+  <\enumerate>
+    <item>Translate all of Polya's other rules the same way.
+
+    <item>Go through each of the preference upgrade operators (announcement,
+    lexicographic, elite, Hebbian, etc.) and check if they satisfy each of
+    the rules. Make a table.
+
+    <item>If <with|font-shape|italic|none> of the operators
+    <math|<around*|[|A|]>> satisfy the inductive rules, then I should come up
+    with one that does!
+
+    <\itemize>
+      <item>Come up with the semantics for a policy that re-orders worlds,
+      that satisfies the inductive rules.
+
+      <item>Is this operator reducible to the base language? If so, what's
+      the reduction? If not, is there such an operator that
+      <with|font-shape|italic|is>, or is this a necessary fact that follows
+      from the inductive rules holding?
+    </itemize>
+
+    <item>After considering (3), we now have <with|font-shape|italic|some>
+    operators <math|<around*|[|A|]>> satisfying the inductive rules. Call
+    them <with|font-shape|italic|inductive operators> (or something). These
+    are a bridge between preference upgrade and logical induction.
+
+    <\itemize>
+      <item>Is there some sort of <with|font-shape|italic|semantic condition>
+      that separates which policies are inductive and which aren't?
+    </itemize>
+  </enumerate>
+
+  \;
+
+  TODO:
+
+  <\enumerate>
+    <item>How can I translate the following rule into a logic of preference
+    upgrade? (\PA more credible\Q reads like a command.)
+
+    <\equation*>
+      <frac|<tabular|<tformat|<cwith|1|-1|1|1|cell-halign|c>|<table|<row|<cell|A<text|
+      implies >B>>|<row|<cell|B<text| true>>>>>>|A<text| more credible>>
+    </equation*>
+
+    <item>Look through every citation of Polya's book and double-check that
+    nobody else has given it formal semantics or related it to KLM
+    conditional logics or logics of preference upgrade.
+  </enumerate>
 </body>
 
 <\initial>
@@ -161,9 +212,10 @@
 
 <\references>
   <\collection>
-    <associate|auto-1|<tuple|1|1|../../.TeXmacs/texts/scratch/no_name_11.tm>>
-    <associate|auto-2|<tuple|2|?|../../.TeXmacs/texts/scratch/no_name_11.tm>>
-    <associate|auto-3|<tuple|1|?|../../.TeXmacs/texts/scratch/no_name_11.tm>>
+    <associate|auto-1|<tuple|1|1>>
+    <associate|auto-2|<tuple|2|1>>
+    <associate|auto-3|<tuple|1|2>>
+    <associate|auto-4|<tuple|2|?>>
   </collection>
 </references>
 
@@ -174,6 +226,14 @@
       Network Semantics for Preference Upgrade>
       <datoms|<macro|x|<repeat|<arg|x>|<with|font-series|medium|<with|font-size|1|<space|0.2fn>.<space|0.2fn>>>>>|<htab|5mm>>
       <no-break><pageref|auto-1><vspace|0.5fn>
+
+      <vspace*|1fn><with|font-series|<quote|bold>|math-font-series|<quote|bold>|2<space|4spc>Polya's
+      Rule of Plausible Inference> <datoms|<macro|x|<repeat|<arg|x>|<with|font-series|medium|<with|font-size|1|<space|0.2fn>.<space|0.2fn>>>>>|<htab|5mm>>
+      <no-break><pageref|auto-2><vspace|0.5fn>
+
+      <with|par-left|<quote|4tab>|Formalizing Polya's Rule.
+      <datoms|<macro|x|<repeat|<arg|x>|<with|font-series|medium|<with|font-size|1|<space|0.2fn>.<space|0.2fn>>>>>|<htab|5mm>>
+      <no-break><pageref|auto-3><vspace|0.15fn>>
     </associate>
   </collection>
 </auxiliary>
