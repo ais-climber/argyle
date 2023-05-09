@@ -1589,14 +1589,16 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
             rw [hL, simp_propagate_acc _ hS₂] at h₁
             -- rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
             
+
+            -- activ_agree lemma doesn't quite work here, so I have
+            -- to try to prove this manually...
+            -- (something very similar does)
+            -- TURN THIS ALL INTO A SIMPLER LEMMA!!!
             rw [hebb_preds _ _] at h₁
             conv at h₁ => 
               intro preds; simp only [List.bind]; enter [2, 2, i, 1]; 
               rw [hebb_layers _ _]
-            
-            -- activ_agree lemma doesn't quite work here, so I have
-            -- to try to prove this manually...
-            -- (something very similar does)
+
             intro preds
             let prev_activ_hebb := do
               let i <- List.range preds.length
@@ -1626,6 +1628,10 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
             -- So we just need to argue that
             -- curr_activ >= curr_activ_hebb
             -- (factor in the fact that they are both binary!)
+            -- 
+            -- Also, our IH should give us prev_activ and prev_activ_hebb
+            -- are the same, I think...?  Or if not the same, then we
+            -- can say something about their relationship
             sorry
 
             -- DEF OF ACTIV
