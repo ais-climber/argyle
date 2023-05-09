@@ -2,6 +2,7 @@ import Mathlib.Tactic.LibrarySearch
 import Mathlib.Tactic.NthRewrite
 import Mathlib.Mathport.Syntax
 import Std.Tactic.ShowTerm
+import Lean.Meta.Tactic.Simp.Main
 
 import Lean.Parser.Tactic
 import Graph.Graph
@@ -874,15 +875,20 @@ theorem propagate_is_idempotent :
           have h₂ : ¬n ∈ propagate net S := h
           simp [propagate] at h₂
           rw [simp_propagate_acc net h₂] at h₁
+          
+          -- -- Setup for the activ_agrees lemma
+          -- intro preds
+          -- intro prev_activ₂
+          -- let prev_activ₁ := do
+          --   let i <- List.range preds.length
+          --   let m := preds.get! i
+          --   return if propagate_acc net S m (layer net m) then 1.0 else 0.0
+          -- have h₁ : activ net prev_activ₁ n := sorry -- should just follow from h₁
+          
+          -- -- activ_agrees lemma goes here
+          -- sorry
           simp
           simp at h₁
-
-          -- -- Apply the inductive hypothesis!
-          -- have h₃ : ∀ (m : ℕ), layer net m ≤ layer net n → 
-          --   ((fun n => propagate_acc net S n (layer net n)) m ↔ S m) := by
-          --   sorry
-          -- exact activ_agree net _ _ n h₃ h₁
-
           
           -- TODO: Having lots of trouble with the activ_agrees lemma atm...
           simp
@@ -1463,6 +1469,15 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
   sorry
 
 
+-- Hebbian update hebb_star does not affect the predecessors
+-- of any node.
+--------------------------------------------------------------------
+theorem hebb_preds (net : BFNN) (S : Set ℕ) : 
+  preds (hebb_star net S) n = preds net n := by 
+--------------------------------------------------------------------
+  sorry
+
+
 -- Hebbian update hebb_star does not affect which neurons are
 -- on which layer of the net.
 --------------------------------------------------------------------
@@ -1565,27 +1580,67 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
             -- Now let's do some simplifications.
             simp only [Membership.mem, Set.Mem, propagate]
             simp only [Membership.mem, Set.Mem, propagate] at h₁
-            simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
+            -- simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
             simp only [Membership.mem, Set.Mem, propagate] at IH
             
             rw [hebb_layers] at h₁
-            conv at IH => intro; intro; intro; intro; rw [hebb_layers]
+            conv at IH => intro x₁ x₂ x₃ x₄; rw [hebb_layers]
             rw [hL, simp_propagate_acc _ h]
             rw [hL, simp_propagate_acc _ hS₂] at h₁
-            rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
+            -- rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
             
+            rw [hebb_preds _ _] at h₁
+            conv at h₁ => 
+              intro preds; simp only [List.bind]; enter [2, 2, i, 1]; 
+              rw [hebb_layers _ _]
+            
+            -- activ_agree lemma doesn't quite work here, so I have
+            -- to try to prove this manually...
+            -- (something very similar does)
+            intro preds
+            let prev_activ_hebb := do
+              let i <- List.range preds.length
+              let m := preds.get! i
+              return if propagate_acc (hebb_star net S₁) S₂ m (layer net m)
+                then 1.0 else 0.0
+            intro prev_activ
+            have h₁ : activ (hebb_star net S₁) prev_activ_hebb n := h₁
+            
+            -- Simplify the activations; argue that if prev_activ₁
+            -- activates then prev_activ₂ must as well!
+            unfold activ
+            unfold activ at h₁
+            rw [hebb_preds _ _] at h₁
+            
+            intro preds
+            let weights_hebb := do
+              let i ← List.range (List.length preds)
+              let m := preds.get! i
+              return (hebb_star net S₁).graph.getEdgeWeight m n
+            let weight_sum_hebb := weighted_sum weights_hebb prev_activ_hebb
+            let curr_activ_hebb := net.activation weight_sum_hebb
+            have h₁ : curr_activ_hebb = 1.0 := sorry
+
+            intro weights weight_sum curr_activ
+            -- We have curr_activ_hebb = 1.0
+            -- So we just need to argue that
+            -- curr_activ >= curr_activ_hebb
+            -- (factor in the fact that they are both binary!)
             sorry
 
-            -- The usual activ_agree lemma doesn't seem
-            -- to work here...
-            -- I have to actually think about what's going on!
+            -- DEF OF ACTIV
             -- 
-            -- simp
-            -- simp at h₁
-            -- convert h₁
-            -- rename_i i
-            -- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
-            -- generalize hLm : layer net m = Lm
+            -- def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
+            --   let preds := preds net n
+            --   let weights := do
+            --     let i <- List.range preds.length
+            --     let m := preds.get! i
+            --     return net.graph.getEdgeWeight m n
+            --   let weight_sum := weighted_sum weights prev_activ
+            --   let curr_activ := net.activation weight_sum
+            --   curr_activ = 1.0
+
+            
 
     -- Backwards direction (should be similar)
     case mpr =>
