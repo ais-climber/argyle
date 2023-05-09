@@ -1510,7 +1510,7 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   generalize hL : layer net n = L
   induction L using Nat.case_strong_induction_on generalizing n
 
-  -- Base Step;
+  -- Base Step
   case hz =>
     simp [propagate]
     simp [Membership.mem, Set.Mem]
@@ -1528,15 +1528,8 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   case hi k IH =>
     apply Iff.intro
 
-    -- Backwards direction (easy; just apply hebb_extensive)
-    case mpr => exact fun h₁ =>
-      have h₂ : propagate net S₁ ∩ reachable net S₂ ⊆ 
-        propagate (hebb_star net S₁) S₂ :=
-        -- This might be tricker than I thought... is it true?
-        sorry
-      Set.union_subset (hebb_extensive _ _ _) h₂ h₁
 
-    -- Forward direction (the tricky part)
+    -- Forward direction
     case mp =>
       intro h₁
 
@@ -1561,25 +1554,51 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
         -- n ∈ propagate(S₁) is a bit trickier. This is where
         -- we use our inductive hypothesis.
         case left => 
-          -- simp only [Membership.mem, Set.Mem]
-          sorry
+          -- By cases on n ∈ S₁ (in order to break down propagate_acc)
+          by_cases n ∈ S₁
+          case pos => exact propagate_is_extens _ _ h
+          case neg => 
+            rename_i hpropS₂
+            have hS₂ : n ∉ S₂ := 
+              fun h₂ => absurd (propagate_is_extens _ _ h₂) hpropS₂
 
+            -- Now let's do some simplifications.
+            simp only [Membership.mem, Set.Mem, propagate]
+            simp only [Membership.mem, Set.Mem, propagate] at h₁
+            simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
+            simp only [Membership.mem, Set.Mem, propagate] at IH
+            
+            rw [hebb_layers] at h₁
+            conv at IH => intro; intro; intro; intro; rw [hebb_layers]
+            rw [hL, simp_propagate_acc _ h]
+            rw [hL, simp_propagate_acc _ hS₂] at h₁
+            rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
+            
+            sorry
 
-/-
-Graph example
-⟨#[
-    ⟨0, #[⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
-    ⟨1, #[⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
-    ⟨2, #[⟨3, 1.0⟩, ⟨3, 5.0⟩]⟩, 
-    ⟨3, #[]⟩
-  ]⟩
--/
-/-
-Update example
-def updateVertexPayload (g : Graph α β) (id : Nat) (payload : α) : Graph α β := {
-  g with vertices := g.vertices.modify id (λ vertex => { vertex with payload := payload })
-}
--/
+            -- The usual activ_agree lemma doesn't seem
+            -- to work here...
+            -- I have to actually think about what's going on!
+            -- 
+            -- simp
+            -- simp at h₁
+            -- convert h₁
+            -- rename_i i
+            -- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+            -- generalize hLm : layer net m = Lm
+
+    -- Backwards direction (should be similar)
+    case mpr =>
+      intro h₁
+      sorry
+      
+      -- Old proof that I tried
+      -- exact fun h₁ =>
+      --   have h₂ : propagate net S₁ ∩ reachable net S₂ ⊆ 
+      --     propagate (hebb_star net S₁) S₂ := by
+      --     sorry
+      --   Set.union_subset (hebb_extensive _ _ _) h₂ h₁
+            
 
 -- TODO: Prove that we can unravel these nets into ordinary
 -- feedforward nets
