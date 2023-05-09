@@ -11,6 +11,7 @@ import Mathlib.Data.List.Defs
 import Mathlib.Init.Propext
 import Mathlib.Data.Set.Basic
 import Mathlib.Logic.Basic
+import Mathlib.Logic.Function.Basic
 
 open Graph
 open Set
@@ -1147,6 +1148,12 @@ theorem reachedby_is_monotone (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
 ══════════════════════════════════════════════════════════════════-/
 
 --------------------------------------------------------------------
+theorem propagate_reach_inclusion (net : BFNN) : ∀ (S : Set ℕ),
+  propagate net S ⊆ reachable net S := by
+--------------------------------------------------------------------
+  sorry
+
+--------------------------------------------------------------------
 lemma minimal_cause_helper (net : BFNN) : ∀ (S₁ S₂ : Set ℕ), ∀ (n : ℕ),
   n ∈ reachedby net S₂
   → (n ∈ propagate net S₁
@@ -1371,55 +1378,57 @@ example : example_net ≡ example_net :=
 -- on S again and increase weights within the same propagation.
 -- (The propagation of S doesn't suddenly change, which is
 --  something we might be worried about.)
---------------------------------------------------------------------
-theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
-  propagate (hebb net S) S = propagate net S := by
---------------------------------------------------------------------
-  apply ext
-  intro (n : ℕ)
-  simp only [Membership.mem, Set.Mem, propagate]
+-- TODO: Not sure if I need this anymore!
+-- It's somewhat interesting, but might not help with the
+-- reduction.
+-- --------------------------------------------------------------------
+-- theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
+--   propagate (hebb net S) S = propagate net S := by
+-- --------------------------------------------------------------------
+--   apply ext
+--   intro (n : ℕ)
+--   simp only [Membership.mem, Set.Mem, propagate]
 
-  -- By induction on the layer of the net containing n
-  generalize hL : layer net n = L
-  induction L using Nat.case_strong_induction_on generalizing n
+--   -- By induction on the layer of the net containing n
+--   generalize hL : layer net n = L
+--   induction L using Nat.case_strong_induction_on generalizing n
 
-  -- Base Step
-  case hz =>
-    apply Iff.intro
-    case mp => 
-      simp only [propagate_acc]
-      exact fun x => x
-    case mpr => 
-      simp only [propagate_acc]
-      exact fun x => x
+--   -- Base Step
+--   case hz =>
+--     apply Iff.intro
+--     case mp => 
+--       simp only [propagate_acc]
+--       exact fun x => x
+--     case mpr => 
+--       simp only [propagate_acc]
+--       exact fun x => x
 
-  -- Inductive Step
-  case hi k IH => 
-    apply Iff.intro
+--   -- Inductive Step
+--   case hi k IH => 
+--     apply Iff.intro
 
-    -- Forward Direction
-    case mp => 
-      intro h₁
-      simp only [propagate_acc] at h₁
-      simp only [propagate_acc]
+--     -- Forward Direction
+--     case mp => 
+--       intro h₁
+--       simp only [propagate_acc] at h₁
+--       simp only [propagate_acc]
 
-      cases h₁
-      case inl h₂ => exact Or.inl h₂
-      case inr h₂ =>
-        apply Or.inr
+--       cases h₁
+--       case inl h₂ => exact Or.inl h₂
+--       case inr h₂ =>
+--         apply Or.inr
 
-        -- TODO: This is the stuff that should go in the activ_agree lemma!        
-        simp
-        simp at h₂
-        sorry
-        -- I do not have the tools to show this at this point.
-        -- I need a lemma about activations in the hebbian updated net.
+--         -- TODO: This is the stuff that should go in the activ_agree lemma!        
+--         simp
+--         simp at h₂
+--         sorry
+--         -- I do not have the tools to show this at this point.
+--         -- I need a lemma about activations in the hebbian updated net.
 
-        -- show_term convert h₂
+--         -- show_term convert h₂
 
-    -- Backwards Direction
-    case mpr => sorry
-
+--     -- Backwards Direction
+--     case mpr => sorry
 
 -- This says that 'hebb_star' is a fixed point of 'hebb'
 -- (with respect to ≡).  i.e. in the following sense, f(X) = X:
@@ -1438,8 +1447,39 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
   sorry
 
 
+-- Hebbian update hebb_star does not affect which neurons are
+-- on which layer of the net.
+--------------------------------------------------------------------
+theorem hebb_layers (net : BFNN) (S : Set ℕ) : 
+  layer (hebb_star net S) n = layer net n := by 
+--------------------------------------------------------------------
+  sorry
+
+/-══════════════════════════════════════════════════════════════════
+  Properties of Naive Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
+-- Hebbian update hebb_star does not affect graph reachability
+-- (It only affects the edge weights)
+--------------------------------------------------------------------
+theorem hebb_reach (net : BFNN) (S₁ S₂ : Set ℕ) : 
+  reachable (hebb_star net S₁) S₂ = 
+    reachable net S₂ := by 
+--------------------------------------------------------------------
+  sorry
+
+
+-- Every net N is a subnet of (hebb_star N)
+-- (i.e. hebb_star includes the previous propagations)
+--------------------------------------------------------------------
+theorem hebb_extensive (net : BFNN) (S : Set ℕ) : 
+  net ≼ (hebb_star net S) := by 
+--------------------------------------------------------------------
+  sorry
+
+
 -- This is the big theorem.
--- It explains the behavior of 'hebb_star' in terms of the net
+-- It explains the behavior of hebb_star in terms of the net
 -- *before* update -- it turns out that we can completely
 -- reduce the dynamic behavior to the static behavior.
 --------------------------------------------------------------------
@@ -1447,10 +1487,71 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   propagate (hebb_star net S₁) S₂ = 
     propagate net S₂ ∪ (propagate net S₁ ∩ reachable net S₂) := by 
 --------------------------------------------------------------------
-  sorry
+  apply ext
+  intro (n : ℕ)
+  
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
 
+  -- Base Step
+  case hz =>
+    simp only [propagate]
+    simp only [Union.union, Set.union, setOf]
+    simp only [Inter.inter, Set.inter, setOf]
+    simp only [Membership.mem, Set.Mem]
+    rw [hebb_layers]
+    rw [hL]
+    simp only [propagate_acc]
+    
+    apply Iff.intro
+    case mp => 
+      intro h₁
+      exact Or.inl h₁
 
+    case mpr =>
+      intro h₁
+      sorry -- this isn't true!!!
 
+  -- Inductive Step
+  case hi k IH =>
+    apply Iff.intro
+
+    -- Backwards direction (easy; just apply hebb_extensive)
+    case mpr => exact fun h₁ =>
+      have h₂ : propagate net S₁ ∩ reachable net S₂ ⊆ 
+        propagate (hebb_star net S₁) S₂ :=
+        -- This might be tricker than I thought... is it true?
+        sorry
+      Set.union_subset (hebb_extensive _ _ _) h₂ h₁
+
+    -- Forward direction (the tricky part)
+    case mp =>
+      intro h₁
+
+      -- By cases; 
+      --   If n ∈ propagate(S₂), then we're done.
+      --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
+      by_cases n ∈ propagate net S₂
+      case pos => exact Or.inl h
+      case neg => 
+        apply Or.inr
+        apply And.intro 
+        
+        -- n ∈ reachable(S₂) follows by prop_reach_inclusion
+        -- along with hebb_layers, hebb_reach 
+        -- (hebbian update doesn't affect the structure of the graph)
+        case right =>
+          have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
+            propagate_reach_inclusion _ _ h₁
+          exact (Function.funext_iff.mp 
+            (hebb_reach net S₁ S₂) _).to_iff.mp h₂
+
+        -- n ∈ propagate(S₁) is a bit trickier. This is where
+        -- we use our inductive hypothesis.
+        case left => 
+          -- simp only [Membership.mem, Set.Mem]
+          sorry
 
 
 /-
