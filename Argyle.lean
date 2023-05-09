@@ -1047,6 +1047,22 @@ def reachable (net : BFNN) (S : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
     ∃ (m : ℕ), (m ∈ S ∧ net.graph.hasPath m n)
 
+-- hL: layer net n = 0
+-- h₁: n ∈ S₂ ∨ n ∈ S₁ ∧ reachable net S₂ n
+-- ⊢ n ∈ S₂
+
+-- Argument: If there is a path from S to n, but n is in
+-- layer 0 -- there are *no* incoming nodes, so the path
+-- must be of length 0.  So n must be that n ∈ S with
+-- a path to n, i.e. n ∈ S.
+--------------------------------------------------------------------
+lemma reach_layer_zero (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
+  layer net n = 0
+  → n ∈ reachable net S
+  → n ∈ S := by
+--------------------------------------------------------------------
+  sorry
+
 --------------------------------------------------------------------
 theorem reach_is_extens (net : BFNN) : ∀ (S : Set ℕ),
   S ⊆ reachable net S := by
@@ -1494,24 +1510,19 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   generalize hL : layer net n = L
   induction L using Nat.case_strong_induction_on generalizing n
 
-  -- Base Step
+  -- Base Step;
   case hz =>
-    simp only [propagate]
-    simp only [Union.union, Set.union, setOf]
-    simp only [Inter.inter, Set.inter, setOf]
-    simp only [Membership.mem, Set.Mem]
+    simp [propagate]
+    simp [Membership.mem, Set.Mem]
     rw [hebb_layers]
     rw [hL]
     simp only [propagate_acc]
     
-    apply Iff.intro
-    case mp => 
-      intro h₁
-      exact Or.inl h₁
-
-    case mpr =>
-      intro h₁
-      sorry -- this isn't true!!!
+    -- n ∈ S₂ ↔ n ∈ S₂ ∨ (n ∈ S₁ ∧ n ∈ reachable net S₂),
+    -- which trivially holds at layer 0.
+    exact ⟨fun h₁ => Or.inl h₁, 
+      fun h₁ => Or.elim h₁ (fun h₂ => h₂) 
+        (fun h₂ => reach_layer_zero net _ _ hL h₂.2)⟩
 
   -- Inductive Step
   case hi k IH =>
