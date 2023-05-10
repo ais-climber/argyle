@@ -60,6 +60,31 @@ def prod_comprehens (xs : List α) (ys : List β) : List (α × β) :=
 #eval [(x, y) | for x in [1, 2], for y in [3, 4]]
 
 -------------------------------------------------
+-- intro_lets tactic
+-- https://leanprover.zulipchat.com/#narrow/stream/217875-Is-there-code-for-X.3F/topic/Pulling.20.60let.60s.20to.20the.20outside.20of.20a.20statement/near/315581119
+-- Courtesy of Eric Wieser
+-- 
+-------------------------------------------------
+-- This is written in Lean 3!
+-- I need this but for Lean 4...
+
+-- meta def mk_local_lets : expr → tactic (list expr × expr)
+-- | (expr.elet n d v b) := do
+--   p ← tactic.definev n d v,
+--   (ps, r) ← mk_local_lets (expr.instantiate_var b p),
+--   return ((p :: ps), r)
+-- | (expr.app f x) := do
+--     (fargs, f) ← mk_local_lets f,
+--     (xargs, x) ← mk_local_lets x,
+--     pure (fargs ++ xargs, f.app x)
+-- | e := return ([], e)
+
+-- meta def tactic.interactive.lift_lets : tactic unit :=
+-- do
+--   (lets, t) ← tactic.target >>= mk_local_lets,
+--   tactic.change t
+
+-------------------------------------------------
 -- Graphs
 -------------------------------------------------
 -- This is a graph with ℕ nodes
@@ -278,7 +303,7 @@ axiom le_refl_float : ∀ (x : Float), x ≤ x
 axiom lt_or_ge_float : ∀ (x y : Float), x < y ∨ x ≥ y
 axiom le_not_lt_float : ∀ (x y : Float), x ≤ y → ¬ (y < x)
 axiom lt_le_lt_float : ∀ (x y z : Float), x < y → y ≤ z → x < z
-axiom zero_le_one : 0.0 ≤ 1.0
+axiom zero_le_one_float : 0.0 ≤ 1.0
 
 theorem binary_step_is_binary (x : Float) :
     (binary_step x = 0.0) ∨ (binary_step x = 1.0) :=
@@ -333,7 +358,7 @@ theorem binary_step_nondecr (x₁ x₂ : Float) (hyp : x₁ ≤ x₂) :
           -- We are in the second and first cases.
           rw [(if_neg (le_not_lt_float x₁ 0.0 case2))]
           rw [(if_pos case21)]
-          exact zero_le_one
+          exact zero_le_one_float
       | inr case22 => 
           rw [(if_neg (le_not_lt_float x₁ 0.0 case2))]
           rw [(if_neg (le_not_lt_float x₂ 0.0 case22))]
@@ -1351,6 +1376,15 @@ def iterate (f : BFNN -> Set ℕ -> BFNN) (no_times : ℕ)
   | Nat.succ k => f (iterate f k netᵢ Sᵢ) Sᵢ
 
 
+-- We score neurons by the total sum of *negative* weights coming 
+-- into them.  The neuron with the lowest score is the least likely
+-- to activate (in the worst case where all of its negative signals
+-- activate but none of its positive ones do).  If a neuron has
+-- no negative incoming weights, we give it a score of 0.
+def neg_weight_score (net : BFNN) (n : ℕ) : Float :=
+  sorry
+
+
 -- This is the exact number of iterations of Hebbian learning
 -- on 'net' and 'S' that we need to make the network unstable,
 -- i.e. any activation involved within Prop(S) simply goes through.
@@ -1358,9 +1392,24 @@ def iterate (f : BFNN -> Set ℕ -> BFNN) (no_times : ℕ)
 -- This is the trickiest part to get right -- we actually need
 -- to *construct* this number, based on the net's activation
 -- function and the edge weights within Prop(S)!
+-- 
+-- We first pick the neuron with the lowest 'neg_weight_score' n_min.
+-- The number of iterations is that number which would (in the worst
+-- case) guarantee that n_min gets activated.
+-- 
+-- If n_score is n_min's score, and X is that point at which
+-- our activation function is guranteed to be 1.0, and η is the
+-- learning rate, then we return
+-- 
+-- (X - n_score) / η   *(I think!)*
 def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
   sorry
+  -- let x := choose net.activ_pos
+  -- have h₁ : net.activation x = 1.0 := sorry
 
+  -- let n_min := @List.minimum (Vertex ℕ Float) sorry sorry net.graph.vertices.toList
+  -- let n_score := sorry
+  -- sorry
 
 -- Iterated hebbian update, up to a certain fixed point.
 -- We implement this as 'hebb' iterated 'hebb_unstable_point'
@@ -1486,6 +1535,14 @@ theorem hebb_layers (net : BFNN) (S : Set ℕ) :
 --------------------------------------------------------------------
   sorry
 
+
+-- Hebbian update hebb_star does not affect the activation function.
+--------------------------------------------------------------------
+theorem hebb_activation (net : BFNN) (S : Set ℕ) : 
+  (hebb_star net S).activation = net.activation := by 
+--------------------------------------------------------------------
+  sorry
+
 /-══════════════════════════════════════════════════════════════════
   Properties of Naive Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
@@ -1502,9 +1559,21 @@ theorem hebb_reach (net : BFNN) (S₁ S₂ : Set ℕ) :
 
 -- Every net N is a subnet of (hebb_star N)
 -- (i.e. hebb_star includes the previous propagations)
+-- (We had this property in The Logic of Hebbian Learning)
 --------------------------------------------------------------------
 theorem hebb_extensive (net : BFNN) (S : Set ℕ) : 
   net ≼ (hebb_star net S) := by 
+--------------------------------------------------------------------
+  sorry
+
+
+-- Hebbian update hebb_star is *local*, i.e. propagation in
+-- the updated net is bounded by the propagation of the input sets.
+-- (We had this property in The Logic of Hebbian Learning)
+--------------------------------------------------------------------
+theorem hebb_local (net : BFNN) (S₁ S₂ : Set ℕ) :
+  propagate (hebb_star net S₁) S₂ ⊆
+    (propagate net S₁ ∪ propagate net S₂) := by
 --------------------------------------------------------------------
   sorry
 
@@ -1520,145 +1589,191 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
-  
-  -- By induction on the layer of the net containing n
-  generalize hL : layer net n = L
-  induction L using Nat.case_strong_induction_on generalizing n
+  apply Iff.intro
 
-  -- Base Step
-  case hz =>
-    simp [propagate]
-    simp [Membership.mem, Set.Mem]
-    rw [hebb_layers]
-    rw [hL]
-    simp only [propagate_acc]
-    
-    -- n ∈ S₂ ↔ n ∈ S₂ ∨ (n ∈ S₁ ∧ n ∈ reachable net S₂),
-    -- which trivially holds at layer 0.
-    exact ⟨fun h₁ => Or.inl h₁, 
-      fun h₁ => Or.elim h₁ (fun h₂ => h₂) 
-        (fun h₂ => reach_layer_zero net _ _ hL h₂.2)⟩
+  -- Forward direction
+  case mp =>
+    intro h₁
 
-  -- Inductive Step
-  case hi k IH =>
-    apply Iff.intro
-
-
-    -- Forward direction
-    case mp =>
-      intro h₁
-
-      -- By cases; 
-      --   If n ∈ propagate(S₂), then we're done.
-      --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
-      by_cases n ∈ propagate net S₂
-      case pos => exact Or.inl h
-      case neg => 
-        apply Or.inr
-        apply And.intro 
-        
-        -- n ∈ reachable(S₂) follows by prop_reach_inclusion
-        -- along with hebb_layers, hebb_reach 
-        -- (hebbian update doesn't affect the structure of the graph)
-        case right =>
-          have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
-            propagate_reach_inclusion _ _ h₁
-          exact (Function.funext_iff.mp 
-            (hebb_reach net S₁ S₂) _).to_iff.mp h₂
-
-        -- n ∈ propagate(S₁) is a bit trickier. This is where
-        -- we use our inductive hypothesis.
-        case left => 
-          -- By cases on n ∈ S₁ (in order to break down propagate_acc)
-          by_cases n ∈ S₁
-          case pos => exact propagate_is_extens _ _ h
-          case neg => 
-            rename_i hpropS₂
-            have hS₂ : n ∉ S₂ := 
-              fun h₂ => absurd (propagate_is_extens _ _ h₂) hpropS₂
-
-            -- Now let's do some simplifications.
-            simp only [Membership.mem, Set.Mem, propagate]
-            simp only [Membership.mem, Set.Mem, propagate] at h₁
-            -- simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
-            simp only [Membership.mem, Set.Mem, propagate] at IH
-            
-            rw [hebb_layers] at h₁
-            conv at IH => intro x₁ x₂ x₃ x₄; rw [hebb_layers]
-            rw [hL, simp_propagate_acc _ h]
-            rw [hL, simp_propagate_acc _ hS₂] at h₁
-            -- rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
-            
-
-            -- activ_agree lemma doesn't quite work here, so I have
-            -- to try to prove this manually...
-            -- (something very similar does)
-            -- TURN THIS ALL INTO A SIMPLER LEMMA!!!
-            rw [hebb_preds _ _] at h₁
-            conv at h₁ => 
-              intro preds; simp only [List.bind]; enter [2, 2, i, 1]; 
-              rw [hebb_layers _ _]
-
-            intro preds
-            let prev_activ_hebb := do
-              let i <- List.range preds.length
-              let m := preds.get! i
-              return if propagate_acc (hebb_star net S₁) S₂ m (layer net m)
-                then 1.0 else 0.0
-            intro prev_activ
-            have h₁ : activ (hebb_star net S₁) prev_activ_hebb n := h₁
-            
-            -- Simplify the activations; argue that if prev_activ₁
-            -- activates then prev_activ₂ must as well!
-            unfold activ
-            unfold activ at h₁
-            rw [hebb_preds _ _] at h₁
-            
-            intro preds
-            let weights_hebb := do
-              let i ← List.range (List.length preds)
-              let m := preds.get! i
-              return (hebb_star net S₁).graph.getEdgeWeight m n
-            let weight_sum_hebb := weighted_sum weights_hebb prev_activ_hebb
-            let curr_activ_hebb := net.activation weight_sum_hebb
-            have h₁ : curr_activ_hebb = 1.0 := sorry
-
-            intro weights weight_sum curr_activ
-            -- We have curr_activ_hebb = 1.0
-            -- So we just need to argue that
-            -- curr_activ >= curr_activ_hebb
-            -- (factor in the fact that they are both binary!)
-            -- 
-            -- Also, our IH should give us prev_activ and prev_activ_hebb
-            -- are the same, I think...?  Or if not the same, then we
-            -- can say something about their relationship
-            sorry
-
-            -- DEF OF ACTIV
-            -- 
-            -- def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
-            --   let preds := preds net n
-            --   let weights := do
-            --     let i <- List.range preds.length
-            --     let m := preds.get! i
-            --     return net.graph.getEdgeWeight m n
-            --   let weight_sum := weighted_sum weights prev_activ
-            --   let curr_activ := net.activation weight_sum
-            --   curr_activ = 1.0
-
-            
-
-    -- Backwards direction (should be similar)
-    case mpr =>
-      intro h₁
-      sorry
+    -- By cases; 
+    --   If n ∈ propagate(S₂), then we're done.
+    --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
+    by_cases n ∈ propagate net S₂
+    case pos => exact Or.inl h
+    case neg => 
+      apply Or.inr
+      apply And.intro 
       
-      -- Old proof that I tried
-      -- exact fun h₁ =>
-      --   have h₂ : propagate net S₁ ∩ reachable net S₂ ⊆ 
-      --     propagate (hebb_star net S₁) S₂ := by
-      --     sorry
-      --   Set.union_subset (hebb_extensive _ _ _) h₂ h₁
+      -- n ∈ propagate(S₁) follows by hebb_local 
+      -- (since n ∉ propagate(S₂))
+      case left =>
+        cases (hebb_local net S₁ S₂ h₁)
+        case inl h₃ => exact h₃
+        case inr h₃ => contradiction
+
+      -- n ∈ reachable(S₂) follows by prop_reach_inclusion
+      -- along with hebb_layers, hebb_reach 
+      -- (hebbian update doesn't affect the structure of the graph)
+      case right =>
+        have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
+          propagate_reach_inclusion _ _ h₁
+        exact (Function.funext_iff.mp 
+          (hebb_reach net S₁ S₂) _).to_iff.mp h₂
+
+  -- Backwards direction
+  case mpr => sorry
+
+
+
+  -- OLD INDUCTIVE PROOF (keep for later!)
+  -- apply ext
+  -- intro (n : ℕ)
+  
+  -- -- By induction on the layer of the net containing n
+  -- generalize hL : layer net n = L
+  -- induction L using Nat.case_strong_induction_on generalizing n
+
+  -- -- Base Step
+  -- case hz =>
+  --   simp [propagate]
+  --   simp [Membership.mem, Set.Mem]
+  --   rw [hebb_layers]
+  --   rw [hL]
+  --   simp only [propagate_acc]
+    
+  --   -- n ∈ S₂ ↔ n ∈ S₂ ∨ (n ∈ S₁ ∧ n ∈ reachable net S₂),
+  --   -- which trivially holds at layer 0.
+  --   exact ⟨fun h₁ => Or.inl h₁, 
+  --     fun h₁ => Or.elim h₁ (fun h₂ => h₂) 
+  --       (fun h₂ => reach_layer_zero net _ _ hL h₂.2)⟩
+
+  -- -- Inductive Step
+  -- case hi k IH =>
+  --   apply Iff.intro
+
+
+  --   -- Forward direction
+  --   case mp =>
+  --     intro h₁
+
+  --     -- By cases; 
+  --     --   If n ∈ propagate(S₂), then we're done.
+  --     --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
+  --     by_cases n ∈ propagate net S₂
+  --     case pos => exact Or.inl h
+  --     case neg => 
+  --       apply Or.inr
+  --       apply And.intro 
+        
+  --       -- n ∈ reachable(S₂) follows by prop_reach_inclusion
+  --       -- along with hebb_layers, hebb_reach 
+  --       -- (hebbian update doesn't affect the structure of the graph)
+  --       case right =>
+  --         have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
+  --           propagate_reach_inclusion _ _ h₁
+  --         exact (Function.funext_iff.mp 
+  --           (hebb_reach net S₁ S₂) _).to_iff.mp h₂
+
+  --       -- n ∈ propagate(S₁) is a bit trickier. This is where
+  --       -- we use our inductive hypothesis.
+  --       case left => 
+  --         -- By cases on n ∈ S₁ (in order to break down propagate_acc)
+  --         by_cases n ∈ S₁
+  --         case pos => exact propagate_is_extens _ _ h
+  --         case neg => 
+  --           rename_i hpropS₂
+  --           have hS₂ : n ∉ S₂ := 
+  --             fun h₂ => absurd (propagate_is_extens _ _ h₂) hpropS₂
+
+  --           -- Now let's do some simplifications.
+  --           simp only [Membership.mem, Set.Mem, propagate]
+  --           simp only [Membership.mem, Set.Mem, propagate] at h₁
+  --           -- simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
+  --           simp only [Membership.mem, Set.Mem, propagate] at IH
+            
+  --           rw [hebb_layers] at h₁
+  --           conv at IH => intro x₁ x₂ x₃ x₄; rw [hebb_layers]
+  --           rw [hL, simp_propagate_acc _ h]
+  --           rw [hL, simp_propagate_acc _ hS₂] at h₁
+  --           -- rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
+            
+
+  --           -- activ_agree lemma doesn't quite work here, so I have
+  --           -- to try to prove this manually...
+  --           -- (something very similar does)
+  --           -- TURN THIS ALL INTO A SIMPLER LEMMA!!!
+  --           rw [hebb_preds _ _] at h₁
+  --           conv at h₁ => 
+  --             intro preds; simp only [List.bind]; enter [2, 2, i, 1]; 
+  --             rw [hebb_layers _ _]
+
+  --           intro preds
+  --           let prev_activ_hebb := do
+  --             let i <- List.range preds.length
+  --             let m := preds.get! i
+  --             return if propagate_acc (hebb_star net S₁) S₂ m (layer net m)
+  --               then 1.0 else 0.0
+  --           intro prev_activ
+  --           change (activ (hebb_star net S₁) prev_activ_hebb n) at h₁
+
+
+  --           have h₁ : activ (hebb_star net S₁) prev_activ_hebb n := h₁
+            
+  --           -- Simplify the activations; argue that if prev_activ₁
+  --           -- activates then prev_activ₂ must as well!
+  --           unfold activ
+  --           unfold activ at h₁
+  --           rw [hebb_preds _ _] at h₁
+            
+  --           intro preds
+  --           let weights_hebb := do
+  --             let i ← List.range (List.length preds)
+  --             let m := preds.get! i
+  --             return (hebb_star net S₁).graph.getEdgeWeight m n
+  --           let weight_sum_hebb := weighted_sum weights_hebb prev_activ_hebb
+  --           let curr_activ_hebb := (hebb_star net S₁).activation weight_sum_hebb
+  --           -- rw [hebb_activation net S₁] at curr_activ_hebb
+            
+  --           intro weights weight_sum curr_activ
+  --           change (curr_activ_hebb = 1.0) at h₁
+            
+
+  --           -- We have curr_activ_hebb = 1.0
+  --           -- So we just need to argue that
+  --           -- curr_activ >= curr_activ_hebb
+  --           -- (factor in the fact that they are both binary!)
+  --           -- 
+  --           -- Also, our IH should give us prev_activ and prev_activ_hebb
+  --           -- are the same, I think...?  Or if not the same, then we
+  --           -- can say something about their relationship
+  --           -- change
+  --           sorry
+
+  --           -- DEF OF ACTIV
+  --           -- 
+  --           -- def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
+  --           --   let preds := preds net n
+  --           --   let weights := do
+  --           --     let i <- List.range preds.length
+  --           --     let m := preds.get! i
+  --           --     return net.graph.getEdgeWeight m n
+  --           --   let weight_sum := weighted_sum weights prev_activ
+  --           --   let curr_activ := net.activation weight_sum
+  --           --   curr_activ = 1.0
+
+            
+
+  --   -- Backwards direction (should be similar)
+  --   case mpr =>
+  --     intro h₁
+  --     sorry
+      
+  --     -- Old proof that I tried
+  --     -- exact fun h₁ =>
+  --     --   have h₂ : propagate net S₁ ∩ reachable net S₂ ⊆ 
+  --     --     propagate (hebb_star net S₁) S₂ := by
+  --     --     sorry
+  --     --   Set.union_subset (hebb_extensive _ _ _) h₂ h₁
             
 
 -- TODO: Prove that we can unravel these nets into ordinary
