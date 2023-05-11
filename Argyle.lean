@@ -1191,6 +1191,31 @@ theorem reachedby_is_monotone (net : BFNN) : ∀ (S₁ S₂ : Set ℕ),
 
 
 /-══════════════════════════════════════════════════════════════════
+  Jesus, another graph-reachability operator!?
+══════════════════════════════════════════════════════════════════-/
+
+
+
+-- A focused path is a path where every node is contained
+-- within the set S.
+inductive focusedPath (g : Graph ℕ β) (S : Set ℕ) : ℕ → ℕ → Prop where
+  | trivial {u : ℕ} :
+      u ∈ S → focusedPath g S u u
+  | from_path {u v w : ℕ} : 
+      focusedPath g S u v → hasEdge g v w → w ∈ S → focusedPath g S u w
+
+
+-- This is graph-reachability, except we now also require
+-- that every node in the path is also in S.
+def focused_reachable (net : BFNN) (S : Set ℕ) : Set ℕ :=
+  fun (n : ℕ) =>
+    ∃ (m : ℕ), focusedPath net.graph S m n
+
+-- TODO: Prove stuff about focused_reachable.
+-- It looks like it should still be extensive, idempotent,
+-- and monotone, but now it interacts differently with Prop :'(
+
+/-══════════════════════════════════════════════════════════════════
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
 
@@ -1583,48 +1608,93 @@ theorem hebb_local (net : BFNN) (S₁ S₂ : Set ℕ) :
 -- *before* update -- it turns out that we can completely
 -- reduce the dynamic behavior to the static behavior.
 --------------------------------------------------------------------
+theorem hebb_local_strengthened (net : BFNN) (S₁ S₂ : Set ℕ) : 
+  propagate (hebb_star net S₁) S₂ ⊆ 
+    propagate net S₂ ∪ (propagate net S₁ ∩ reachable net S₂) := by 
+--------------------------------------------------------------------
+  intro (n : ℕ)
+  intro h₁
+
+  -- By cases; 
+  --   If n ∈ propagate(S₂), then we're done.
+  --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
+  by_cases n ∈ propagate net S₂
+  case pos => exact Or.inl h
+  case neg => 
+    apply Or.inr
+    apply And.intro 
+    
+    -- n ∈ propagate(S₁) follows by hebb_local 
+    -- (since n ∉ propagate(S₂))
+    case left =>
+      cases (hebb_local net S₁ S₂ h₁)
+      case inl h₃ => exact h₃
+      case inr h₃ => contradiction
+
+    -- n ∈ reachable(S₂) follows by prop_reach_inclusion
+    -- along with hebb_layers, hebb_reach 
+    -- (hebbian update doesn't affect the structure of the graph)
+    case right =>
+      have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
+        propagate_reach_inclusion _ _ h₁
+      exact (Function.funext_iff.mp 
+        (hebb_reach net S₁ S₂) _).to_iff.mp h₂
+
+
+-- I claim that naive hebbian update is reducible to the
+-- union of this (finite but arbitrarily large) recurrent term.
+def reduced_term (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) : Set ℕ :=
+  match k with
+  | Nat.zero => propagate net S₂
+  | Nat.succ k => propagate net (focused_reachable net 
+    (propagate net S₁ ∩ reduced_term net S₁ S₂ k))
+
+--------------------------------------------------------------------
 theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
   propagate (hebb_star net S₁) S₂ = 
-    propagate net S₂ ∪ (propagate net S₁ ∩ reachable net S₂) := by 
+    ⋃ k, reduced_term net S₁ S₂ k := by 
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
   apply Iff.intro
 
-  -- Forward direction
-  case mp =>
+  -- Forward Direction:
+  -- propagate (hebb_star net S₁) S₂ ⊆ ⋃ k, ... 
+  case mp => 
+    -- By induction on the layer of the net containing n
+    generalize hL : layer net n = L
+    induction L using Nat.case_strong_induction_on generalizing n
+    
+    -- Base Step;
+    -- If n ∈ S₂, then by Extensive n ∈ propagate(S₂), 
+    -- which is reduced_term[0].
+    case hz => 
+      simp [propagate]
+      simp [Membership.mem, Set.Mem]
+      rw [hebb_layers]
+      rw [hL]
+      simp only [propagate_acc]
+      exact fun h₁ => ⟨0, propagate_is_extens _ _ h₁⟩
+
+    -- Inductive Step
+    case hi L IH => sorry
+
+  -- Backwards Direction
+  case mpr => 
     intro h₁
-
-    -- By cases; 
-    --   If n ∈ propagate(S₂), then we're done.
-    --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
-    by_cases n ∈ propagate net S₂
-    case pos => exact Or.inl h
-    case neg => 
-      apply Or.inr
-      apply And.intro 
-      
-      -- n ∈ propagate(S₁) follows by hebb_local 
-      -- (since n ∉ propagate(S₂))
-      case left =>
-        cases (hebb_local net S₁ S₂ h₁)
-        case inl h₃ => exact h₃
-        case inr h₃ => contradiction
-
-      -- n ∈ reachable(S₂) follows by prop_reach_inclusion
-      -- along with hebb_layers, hebb_reach 
-      -- (hebbian update doesn't affect the structure of the graph)
-      case right =>
-        have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
-          propagate_reach_inclusion _ _ h₁
-        exact (Function.funext_iff.mp 
-          (hebb_reach net S₁ S₂) _).to_iff.mp h₂
-
-  -- Backwards direction
-  case mpr => sorry
+    
+    -- We know that n ∈ reduced_term[k] for some k, so
+    -- by induction on *that* k.
+    generalize hk : choose h₁ = k
+    induction k
+    case Nat.zero => sorry
+    case Nat.succ k IH => sorry
 
 
 
+
+
+---------------------------------------------------------------------
   -- OLD INDUCTIVE PROOF (keep for later!)
   -- apply ext
   -- intro (n : ℕ)
