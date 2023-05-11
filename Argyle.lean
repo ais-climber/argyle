@@ -1680,15 +1680,43 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
     case hi L IH => sorry
 
   -- Backwards Direction
+  -- We show that for each k,
+  -- reduced_term net[k] ⊆ propagate (hebb_star net S₁) S₂
   case mpr => 
     intro h₁
-    
+    have h₁ := Set.mem_unionᵢ.mp h₁
+
     -- We know that n ∈ reduced_term[k] for some k, so
     -- by induction on *that* k.
-    generalize hk : choose h₁ = k
+    generalize hk : h₁.choose = k
     induction k
-    case Nat.zero => sorry
-    case Nat.succ k IH => sorry
+
+    -- Base Step;
+    -- reduced_term[0] is just propagate net S₂,
+    -- by hebb_extensive, this ⊆ propagate (hebb_star net S₁) S₂. 
+    case zero =>
+      have h₂ : n ∈ reduced_term net S₁ S₂ 0 := sorry
+      exact hebb_extensive _ _ _ h₂
+
+    -- Inductive Step
+    case succ k IH₁ => 
+      -- From here, we do induction on the layer of the net
+      -- containing n.
+      generalize hL : layer net n = L
+      induction L using Nat.case_strong_induction_on generalizing n
+
+      -- Base Step
+      case hz =>
+        simp [propagate]
+        simp [Membership.mem, Set.Mem]
+        rw [hebb_layers]
+        rw [hL]
+        simp only [propagate_acc]
+        sorry
+
+      -- Inductive Step
+      case hi L IH₂ => sorry
+
 
 
 
