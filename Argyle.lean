@@ -1215,6 +1215,13 @@ def focused_reachable (net : BFNN) (S : Set ℕ) : Set ℕ :=
 -- It looks like it should still be extensive, idempotent,
 -- and monotone, but now it interacts differently with Prop :'(
 
+--------------------------------------------------------------------
+theorem focused_reach_subset (net : BFNN) : ∀ (S : Set ℕ),
+  focused_reachable net S ⊆ S := by
+--------------------------------------------------------------------
+  sorry
+
+
 /-══════════════════════════════════════════════════════════════════
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
@@ -1649,6 +1656,18 @@ def reduced_term (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) : Set ℕ :=
   | Nat.succ k => propagate net (focused_reachable net 
     (propagate net S₁ ∩ reduced_term net S₁ S₂ k))
 
+
+-- The inner part of reduced_term[k-1]
+-- is a subset of reduced_term[k].
+--------------------------------------------------------------------
+lemma reduced_term_subset (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) :
+  focused_reachable net (propagate net S₁ ∩ reduced_term net S₁ S₂ k) 
+  ⊆ reduced_term net S₁ S₂ k :=
+--------------------------------------------------------------------
+  subset_trans (focused_reach_subset _ _) 
+    (inter_subset_right (propagate net S₁) (reduced_term net S₁ S₂ k))
+
+
 --------------------------------------------------------------------
 theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
   propagate (hebb_star net S₁) S₂ = 
@@ -1684,38 +1703,50 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   -- reduced_term net[k] ⊆ propagate (hebb_star net S₁) S₂
   case mpr => 
     intro h₁
-    have h₁ := Set.mem_unionᵢ.mp h₁
-
+    -- have h₁ := Set.mem_unionᵢ.mp h₁
+    
     -- We know that n ∈ reduced_term[k] for some k, so
     -- by induction on *that* k.
-    generalize hk : h₁.choose = k
-    induction k
+    match Set.mem_unionᵢ.mp h₁ with
+    | ⟨k, hk⟩ =>
+      induction k
 
-    -- Base Step;
-    -- reduced_term[0] is just propagate net S₂,
-    -- by hebb_extensive, this ⊆ propagate (hebb_star net S₁) S₂. 
-    case zero =>
-      have h₂ : n ∈ reduced_term net S₁ S₂ 0 := sorry
-      exact hebb_extensive _ _ _ h₂
-
-    -- Inductive Step
-    case succ k IH₁ => 
-      -- From here, we do induction on the layer of the net
-      -- containing n.
-      generalize hL : layer net n = L
-      induction L using Nat.case_strong_induction_on generalizing n
-
-      -- Base Step
-      case hz =>
-        simp [propagate]
-        simp [Membership.mem, Set.Mem]
-        rw [hebb_layers]
-        rw [hL]
-        simp only [propagate_acc]
-        sorry
+      -- Base Step;
+      -- reduced_term[0] is just propagate net S₂,
+      -- by hebb_extensive, this ⊆ propagate (hebb_star net S₁) S₂. 
+      case zero => exact hebb_extensive _ _ _ hk
 
       -- Inductive Step
-      case hi L IH₂ => sorry
+      case succ k IH₁ => 
+        -- From here, we do induction on the layer of the net
+        -- containing n.
+        generalize hL : layer net n = L
+        induction L using Nat.case_strong_induction_on generalizing n
+
+        -- Base Step;
+        -- After simplifications, we're just need to show
+        -- focused_reach(prop(S₁) ∩ reduced_term[k]) 
+        --   ⊆ reduced_term[k]
+        --   ⊆ S₂
+        case hz h₁_orig =>
+          simp only [reduced_term] at hk
+          simp only [propagate, Membership.mem, Set.Mem]
+          simp only [propagate, Membership.mem, Set.Mem] at IH₁
+          simp only [propagate, Membership.mem, Set.Mem] at hk
+          rw [hebb_layers]
+          rw [hebb_layers] at IH₁
+          rw [hL]
+          rw [hL] at IH₁
+          rw [hL] at hk
+          simp only [propagate_acc]
+          simp only [propagate_acc] at IH₁
+          simp only [propagate_acc] at hk
+          
+          exact IH₁ (reduced_term_subset _ _ _ _ hk)
+
+        -- Inductive Step
+        case hi L IH₂ h₁_orig => 
+          sorry
 
 
 
