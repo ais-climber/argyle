@@ -1696,7 +1696,21 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
       exact fun h₁ => ⟨0, propagate_is_extens _ _ h₁⟩
 
     -- Inductive Step
-    case hi L IH => sorry
+    case hi L IH => 
+      intro h₁
+
+      -- By cases on n ∈ S₂ in order to eliminate propagate_acc
+      by_cases n ∈ S₂
+      case pos => 
+        -- Same situation as Base Step
+        exact Set.mem_unionᵢ.mpr ⟨0, propagate_is_extens _ _ h⟩
+      case neg => 
+        -- Now let's do some simplifications.
+        simp only [Membership.mem, Set.Mem, propagate] at h₁
+        rw [hebb_layers, hL, simp_propagate_acc _ h] at h₁
+        
+        -- We really need equality in order to prove this!!!
+        sorry
 
   -- Backwards Direction
   -- We show that for each k,
@@ -1745,9 +1759,29 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
           exact IH₁ (reduced_term_subset _ _ _ _ hk)
 
         -- Inductive Step
-        case hi L IH₂ h₁_orig => 
-          sorry
+        case hi L IH₂ => 
+          -- By cases on n ∈ S₂ in order to eliminate propagate_acc
+          by_cases n ∈ S₂
+          case pos => exact propagate_is_extens _ _ h
+          case neg => 
+            -- Now let's do some simplifications.
+            simp only [Membership.mem, Set.Mem, propagate]
+            rw [hebb_layers, hL, simp_propagate_acc _ h]
+            intro preds
+            intro prev_activ
+            sorry
 
+            -- simp only [Membership.mem, Set.Mem, propagate]
+            -- simp only [Membership.mem, Set.Mem, propagate] at h₁
+            -- -- simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
+            -- simp only [Membership.mem, Set.Mem, propagate] at IH
+            
+            -- rw [hebb_layers] at h₁
+            -- conv at IH => intro x₁ x₂ x₃ x₄; rw [hebb_layers]
+            -- rw [hL, simp_propagate_acc _ h]
+            -- rw [hL, simp_propagate_acc _ hS₂] at h₁
+            -- -- rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
+              
 
 
 
