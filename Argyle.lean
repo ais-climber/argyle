@@ -1675,8 +1675,87 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
-  apply Iff.intro
+  -- have h₁ := Set.mem_unionᵢ.mp h₁
+  
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
 
+  -- Base Step
+  -- TODO: DOCS for both directions!
+  case hz =>
+    -- TODO: DOCS for both directions!
+    apply Iff.intro
+
+    -- Forward Direction
+    case mp => 
+      simp only [propagate, Membership.mem, Set.Mem]
+      rw [hebb_layers]
+      rw [hL]
+      simp only [propagate_acc]
+
+      exact fun h₁ => Set.mem_unionᵢ.mpr ⟨0, propagate_is_extens _ _ h₁⟩
+    
+    -- Backwards Direction
+    case mpr => 
+      intro h₁
+      have h₁ := Set.mem_unionᵢ.mp h₁
+      match h₁ with
+      | ⟨k, hk⟩ => 
+        -- We know that n ∈ reduced_term[k] for some k, so
+        -- by induction on *that* k.
+        induction k
+        case zero => exact hebb_extensive _ _ _ hk
+        case succ k IH =>
+
+          -- Inductive Step;
+          -- After simplifications, we're just need to show
+          -- focused_reach(prop(S₁) ∩ reduced_term[k]) 
+          --   ⊆ reduced_term[k]
+          --   ⊆ S₂
+          simp only [reduced_term] at hk
+          simp only [propagate, Membership.mem, Set.Mem]
+          simp only [propagate, Membership.mem, Set.Mem] at IH
+          simp only [propagate, Membership.mem, Set.Mem] at hk
+          rw [hebb_layers]
+          rw [hebb_layers] at IH
+          rw [hL]
+          rw [hL] at IH
+          rw [hL] at hk
+          simp only [propagate_acc]
+          simp only [propagate_acc] at IH
+          simp only [propagate_acc] at hk
+
+          exact IH (reduced_term_subset _ _ _ _ hk)
+
+  -- Inductive Step
+  case hi L IH₁ => 
+    apply Iff.intro
+
+    -- Forward Direction
+    case mp => 
+      intro h₁
+      -- Now I can resume what I was doing with a much
+      -- stronger inductive hypothesis!
+      sorry
+
+    -- Backwards Direction
+    case mpr =>
+      intro h₁
+      have h₁ := Set.mem_unionᵢ.mp h₁
+      match h₁ with
+      | ⟨k, hk⟩ => 
+        -- We know that n ∈ reduced_term[k] for some k, so
+        -- by induction on *that* k.
+        induction k
+        case zero => exact hebb_extensive _ _ _ hk
+        case succ k IH₂ => 
+          -- Inductive Step
+          -- Now I can resume what I was doing with a much
+          -- stronger inductive hypothesis!
+          sorry
+
+/-
   -- Forward Direction:
   -- propagate (hebb_star net S₁) S₂ ⊆ ⋃ k, ... 
   case mp => 
@@ -1770,19 +1849,7 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
             intro preds
             intro prev_activ
             sorry
-
-            -- simp only [Membership.mem, Set.Mem, propagate]
-            -- simp only [Membership.mem, Set.Mem, propagate] at h₁
-            -- -- simp only [Membership.mem, Set.Mem, propagate] at hpropS₂
-            -- simp only [Membership.mem, Set.Mem, propagate] at IH
-            
-            -- rw [hebb_layers] at h₁
-            -- conv at IH => intro x₁ x₂ x₃ x₄; rw [hebb_layers]
-            -- rw [hL, simp_propagate_acc _ h]
-            -- rw [hL, simp_propagate_acc _ hS₂] at h₁
-            -- -- rw [hL, simp_propagate_acc _ hS₂] at hpropS₂
-              
-
+-/
 
 
 
