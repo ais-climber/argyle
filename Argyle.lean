@@ -3,6 +3,7 @@ import Mathlib.Tactic.NthRewrite
 import Mathlib.Mathport.Syntax
 import Std.Tactic.ShowTerm
 import Lean.Meta.Tactic.Simp.Main
+import Mathlib.Tactic.Basic
 
 import Lean.Parser.Tactic
 import Graph.Graph
@@ -31,6 +32,118 @@ inductive my_lte : ℕ → ℕ → Prop where
 
 -- #eval my_lte 1 3
 
+
+
+-------------------------------------------------
+-- Extract Lets Tactic
+-------------------------------------------------
+/-
+Copyright (c) 2023 Kyle Miller. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Kyle Miller
+-/
+
+/-!
+# The `extract_lets at` tactic
+This module defines a tactic `extract_lets ... at h` that can be used to (in essence) do `cases`
+on a `let` expression.
+-/
+
+
+-- open Lean Elab Parser Meta Tactic
+
+-- /-- Given a local hypothesis whose type is a `let` expression, then lift the `let` bindings to be
+-- a new local definition. -/
+-- def Lean.MVarId.extractLetsAt (mvarId : MVarId) (fvarId : FVarId) (names : Array Name) :
+--     MetaM (Array FVarId × MVarId) := do
+--   mvarId.checkNotAssigned `extractLetAt
+--   mvarId.withReverted #[fvarId] fun mvarId fvarIds => mvarId.withContext do
+--     let mut mvarId := mvarId
+--     let mut fvarIds' := #[]
+--     for name in names do
+--       let ty ← Lean.instantiateMVars (← mvarId.getType)
+--       mvarId ← match ty with
+--         | .letE n t v b ndep => process mvarId t (.letE n · v b ndep)
+--         | .forallE n t v b   => process mvarId t (.forallE n · v b)
+--         | _ => throwTacticEx `extractLetAt mvarId "unexpected auxiliary target"
+--       let (fvarId', mvarId') ← mvarId.intro name
+--       fvarIds' := fvarIds'.push fvarId'
+--       mvarId := mvarId'
+--     return (fvarIds', fvarIds.map .some, mvarId)
+-- where
+--   /-- Check that `t` is a `let` and then do what's necessary to lift it over the binding
+--   described by `mk`. -/
+--   process (mvarId : MVarId) (t : Expr) (mk : Expr → Expr) : MetaM MVarId := do
+--     let .letE n' t' v' b' _ := t.cleanupAnnotations
+--       | throwTacticEx `extractLetAt mvarId "insufficient number of `let` expressions"
+--     -- Lift the let
+--     withLetDecl n' t' v' fun fvar => do
+--       let b' := b'.instantiate1 fvar
+--       let ty' ← mkLetFVars #[fvar] <| mk b'
+--       mvarId.change ty'
+
+-- /-- Counts the immediate depth of a nested `let` expression. -/
+-- def Lean.Expr.letDepth : Expr → Nat
+--   | .letE _ _ _ b _ => b.letDepth + 1
+--   | _ => 0
+
+-- /-- A more limited version of `Lean.MVarId.introN` that ensures the goal is a
+-- nested `let` expression. -/
+-- def Lean.MVarId.extractLets (mvarId : MVarId) (names : Array Name) :
+--     MetaM (Array FVarId × MVarId) :=
+--   mvarId.withContext do
+--     let ty := (← Lean.instantiateMVars (← mvarId.getType)).cleanupAnnotations
+--     if ty.letDepth < names.size then
+--       throwTacticEx `extractLet mvarId "insufficient number of `let` expressions"
+--     mvarId.introN names.size names.toList
+
+-- namespace Mathlib
+
+-- /-- The `extract_lets at h` tactic takes a local hypothesis of the form `h : let x := v; b`
+-- and introduces a new local definition `x := v` while changing `h` to be `h : b`.  It can be thought
+-- of as being a `cases` tactic for `let` expressions. It can also be thought of as being like
+-- `intros at h` for `let` expressions.
+-- For example, if `h : let x := 1; x = x`, then `extract_lets x at h` introduces `x : Nat := 1` and
+-- changes `h` to `h : x = x`.
+-- Just like `intros`, the `extract_lets` tactic either takes a list of names, in which case
+-- that specifies the number of `let` bindings that must be extracted, or it takes no names, in which
+-- case all the `let` bindings are extracted.
+-- The tactic `extract_let at ⊢` is a weaker form of `intros` that only introduces obvious `let`s. -/
+-- syntax (name := extractLets) "extract_lets " (colGt (ident <|> hole))* (ppSpace location) : tactic
+
+-- @[tactic Mathlib.extractLets] def evalExtractLet : Tactic := fun stx => do
+--   match stx with
+--   | `(tactic| extract_lets $loc:location)         => doExtract none loc
+--   | `(tactic| extract_lets $hs* $loc:location)    => doExtract hs loc
+--   | _ => throwUnsupportedSyntax
+-- where
+--   setupNames (ids? : Option (TSyntaxArray [`ident, `Lean.Parser.Term.hole])) (ty : Expr) :
+--       MetaM (Array Name) := do
+--     if let some ids := ids? then
+--       return ids.map getNameOfIdent'
+--     else
+--       return Array.mkArray (← instantiateMVars ty).cleanupAnnotations.letDepth `_
+--   doExtract (ids? : Option (TSyntaxArray [`ident, `Lean.Parser.Term.hole]))
+--       (loc : TSyntax `Lean.Parser.Tactic.location) :
+--       TacticM Unit := do
+--     let process (f : MVarId → Array Name → MetaM (Array FVarId × MVarId))
+--         (ty : MVarId → MetaM Expr) : TacticM Unit := do
+--       let fvarIds ← liftMetaTacticAux fun mvarId => do
+--         let ids ← setupNames ids? (← ty mvarId)
+--         let (fvarIds, mvarId) ← f mvarId ids
+--         return (fvarIds, [mvarId])
+--       if let some ids := ids? then
+--         withMainContext do
+--           for stx in ids, fvarId in fvarIds do
+--             Term.addLocalVarInfo stx (.fvar fvarId)
+--     withLocation (expandOptLocation (mkOptionalNode loc))
+--       (atLocal := fun h ↦ do
+--         process (fun mvarId ids => mvarId.extractLetsAt h ids) (fun _ => h.getType))
+--       (atTarget := do
+--         process (fun mvarId ids => mvarId.extractLets ids) (fun mvarId => mvarId.getType))
+--       (failed := fun _ ↦ throwError "extract_let tactic failed")
+
+-- end Mathlib
 
 
 -------------------------------------------------
@@ -1589,6 +1702,24 @@ theorem hebb_reach (net : BFNN) (S₁ S₂ : Set ℕ) :
   sorry
 
 
+--------------------------------------------------------------------
+lemma hebb_extensive_activ (net : BFNN) (S : Set ℕ) :
+  let preds := preds net n
+  let prev_activ := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc net S₂ m (layer net m) then 1.0 else 0.0
+  let prev_activ_hebb := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc (hebb_star net S₁) S₂ m (layer (hebb_star net S₁) m) then 1.0 else 0.0
+  activ net prev_activ n
+  → activ (hebb_star net S₁) prev_activ_hebb n := by
+--------------------------------------------------------------------
+  sorry
+
+
+
 -- Every net N is a subnet of (hebb_star N)
 -- (i.e. hebb_star includes the previous propagations)
 -- (We had this property in The Logic of Hebbian Learning)
@@ -1616,36 +1747,141 @@ theorem hebb_local (net : BFNN) (S₁ S₂ : Set ℕ) :
 -- reduce the dynamic behavior to the static behavior.
 --------------------------------------------------------------------
 theorem hebb_local_strengthened (net : BFNN) (S₁ S₂ : Set ℕ) : 
-  propagate (hebb_star net S₁) S₂ ⊆ 
+  propagate (hebb_star net S₁) S₂ = 
     propagate net S₂ ∪ (propagate net S₁ ∩ reachable net S₂) := by 
 --------------------------------------------------------------------
+  apply ext
   intro (n : ℕ)
-  intro h₁
 
-  -- By cases; 
-  --   If n ∈ propagate(S₂), then we're done.
-  --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
-  by_cases n ∈ propagate net S₂
-  case pos => exact Or.inl h
-  case neg => 
-    apply Or.inr
-    apply And.intro 
-    
-    -- n ∈ propagate(S₁) follows by hebb_local 
-    -- (since n ∉ propagate(S₂))
-    case left =>
-      cases (hebb_local net S₁ S₂ h₁)
-      case inl h₃ => exact h₃
-      case inr h₃ => contradiction
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
 
-    -- n ∈ reachable(S₂) follows by prop_reach_inclusion
-    -- along with hebb_layers, hebb_reach 
-    -- (hebbian update doesn't affect the structure of the graph)
-    case right =>
-      have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
-        propagate_reach_inclusion _ _ h₁
-      exact (Function.funext_iff.mp 
-        (hebb_reach net S₁ S₂) _).to_iff.mp h₂
+  -- Base Step
+  case hz =>
+    simp [Membership.mem, Set.Mem, Union.union, Set.union, Inter.inter, Set.inter, propagate]
+    rw [setOf_app_iff, setOf_app_iff]
+    rw [hebb_layers]
+    rw [hL]
+    simp only [propagate_acc]
+
+    -- n ∈ S₂ ↔ n ∈ S₂ ∨ (n ∈ S₁ ∧ n ∈ reachable net S₂),
+    -- which trivially holds at layer 0.
+    exact ⟨fun h₁ => Or.inl h₁, 
+      fun h₁ => Or.elim h₁ (fun h₂ => h₂) 
+        (fun h₂ => reach_layer_zero net _ _ hL h₂.2)⟩
+
+  -- Inductive Step
+  case hi L IH =>
+    apply Iff.intro
+
+    -- Forward direction (relatively easy to check)
+    case mp =>
+      intro h₁
+
+      -- By cases; 
+      --   If n ∈ propagate(S₂), then we're done.
+      --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
+      by_cases n ∈ propagate net S₂
+      case pos => exact Or.inl h
+      case neg => 
+        apply Or.inr
+        apply And.intro 
+        
+        -- n ∈ propagate(S₁) follows by hebb_local 
+        -- (since n ∉ propagate(S₂))
+        case left =>
+          cases (hebb_local net S₁ S₂ h₁)
+          case inl h₃ => exact h₃
+          case inr h₃ => contradiction
+
+        -- n ∈ reachable(S₂) follows by prop_reach_inclusion
+        -- along with hebb_layers, hebb_reach 
+        -- (hebbian update doesn't affect the structure of the graph)
+        case right =>
+          have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
+            propagate_reach_inclusion _ _ h₁
+          exact (Function.funext_iff.mp 
+            (hebb_reach net S₁ S₂) _).to_iff.mp h₂
+
+    -- Backwards direction
+    case mpr =>
+      -- First, some simplifications 
+      simp only [Membership.mem, Set.Mem, Union.union, Set.union, Inter.inter, Set.inter]
+      rw [setOf_app_iff, setOf_app_iff]
+      intro h₁
+
+      -- Split on h₁
+      cases h₁
+      case inl h₂ => exact hebb_extensive _ _ _ h₂
+      case inr h₂ =>
+        
+        -- By cases on S₂ in order to reduce propagate_acc
+        by_cases n ∈ S₂
+        case pos => exact hebb_extensive _ _ _ (propagate_is_extens _ _ h)
+        case neg =>
+          -- Some more simplifications
+          simp only [propagate]
+          rw [hebb_layers]
+          rw [hL]
+          rw [simp_propagate_acc _ h]
+          sorry
+      
+      -- intro h₁
+
+
+
+-- n is activated by mᵢs in the hebb_star net iff either
+--   - n was activated by mᵢs in the original net, or
+--   - there is some mᵢ⟶n edge that was maxed out in the update,
+--     and n is consequently activated by this edge
+--------------------------------------------------------------------
+lemma simp_hebb_activ (net : BFNN) :
+  n ∉ S₂ → 
+  let preds := preds net n
+  let prev_activ := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc net S₂ m (layer net m) then 1.0 else 0.0
+  let prev_activ_hebb := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc (hebb_star net S₁) S₂ m (layer (hebb_star net S₁) m) then 1.0 else 0.0
+  (activ (hebb_star net S₁) prev_activ_hebb n 
+  ↔ activ net prev_activ n 
+  ∨ ∃ m, m ∈ preds ∧ propagate net S₁ m ∧ propagate net S₁ n) := by
+--------------------------------------------------------------------
+  intro (h₁ : n ∉ S₂)
+  intro preds prev_activ prev_activ_hebb
+  apply Iff.intro
+
+  -- Backwards direction is easy
+  case mpr => 
+    intro h₂
+    cases h₂
+    case inl h₃ => exact hebb_extensive_activ net S₂ h₃
+    case inr h₃ => 
+      -- unfold activ
+      -- intro preds
+      -- intro weights
+      -- intro weight_sum
+      -- intro curr_activ
+      sorry
+
+  -- Forward direction is trickier
+  case mp => 
+    intro h₂
+
+    -- By cases; either n is activated in the original net,
+    -- otherwise we have to argue that it must have come from
+    -- an updated net (which we do by contradiction).
+    by_cases (activ net prev_activ n)
+    case pos => exact Or.inl h
+    case neg =>
+      apply Or.inr
+      apply Classical.by_contradiction
+      intro h₃
+      sorry -- I have to think carefully about this!!!
 
 
 -- I claim that naive hebbian update is reducible to the
@@ -1737,7 +1973,48 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
       intro h₁
       -- Now I can resume what I was doing with a much
       -- stronger inductive hypothesis!
-      sorry
+      apply Set.mem_unionᵢ.mpr
+      
+      -- (it probably depends on the preceding m's.)
+      -- By cases on n ∈ S₂ in order to eliminate propagate_acc
+      by_cases n ∈ S₂
+      case pos => exact ⟨0, propagate_is_extens _ _ h⟩
+      case neg => 
+        -- Now let's do some simplifications.
+        simp [propagate, Membership.mem, Set.Mem] at h₁
+        simp only [propagate, Membership.mem, Set.Mem] at IH₁
+        rw [hebb_layers] at h₁
+        rw [hL] at h₁
+        rw [simp_propagate_acc _ h] at h₁
+        -- simp at h₁
+
+        -- Go into prev_activ and apply our Inductive Hypothesis
+        -- (prev_activ[i] = 1.0 iff m[i] ∈ ⋃ᵢ reduced_term[i])
+        sorry
+        
+        -- conv at h₁ =>
+        --   arg 2; arg 2; intro i; arg 1; rw [IH₁ i sorry (List.get! (predecessors (hebb_star net S₁).toNet.graph n).data i) sorry]
+        -- sorry
+
+        -- let preds := preds (hebb_star net S₁) n;
+        -- let prev_activ := do
+        --   let i ← List.range (List.length preds)
+        --   let m : ℕ := List.get! preds i
+        --   pure (if propagate_acc (hebb_star net S₁) S₂ m (layer (hebb_star net S₁) m) then 1.0 else 0.0);
+        -- have h₁ : activ (hebb_star net S₁) prev_activ n := h₁
+
+        -- Go into prev_activ and apply our Inductive Hypothesis
+        -- (prev_activ[i] = 1.0 iff m[i] ∈ ⋃ᵢ reduced_term[i])
+        
+        
+        -- conv at prev_activ in (propagate_acc (hebb_star net S₁) S₂ n (layer (hebb_star net S₁) n) => 
+        -- conv at prev_activ => 
+          
+          -- intro x₁ x₂ x₃ x₄
+          -- rw [hebb_layers]
+        
+        
+        -- Come up with the k such that n ∈ reduced_term[k]!!!
 
     -- Backwards Direction
     case mpr =>
@@ -1751,9 +2028,16 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
         case zero => exact hebb_extensive _ _ _ hk
         case succ k IH₂ => 
           -- Inductive Step
-          -- Now I can resume what I was doing with a much
-          -- stronger inductive hypothesis!
-          sorry
+          -- By cases on n ∈ S₂ in order to eliminate propagate_acc
+          by_cases n ∈ S₂
+          case pos => exact propagate_is_extens _ _ h
+          case neg => 
+            -- Now let's do some simplifications.
+            -- simp only [Membership.mem, Set.Mem, propagate]
+            -- rw [hebb_layers, hL, simp_propagate_acc _ h]
+            sorry
+
+
 
 /-
   -- Forward Direction:
