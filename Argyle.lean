@@ -1879,59 +1879,61 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
     case mp =>
       intro h₁
       
+      -- By cases in order to reduce propagate_acc
+      by_cases n ∈ S₂ ∪ focused_reachable net (propagate net S₁ ∩ propagate net S₂)
+      case pos => exact propagate_is_extens _ _ h
+      case neg => 
+        have h₂ : n ∉ S₂ := 
+          fun h₂ => absurd (subset_union_left _ _ h₂) h
 
+        -- Now we can do our usual simplifications 
+        simp [propagate, Membership.mem, Set.Mem]
+        simp [propagate, Membership.mem, Set.Mem] at h₁
+        rw [hebb_layers] at h₁
+        rw [hL]
+        rw [hL] at h₁
+        rw [simp_propagate_acc _ h₂] at h₁
+        -- rw [simp_propagate_acc _ _] -- TODO: How to do this simp?
 
-      -- -- By cases; 
-      -- --   If n ∈ propagate(S₂), then we're done.
-      -- --   Otherwise, we show that n ∈ propagate(S₁) ∩ reachable(S₂)
-      -- by_cases n ∈ propagate net S₂
-      -- case pos => exact Or.inl h
-      -- case neg => 
-      --   apply Or.inr
-      --   apply And.intro 
-        
-      --   -- n ∈ propagate(S₁) follows by hebb_local 
-      --   -- (since n ∉ propagate(S₂))
-      --   case left =>
-      --     cases (hebb_local net S₁ S₂ h₁)
-      --     case inl h₃ => exact h₃
-      --     case inr h₃ => contradiction
+        -- TODO: Lemma here that lets us split on
+        --   the two cases that give us
+        --     - n was activated in the original net, or
+        --     - there is a preceding m that increased and then activated it
+        sorry 
 
-      --   -- n ∈ reachable(S₂) follows by prop_reach_inclusion
-      --   -- along with hebb_layers, hebb_reach 
-      --   -- (hebbian update doesn't affect the structure of the graph)
-      --   case right =>
-      --     have h₂ : n ∈ reachable (hebb_star net S₁) S₂ :=
-      --       propagate_reach_inclusion _ _ h₁
-      --     exact (Function.funext_iff.mp 
-      --       (hebb_reach net S₁ S₂) _).to_iff.mp h₂
-
-    -- Backwards direction
+    -- Backwards direction (similar, so handle forward first)
     case mpr =>
-      sorry
-      -- -- First, some simplifications 
-      -- simp only [Membership.mem, Set.Mem, Union.union, Set.union, Inter.inter, Set.inter]
-      -- rw [setOf_app_iff, setOf_app_iff]
-      -- intro h₁
+      intro h₁
 
-      -- -- Split on h₁
-      -- cases h₁
-      -- case inl h₂ => exact hebb_extensive _ _ _ h₂
-      -- case inr h₂ =>
-        
-      --   -- By cases on S₂ in order to reduce propagate_acc
-      --   by_cases n ∈ S₂
-      --   case pos => exact hebb_extensive _ _ _ (propagate_is_extens _ _ h)
-      --   case neg =>
-      --     -- Some more simplifications
-      --     simp only [propagate]
-      --     rw [hebb_layers]
-      --     rw [hL]
-      --     rw [simp_propagate_acc _ h]
-      --     sorry
+      -- By cases in order to reduce propagate_acc
+      by_cases n ∈ S₂ ∪ focused_reachable net (propagate net S₁ ∩ propagate net S₂)
+      case pos => 
+        -- Either n ∈ S₂ or n ∈ focused_reachable(...),
+        -- but either way we have n ∈ propagate(S₂).
+        cases h
+        case inl h₂ => 
+          exact hebb_extensive _ _ _ (propagate_is_extens _ _ h₂)
+        case inr h₂ => 
+          exact hebb_extensive _ _ _ (inter_subset_right _ _ (focused_reach_subset _ _ h₂))
       
-      -- -- intro h₁
+      case neg => 
+        have h₂ : n ∉ S₂ :=
+          fun h₂ => absurd (subset_union_left _ _ h₂) h
 
+        -- Now we can do our usual simplifications 
+        simp [propagate, Membership.mem, Set.Mem]
+        simp [propagate, Membership.mem, Set.Mem] at h₁
+        rw [hebb_layers]
+        rw [hL]
+        rw [hL] at h₁
+        rw [simp_propagate_acc _ h₂]
+        -- rw [simp_propagate_acc _ _] at h₁ -- TODO: How to do this simp?
+
+        -- TODO: Lemma here that lets us split on
+        --   the two cases that give us
+        --     - n was activated in the original net, or
+        --     - there is a preceding m that increased and then activated it
+        sorry
 
 
 
