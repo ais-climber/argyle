@@ -1741,10 +1741,6 @@ theorem hebb_local (net : BFNN) (S₁ S₂ : Set ℕ) :
   sorry
 
 
--- This is the big theorem.
--- It explains the behavior of hebb_star in terms of the net
--- *before* update -- it turns out that we can completely
--- reduce the dynamic behavior to the static behavior.
 --------------------------------------------------------------------
 theorem hebb_local_strengthened (net : BFNN) (S₁ S₂ : Set ℕ) : 
   propagate (hebb_star net S₁) S₂ = 
@@ -1830,9 +1826,67 @@ theorem hebb_local_strengthened (net : BFNN) (S₁ S₂ : Set ℕ) :
       -- intro h₁
 
 
+-- Either net and (hebb_star net S₁) activate exactly the same
+-- nodes in one step, or there is some edge that was updated,
+-- resulting in an n activated by (hebb_star net S₁) that was not
+-- activated in the original net.
+--------------------------------------------------------------------
+lemma hebb_activ (net : BFNN) (S₁ S₂ : Set ℕ) : 
+  let preds := preds net n 
+  let prev_activ := do
+    let i ← List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc net S₂ m (layer net m) 
+      then 1.0 else 0.0;
+  let prev_activ_hebb := do
+    let i ← List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc (hebb_star net S₁) S₂ m (layer net m) 
+      then 1.0 else 0.0;
+  
+  (activ (hebb_star net S₁) prev_activ_hebb n ↔ activ net prev_activ n)
+  ∨ (∃ m, m ∈ preds
+    ∧ activ (hebb_star net S₁) prev_activ_hebb n)
+    ∧ propagate_acc net S₁ m (layer net m)
+    ∧ propagate_acc net S₁ n (layer net n)
+    ∧ ¬ activ net prev_activ n := by
+--------------------------------------------------------------------
+  intro preds prev_activ prev_activ_hebb
+  by_cases activ (hebb_star net S₁) prev_activ_hebb n ↔ activ net prev_activ n
+  case pos => exact Or.inl h
+  case neg =>
+    -- By contradiction;
+    -- If ∀ m ∈ preds, if
+    --   hebb_star activates n
+    --   n ∈ Prop(S₁)
+    --   m ∈ Prop(S₁)
+    -- implies
+    --   net activates n
+    -- then hebb_star and net agree exactly on every
+    -- predecessor that could have been updated.
+    apply Or.inr
+    apply byContradiction
+    intro h_contr
+    sorry
+
+
+/-
+let preds := preds (hebb_star net S₁) n;
+let prev_activ := do
+  let i ← List.range (List.length preds)
+  let m : ℕ := List.get! preds i
+  pure (if propagate_acc (hebb_star net S₁) S₂ m (layer (hebb_star net S₁) m) then 1.0 else 0.0);
+activ (hebb_star net S₁) prev_activ n
+-/
 
 
 
+
+
+-- This is the big theorem.
+-- It explains the behavior of hebb_star in terms of the net
+-- *before* update -- it turns out that we can completely
+-- reduce the dynamic behavior to the static behavior.
 --------------------------------------------------------------------
 theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
   propagate (hebb_star net S₁) S₂ = 
