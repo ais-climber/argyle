@@ -141,7 +141,7 @@
   dynamic logic is the following:
 
   <\equation*>
-    <frac|A\<rightarrow\>B<space|2em>B<space|2em><around*|[|A|]>C|C>
+    <frac|A\<rightarrow\>B<space|2em>B<space|2em><around*|[|A|]><around*|[|B|]>C|<around*|[|B|]>C>
   </equation*>
 
   Note that <math|<around*|[|A|]>> doesn't affect \Pground truth\Q
