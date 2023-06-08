@@ -43,7 +43,7 @@
     </cell>|<\cell>
       Restrict the graph to <with|font-shape|italic|exactly>
 
-      the set <math|P>
+      the set <math|P> (unproven!)
     </cell>|<cell|<with|color|green|<math|\<checkmark\>>>>>|<row|<cell|<math|<around*|[|\<Uparrow\>P|]>A>>|<cell|Lexicographic
     Upgrade>|<\cell>
       Make <math|P> worlds better than
@@ -63,12 +63,12 @@
       <with|font-series|bold|<with|color|purple|?>>
     </cell>|<\cell>
       Fixed-pt hebbian update
-    </cell>|<cell|<with|color|green|<math|\<checkmark\>>>>>|<row|<cell|<math|<around*|[|P|]><rsub|hebb<rsub|S>>A>>|<cell|Stable
+    </cell>|<cell|<with|font-series|bold|<with|color|purple|?>>>>|<row|<cell|<math|<around*|[|P|]><rsub|hebb<rsub|S>>A>>|<cell|Stable
     Hebbian>|<\cell>
       <with|font-series|bold|<with|color|purple|?>>
     </cell>|<\cell>
       Fixed-pt Oja's rule
-    </cell>|<cell|<with|font-series|bold|<with|color|purple|?>>>>|<row|<cell|<math|<around*|[|P|]><rsub|backprop>A>>|<cell|Backpropagation>|<\cell>
+    </cell>|<cell|<with|font-series|bold|<with|color|purple|?>>>>|<row|<cell|<math|<around*|[|P;Q|]><rsub|backprop>A>>|<cell|Backpropagation>|<\cell>
       <with|font-series|bold|<with|color|purple|?>>
     </cell>|<\cell>
       Fixed-pt backpropagation
@@ -157,6 +157,33 @@
     <frac|P\<rightarrow\>Q<space|2em>Q<space|2em><around*|[|P|]><around*|(|A\<Rightarrow\>B|)>|A\<Rightarrow\>B>
   </equation*>
 
+  <paragraph|Other Rules.>Polya also suggests two rules that are between the
+  demonstrative contrapositive and the inductive rule
+  (<with|font-series|bold|shaded contraposition>, and
+  <with|font-series|bold|shaded induction>):
+
+  <\equation*>
+    <frac|<tabular|<tformat|<cwith|1|-1|1|1|cell-halign|c>|<table|<row|<cell|A<text|
+    implies >B>>|<row|<cell|B<text| less credible>>>>>>|A<text| less
+    credible>>
+  </equation*>
+
+  and
+
+  <\equation*>
+    <frac|<tabular|<tformat|<cwith|1|-1|1|1|cell-halign|c>|<table|<row|<cell|A<text|
+    implies >B>>|<row|<cell|B<text| more credible>>>>>>|A<text| (somewhat)
+    more credible>>
+  </equation*>
+
+  Can we express these rules in dynamic modal logic (ignoring the word
+  \Psomewhat\Q)? Notice that the second one gives us induction:
+
+  <center|shaded induction <math|\<longrightarrow\>> induction>
+
+  (since <math|A> true <math|\<longrightarrow\>> <math|A> is already made
+  more credible)
+
   <paragraph|The Plan.>
 
   <\enumerate>
@@ -229,6 +256,7 @@
     <associate|auto-2|<tuple|2|1>>
     <associate|auto-3|<tuple|1|2>>
     <associate|auto-4|<tuple|2|2>>
+    <associate|auto-5|<tuple|3|3>>
   </collection>
 </references>
 
@@ -248,9 +276,13 @@
       <datoms|<macro|x|<repeat|<arg|x>|<with|font-series|medium|<with|font-size|1|<space|0.2fn>.<space|0.2fn>>>>>|<htab|5mm>>
       <no-break><pageref|auto-3><vspace|0.15fn>>
 
-      <with|par-left|<quote|4tab>|The Plan.
+      <with|par-left|<quote|4tab>|Other Rules.
       <datoms|<macro|x|<repeat|<arg|x>|<with|font-series|medium|<with|font-size|1|<space|0.2fn>.<space|0.2fn>>>>>|<htab|5mm>>
       <no-break><pageref|auto-4><vspace|0.15fn>>
+
+      <with|par-left|<quote|4tab>|The Plan.
+      <datoms|<macro|x|<repeat|<arg|x>|<with|font-series|medium|<with|font-size|1|<space|0.2fn>.<space|0.2fn>>>>>|<htab|5mm>>
+      <no-break><pageref|auto-5><vspace|0.15fn>>
     </associate>
   </collection>
 </auxiliary>
