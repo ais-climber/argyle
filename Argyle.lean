@@ -1917,6 +1917,7 @@ lemma hebb_lifted (net : BFNN) (S₁ S₂ : Set ℕ) :
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
+  simp only [Membership.mem, Set.Mem, propagate]
   -- have h₁ := Set.mem_unionᵢ.mp h₁
   
   -- By induction on the layer of the net containing n
@@ -1927,8 +1928,6 @@ lemma hebb_lifted (net : BFNN) (S₁ S₂ : Set ℕ) :
   -- TODO: DOCS for both directions!
   case hz =>
     -- First, do the base case simplifications
-    simp only [propagate, Membership.mem, Set.Mem]
-    rw [hL]
     simp only [propagate_acc]
     simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
 
@@ -1949,14 +1948,60 @@ lemma hebb_lifted (net : BFNN) (S₁ S₂ : Set ℕ) :
         exact reachable_within_layer_zero _ _ _ _ heq h₂
 
   -- Inductive Step
-  case hi L IH₁ => 
+  case hi L IH => 
     apply Iff.intro
+    
 
     -- Forward Direction
     case mp => 
-      sorry
+      intro h₁
+
+      -- By cases; either n ∈ S₂ ∪ reachable_within net (propagate net S₁) S₂, 
+      -- or not.
+      by_cases n ∈ S₂ ∪ reachable_within net (propagate net S₁) S₂
+      case pos => 
+        -- In this case, either n ∈ S₂ or it is reachable from S₂
+        -- via a path entirely within Prop(S₁).  In this second case,
+        -- this path has been updated in the hebb_star net, so of course
+        -- n ∈ Prop (hebb_star net S₁) S₂!
+        simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at h
+        cases h
+        case inl h₂ => sorry -- exact hebb_extensive _ _ _ (propagate_is_extens _ _ h₂)
+        case inr h₂ => sorry
+
+      case neg => 
+        -- If n ∉ S₂ ∪ reachable ..., then n ∉ S₂.
+        have n_not_in_S₂ : n ∉ S₂ :=
+          fun n_in_S₂ => absurd (Set.mem_union_left _ n_in_S₂) h
         
-    -- Backwards Direction
+        -- Now for some simplifications and rewriting definitions
+        simp only [propagate, Membership.mem, Set.Mem]
+        simp only [propagate, Membership.mem, Set.Mem] at h₁
+        simp only [propagate] at h
+        rw [simp_propagate_acc _ n_not_in_S₂]
+        rw [simp_propagate_acc (hebb_star net S₁) h] at h₁
+
+        -- TODO: This is the stuff that should go in the activ_agree lemma!
+        simp
+        simp at h₁
+        convert h₁ using 5
+        rename_i i
+        generalize hm : List.get! (predecessors (hebb_star net S₁).toNet.graph n).data i = m
+        generalize hLm : layer (hebb_star net S₁) m = Lm
+
+        -- Apply the inductive hypothesis!
+        have h₄ : m ∈ preds (hebb_star net S₁) n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (predecessors (hebb_star net S₁).toNet.graph n).data i
+        have h₅ : Lm ≤ L := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing (hebb_star net S₁) m n h₄
+        exact (symm (IH Lm h₅ m hLm).to_eq).to_iff
+        
+    -- Backwards Direction (similar, pretty much the same proof)
     case mpr =>
       sorry
 
