@@ -1333,6 +1333,18 @@ def reachable_within (net : BFNN) (S₁ S₂ : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
     ∃ (m : ℕ), m ∈ S₂ ∧ focusedPath net.graph S₁ m n
 
+-- Argument: If there is a path from S₂ to n, but n is in
+-- layer 0 -- there are *no* incoming nodes -- then the path
+-- must be of length 0.  So n must be that n ∈ S₂ with
+-- a path to n, i.e. n ∈ S₂.
+--------------------------------------------------------------------
+lemma reachable_within_layer_zero (net : BFNN) : ∀ (S₁ S₂ : Set ℕ) (n : ℕ),
+  layer net n = 0
+  → n ∈ reachable_within net S₁ S₂
+  → n ∈ S₂ := by
+--------------------------------------------------------------------
+  sorry
+
 -- TODO: Prove stuff about reachable_within.
 -- It looks like
 -- reachable_within S₁ S₂ ⊆ S₁,
@@ -1898,7 +1910,7 @@ lemma reduced_term_subset (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) :
 -- A helper lemma, stating that *in the updated net*,
 -- propagation(B) = propagation(B ∪ Reach(Prop(A), B))
 --------------------------------------------------------------------
-lemma hebb_prop_reach (net : BFNN) (S₁ S₂ : Set ℕ) :
+lemma hebb_lifted (net : BFNN) (S₁ S₂ : Set ℕ) :
   propagate (hebb_star net S₁) 
     (S₂ ∪ reachable_within net (propagate net S₁) S₂) =
   propagate (hebb_star net S₁) S₂ := by 
@@ -1908,30 +1920,33 @@ lemma hebb_prop_reach (net : BFNN) (S₁ S₂ : Set ℕ) :
   -- have h₁ := Set.mem_unionᵢ.mp h₁
   
   -- By induction on the layer of the net containing n
-  generalize hL : layer net n = L
+  generalize hL : layer (hebb_star net S₁) n = L
   induction L using Nat.case_strong_induction_on generalizing n
 
   -- Base Step
   -- TODO: DOCS for both directions!
   case hz =>
-    -- TODO: DOCS for both directions!
+    -- First, do the base case simplifications
+    simp only [propagate, Membership.mem, Set.Mem]
+    rw [hL]
+    simp only [propagate_acc]
+    simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
+
+    -- Backwards direction is the easy part, so we do it first.
+    -- Forward direction relies on reachable_within_layer_zero,
+    -- a fact about paths when we know n is at layer 0.
     apply Iff.intro
-
-    -- Forward Direction
+    case mpr => exact fun h₁ => Or.inl h₁
     case mp => 
-      simp only [propagate, Membership.mem, Set.Mem]
-      rw [hebb_layers]
-      rw [hL]
-      simp only [propagate_acc]
-
-      exact fun h₁ => 
-        -- Set.mem_unionᵢ.mpr ⟨0, propagate_is_extens _ _ h₁⟩
-        sorry
-    
-    -- Backwards Direction
-    case mpr => 
       intro h₁
-      sorry
+
+      -- Either n ∈ S₂ or n is reachable from S₂ using only
+      -- paths within Prop(S₁).
+      cases h₁
+      case inl h₂ => exact h₂
+      case inr h₂ => 
+        have heq : layer net n = 0 := Eq.trans (symm (hebb_layers net S₁)) hL
+        exact reachable_within_layer_zero _ _ _ _ heq h₂
 
   -- Inductive Step
   case hi L IH₁ => 
@@ -2105,7 +2120,7 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
           exact h₂
         case succ k IH₂ => 
           simp only [reduced_term] at hk
-          sorry
+          sorry -- go through this carefully on paper!!
 
 
 /-
