@@ -1604,6 +1604,11 @@ def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
   iterate hebb (hebb_unstable_point net S) net S
 
 
+
+/-══════════════════════════════════════════════════════════════════
+  Properties of Unstable Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
 -- A net net₁ is a subnet of net₂ (net₁ ≼ net₂) iff for all
 -- sets S, every node activated in the propagation of S
 -- in net₁ is activated in the propagation of S in net₂.
@@ -1703,6 +1708,11 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
   sorry
 
 
+
+/-══════════════════════════════════════════════════════════════════
+  Properties of Naive Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
 -- Hebbian update hebb_star does not affect the predecessors
 -- of any node.
 --------------------------------------------------------------------
@@ -1728,9 +1738,6 @@ theorem hebb_activation (net : BFNN) (S : Set ℕ) :
 --------------------------------------------------------------------
   sorry
 
-/-══════════════════════════════════════════════════════════════════
-  Properties of Naive Hebbian Update
-══════════════════════════════════════════════════════════════════-/
 
 -- Hebbian update hebb_star does not affect graph reachability
 -- (It only affects the edge weights)
@@ -1741,26 +1748,13 @@ theorem hebb_reach (net : BFNN) (S₁ S₂ : Set ℕ) :
 --------------------------------------------------------------------
   sorry
 
+
+-- If there is a path within Prop(S₁) from S₂ to n, then, since this
+-- path is updated in hebb_star, n ∈ Prop(S₂).
 --------------------------------------------------------------------
 theorem hebb_updated_path (net : BFNN) (S₁ S₂ : Set ℕ) :
   reachable net (propagate net S₁) S₂
   ⊆ propagate (hebb_star net S₁) S₂ := by
---------------------------------------------------------------------
-  sorry
-
---------------------------------------------------------------------
-lemma hebb_extensive_activ (net : BFNN) (S : Set ℕ) :
-  let preds := preds net n
-  let prev_activ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if propagate_acc net S₂ m (layer net m) then 1.0 else 0.0
-  let prev_activ_hebb := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if propagate_acc (hebb_star net S₁) S₂ m (layer (hebb_star net S₁) m) then 1.0 else 0.0
-  activ net prev_activ n
-  → activ (hebb_star net S₁) prev_activ_hebb n := by
 --------------------------------------------------------------------
   sorry
 
@@ -1783,132 +1777,18 @@ theorem hebb_extensive (net : BFNN) (S : Set ℕ) :
 
 
 
-
-
-
-
--- -- This is the big theorem.
--- -- It explains the behavior of hebb_star in terms of the net
--- -- *before* update -- it turns out that we can completely
--- -- reduce the dynamic behavior to the static behavior.
--- --------------------------------------------------------------------
--- theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
---   propagate (hebb_star net S₁) S₂ = 
---     propagate net (S₂ ∪ focused_reachable net 
---       (propagate net S₁ ∩ propagate net S₂)) := by 
--- --------------------------------------------------------------------
---   apply ext
---   intro (n : ℕ)
-
---   -- By induction on the layer of the net containing n
---   generalize hL : layer net n = L
---   induction L using Nat.case_strong_induction_on generalizing n
-
---   -- Base Step
---   case hz =>
---     simp only [Membership.mem, Set.Mem, Union.union, Set.union, propagate]
---     rw [hebb_layers]
---     rw [hL]
---     simp only [propagate_acc]
---     simp only [Membership.mem, Set.Mem]
---     rw [setOf_app_iff]
-
---     exact ⟨fun h₁ => Or.inl h₁, 
---       fun h₁ => Or.elim h₁ (fun h₂ => h₂) (fun h₂ => 
---         -- Idea:
---         -- focused_reachable(propagate(S₁) ∩ propagate(S₂))
---         --   ⊆ propagate(S₁) ∩ propagate(S₂)
---         --   ⊆ propagate(S₂)
---         --   = S₂                         (trivially at layer 0)
---         have h₃ : n ∈ propagate net S₂ :=
---           inter_subset_right _ _ (focused_reach_subset _ _ h₂)
---         have h₄ : n ∈ S₂ := by
---           simp only [Membership.mem, Set.Mem, propagate] at h₃
---           rw [hL] at h₃
---           simp only [propagate_acc] at h₃
---           exact h₃
---         h₄)⟩
-
---   -- Inductive Step
---   case hi L IH =>
---     apply Iff.intro
-
---     -- Forward direction
---     case mp =>
---       intro h₁
-      
---       -- By cases in order to reduce propagate_acc
---       by_cases n ∈ S₂ ∪ focused_reachable net (propagate net S₁ ∩ propagate net S₂)
---       case pos => exact propagate_is_extens _ _ h
---       case neg => 
---         have h₂ : n ∉ S₂ := 
---           fun h₂ => absurd (subset_union_left _ _ h₂) h
-
---         -- Now we can do our usual simplifications 
---         simp [propagate, Membership.mem, Set.Mem]
---         simp [propagate, Membership.mem, Set.Mem] at h₁
---         rw [hebb_layers] at h₁
---         rw [hL]
---         rw [hL] at h₁
---         rw [simp_propagate_acc _ h₂] at h₁
---         -- rw [simp_propagate_acc _ _] -- TODO: How to do this simp?
-
---         -- TODO: Lemma here that lets us split on
---         --   the two cases that give us
---         --     - n was activated in the original net, or
---         --     - there is a preceding m that increased and then activated it
---         sorry 
-
---     -- Backwards direction (similar, so handle forward first)
---     case mpr =>
---       intro h₁
-
---       -- By cases in order to reduce propagate_acc
---       by_cases n ∈ S₂ ∪ focused_reachable net (propagate net S₁ ∩ propagate net S₂)
---       case pos => 
---         -- Either n ∈ S₂ or n ∈ focused_reachable(...),
---         -- but either way we have n ∈ propagate(S₂).
---         cases h
---         case inl h₂ => 
---           exact hebb_extensive _ _ _ (propagate_is_extens _ _ h₂)
---         case inr h₂ => 
---           exact hebb_extensive _ _ _ (inter_subset_right _ _ (focused_reach_subset _ _ h₂))
-      
---       case neg => 
---         have h₂ : n ∉ S₂ :=
---           fun h₂ => absurd (subset_union_left _ _ h₂) h
-
---         -- Now we can do our usual simplifications 
---         simp [propagate, Membership.mem, Set.Mem]
---         simp [propagate, Membership.mem, Set.Mem] at h₁
---         rw [hebb_layers]
---         rw [hL]
---         rw [hL] at h₁
---         rw [simp_propagate_acc _ h₂]
---         -- rw [simp_propagate_acc _ _] at h₁ -- TODO: How to do this simp?
-
---         -- TODO: Lemma here that lets us split on
---         --   the two cases that give us
---         --     - n was activated in the original net, or
---         --     - there is a preceding m that increased and then activated it
---         sorry
-
-
--- THE MAIN CONDITION
--- (∃ m, m ∈ preds
---     ∧ activ (hebb_star net S₁) prev_activ_hebb m
---     ∧ propagate_acc net S₁ m (layer net m)
---     ∧ propagate_acc net S₁ n (layer net n)
---     ∧ ¬ activ net prev_activ n)
+/-══════════════════════════════════════════════════════════════════
+  Reduction for Unstable Hebbian Update
+══════════════════════════════════════════════════════════════════-/
 
 -- I claim that naive hebbian update is reducible to the
 -- union of this (finite but arbitrarily large) recurrent term.
-def reduced_term (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) : Set ℕ :=
+def reduced_term (net : BFNN) (A B : Set ℕ) (k : ℕ) : Set ℕ :=
   match k with
-  | Nat.zero => propagate net (S₂ ∪ 
-    reachable net (propagate net S₁) S₂)
-  | Nat.succ k => propagate net (reduced_term net S₁ S₂ k ∪
-    reachable net (propagate net S₁) (reduced_term net S₁ S₂ k))
+  | Nat.zero => propagate net (B ∪ 
+    reachable net (propagate net A) B)
+  | Nat.succ k => propagate net (reduced_term net A B k ∪
+    reachable net (propagate net A) (reduced_term net A B k))
 
 
 -- The inner part of reduced_term[k-1]
@@ -1923,9 +1803,168 @@ lemma reduced_term_subset (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) :
 
 
 -- A helper lemma, stating that *in the updated net*,
+-- propagation(B) = ⋃ reduced_term[k]
+--------------------------------------------------------------------
+lemma hebb_lifted (net : BFNN) (A B : Set ℕ) :
+  (⋃ k, reduced_term (hebb_star net A) A B k) =
+  propagate (hebb_star net A) B := by 
+--------------------------------------------------------------------
+  apply ext
+  intro (n : ℕ)
+  simp only [Membership.mem, Set.Mem, propagate]
+  -- have h₁ := Set.mem_unionᵢ.mp h₁
+  
+  -- By induction on the layer of the net containing n
+  generalize hL : layer (hebb_star net A) n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+
+  -- Base Step
+  -- TODO: DOCS for both directions!
+  case hz =>
+    -- First, do the base case simplifications
+    simp only [propagate_acc]
+    simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
+
+    -- Backwards direction is the easy part, so we do it first.
+    -- Forward direction relies on reach_layer_zero,
+    -- a fact about paths when we know n is at layer 0.
+    apply Iff.intro
+    case mpr => exact fun h₁ => Or.inl h₁
+    case mp => 
+      intro h₁
+
+      -- Either n ∈ S₂ or n is reachable from S₂ using only
+      -- paths within Prop(S₁).
+      cases h₁
+      case inl h₂ => exact h₂
+      case inr h₂ => 
+        have heq : layer net n = 0 := Eq.trans (symm (hebb_layers net S₁)) hL
+        exact reach_layer_zero _ _ _ _ heq h₂
+
+  -- Inductive Step
+  case hi L IH => 
+    apply Iff.intro
+    
+
+    -- Forward Direction
+    case mp => 
+      intro h₁
+
+      -- By cases; either n ∈ B ∪ reachable net (propagate net A) B, 
+      -- or not.
+      by_cases n ∈ B ∪ reachable net (propagate net A) B
+      case pos => 
+        -- In this case, either n ∈ B or it is reachable from B
+        -- via a path entirely within Prop(A).  In this second case,
+        -- this path has been updated in the hebb_star net, so of course
+        -- n ∈ Prop (hebb_star net A) B!
+        -- (i.e. apply lemma 'hebb_updated_path')
+        simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at h
+        rw [symm hL]
+        cases h
+        case inl h₂ => exact hebb_acc_is_extens _ _ _ _ _ (propagate_acc_is_extens _ _ h₂)
+        case inr h₂ => 
+          have h₃ : n ∈ propagate (hebb_star net A) B := 
+            hebb_updated_path _ _ _ h₂
+          simp only [propagate, Membership.mem, Set.Mem] at h₃
+          exact h₃
+
+      case neg => 
+        -- If n ∉ S₂ ∪ reachable ..., then n ∉ S₂.
+        have n_not_in_B : n ∉ B :=
+          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
+        
+        -- Now for some simplifications and rewriting definitions
+        simp only [propagate, Membership.mem, Set.Mem]
+        simp only [propagate, Membership.mem, Set.Mem] at h₁
+        simp only [propagate] at h
+        rw [simp_propagate_acc _ n_not_in_B]
+        rw [simp_propagate_acc (hebb_star net A) h] at h₁
+
+        -- TODO: This is the stuff that should go in the activ_agree lemma!
+        simp
+        simp at h₁
+        convert h₁ using 5
+        rename_i i
+        generalize hm : List.get! (predecessors (hebb_star net S₁).toNet.graph n).data i = m
+        generalize hLm : layer (hebb_star net S₁) m = Lm
+
+        -- Apply the inductive hypothesis!
+        have h₄ : m ∈ preds (hebb_star net S₁) n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (predecessors (hebb_star net S₁).toNet.graph n).data i
+        have h₅ : Lm ≤ L := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing (hebb_star net S₁) m n h₄
+        exact (symm (IH Lm h₅ m hLm).to_eq).to_iff
+        
+    -- Backwards Direction (similar, pretty much the same as the ⟶ direction)
+    case mpr =>
+      intro h₁
+
+      -- By cases; either n ∈ B ∪ reachable net (propagate net A) B, 
+      -- or not.
+      by_cases n ∈ B ∪ reachable net (propagate net B) B
+      case pos => 
+        -- In this case, either n ∈ S₂ or it is reachable from S₂
+        -- via a path entirely within Prop(S₁).  In this second case,
+        -- this path has been updated in the hebb_star net, so of course
+        -- n ∈ Prop (hebb_star net S₁) S₂!
+        -- (i.e. apply lemma 'hebb_updated_path')
+        simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at h
+        rw [symm hL]
+        cases h
+        case inl h₂ => exact hebb_acc_is_extens _ _ _ _ _ (propagate_acc_is_extens _ _ h₂)
+        case inr h₂ => 
+          have h₃ : n ∈ propagate (hebb_star net A) 
+            ((B ∪ reachable net (propagate net A) B)) := 
+            hebb_updated_path _ _ _ (reach_is_monotone _ _ _ _ (subset_union_left B _) h₂)
+          simp only [propagate, Membership.mem, Set.Mem] at h₃
+          exact h₃
+
+      case neg => 
+        -- If n ∉ B ∪ reachable ..., then n ∉ B.
+        have n_not_in_B : n ∉ B :=
+          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
+        
+        -- Now for some simplifications and rewriting definitions
+        simp only [propagate, Membership.mem, Set.Mem]
+        simp only [propagate, Membership.mem, Set.Mem] at h₁
+        simp only [propagate] at h
+        rw [simp_propagate_acc _ n_not_in_B] at h₁
+        rw [simp_propagate_acc (hebb_star net A) h]
+
+        -- TODO: This is the stuff that should go in the activ_agree lemma!
+        simp
+        simp at h₁
+        convert h₁ using 5
+        rename_i i
+        generalize hm : List.get! (predecessors (hebb_star net A).toNet.graph n).data i = m
+        generalize hLm : layer (hebb_star net A) m = Lm
+
+        -- Apply the inductive hypothesis!
+        have h₄ : m ∈ preds (hebb_star net A) n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (predecessors (hebb_star net A).toNet.graph n).data i
+        have h₅ : Lm ≤ L := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing (hebb_star net A) m n h₄
+        exact (IH Lm h₅ m hLm)
+
+
+
+
+-- Old lemma (I'm trying to strengthen it above)
+-- A helper lemma, stating that *in the updated net*,
 -- propagation(B) = propagation(B ∪ Reach(Prop(A), B))
 --------------------------------------------------------------------
-lemma hebb_lifted (net : BFNN) (S₁ S₂ : Set ℕ) :
+lemma hebb_lifted_old (net : BFNN) (S₁ S₂ : Set ℕ) :
   propagate (hebb_star net S₁) 
     (S₂ ∪ reachable net (propagate net S₁) S₂) =
   propagate (hebb_star net S₁) S₂ := by 
@@ -2077,6 +2116,15 @@ lemma hebb_lifted (net : BFNN) (S₁ S₂ : Set ℕ) :
           rw [symm hL]
           exact preds_decreasing (hebb_star net S₁) m n h₄
         exact (IH Lm h₅ m hLm)
+
+
+-- THE MAIN CONDITION
+-- (∃ m, m ∈ preds
+--     ∧ activ (hebb_star net S₁) prev_activ_hebb m
+--     ∧ propagate_acc net S₁ m (layer net m)
+--     ∧ propagate_acc net S₁ n (layer net n)
+--     ∧ ¬ activ net prev_activ n)
+
 
 
 --------------------------------------------------------------------
@@ -2240,6 +2288,113 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
         case succ k IH₂ => 
           simp only [reduced_term] at hk
           sorry -- go through this carefully on paper!!
+
+
+-- -- This is the big theorem.
+-- -- It explains the behavior of hebb_star in terms of the net
+-- -- *before* update -- it turns out that we can completely
+-- -- reduce the dynamic behavior to the static behavior.
+-- --------------------------------------------------------------------
+-- theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
+--   propagate (hebb_star net S₁) S₂ = 
+--     propagate net (S₂ ∪ focused_reachable net 
+--       (propagate net S₁ ∩ propagate net S₂)) := by 
+-- --------------------------------------------------------------------
+--   apply ext
+--   intro (n : ℕ)
+
+--   -- By induction on the layer of the net containing n
+--   generalize hL : layer net n = L
+--   induction L using Nat.case_strong_induction_on generalizing n
+
+--   -- Base Step
+--   case hz =>
+--     simp only [Membership.mem, Set.Mem, Union.union, Set.union, propagate]
+--     rw [hebb_layers]
+--     rw [hL]
+--     simp only [propagate_acc]
+--     simp only [Membership.mem, Set.Mem]
+--     rw [setOf_app_iff]
+
+--     exact ⟨fun h₁ => Or.inl h₁, 
+--       fun h₁ => Or.elim h₁ (fun h₂ => h₂) (fun h₂ => 
+--         -- Idea:
+--         -- focused_reachable(propagate(S₁) ∩ propagate(S₂))
+--         --   ⊆ propagate(S₁) ∩ propagate(S₂)
+--         --   ⊆ propagate(S₂)
+--         --   = S₂                         (trivially at layer 0)
+--         have h₃ : n ∈ propagate net S₂ :=
+--           inter_subset_right _ _ (focused_reach_subset _ _ h₂)
+--         have h₄ : n ∈ S₂ := by
+--           simp only [Membership.mem, Set.Mem, propagate] at h₃
+--           rw [hL] at h₃
+--           simp only [propagate_acc] at h₃
+--           exact h₃
+--         h₄)⟩
+
+--   -- Inductive Step
+--   case hi L IH =>
+--     apply Iff.intro
+
+--     -- Forward direction
+--     case mp =>
+--       intro h₁
+      
+--       -- By cases in order to reduce propagate_acc
+--       by_cases n ∈ S₂ ∪ focused_reachable net (propagate net S₁ ∩ propagate net S₂)
+--       case pos => exact propagate_is_extens _ _ h
+--       case neg => 
+--         have h₂ : n ∉ S₂ := 
+--           fun h₂ => absurd (subset_union_left _ _ h₂) h
+
+--         -- Now we can do our usual simplifications 
+--         simp [propagate, Membership.mem, Set.Mem]
+--         simp [propagate, Membership.mem, Set.Mem] at h₁
+--         rw [hebb_layers] at h₁
+--         rw [hL]
+--         rw [hL] at h₁
+--         rw [simp_propagate_acc _ h₂] at h₁
+--         -- rw [simp_propagate_acc _ _] -- TODO: How to do this simp?
+
+--         -- TODO: Lemma here that lets us split on
+--         --   the two cases that give us
+--         --     - n was activated in the original net, or
+--         --     - there is a preceding m that increased and then activated it
+--         sorry 
+
+--     -- Backwards direction (similar, so handle forward first)
+--     case mpr =>
+--       intro h₁
+
+--       -- By cases in order to reduce propagate_acc
+--       by_cases n ∈ S₂ ∪ focused_reachable net (propagate net S₁ ∩ propagate net S₂)
+--       case pos => 
+--         -- Either n ∈ S₂ or n ∈ focused_reachable(...),
+--         -- but either way we have n ∈ propagate(S₂).
+--         cases h
+--         case inl h₂ => 
+--           exact hebb_extensive _ _ _ (propagate_is_extens _ _ h₂)
+--         case inr h₂ => 
+--           exact hebb_extensive _ _ _ (inter_subset_right _ _ (focused_reach_subset _ _ h₂))
+      
+--       case neg => 
+--         have h₂ : n ∉ S₂ :=
+--           fun h₂ => absurd (subset_union_left _ _ h₂) h
+
+--         -- Now we can do our usual simplifications 
+--         simp [propagate, Membership.mem, Set.Mem]
+--         simp [propagate, Membership.mem, Set.Mem] at h₁
+--         rw [hebb_layers]
+--         rw [hL]
+--         rw [hL] at h₁
+--         rw [simp_propagate_acc _ h₂]
+--         -- rw [simp_propagate_acc _ _] at h₁ -- TODO: How to do this simp?
+
+--         -- TODO: Lemma here that lets us split on
+--         --   the two cases that give us
+--         --     - n was activated in the original net, or
+--         --     - there is a preceding m that increased and then activated it
+--         sorry
 
 
 /-
