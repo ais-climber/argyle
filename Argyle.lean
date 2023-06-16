@@ -1784,7 +1784,7 @@ theorem hebb_extensive (net : BFNN) (S : Set ℕ) :
 -- A helper lemma, stating that *in the updated net*,
 -- propagation(B) = propagation(B ∪ Reach(Prop(A), B))
 --------------------------------------------------------------------
-lemma hebb_lifted_propagate (net : BFNN) (S₁ S₂ : Set ℕ) :
+lemma hebb_lifted_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   propagate (hebb_star net S₁) 
     (S₂ ∪ reachable net (propagate net S₁) S₂) =
   propagate (hebb_star net S₁) S₂ := by 
@@ -1951,13 +1951,6 @@ def reduced_term (net : BFNN) (A B : Set ℕ) (k : ℕ) : Set ℕ :=
   | Nat.succ k => propagate net (reduced_term net A B k ∪
     reachable net (propagate net A) (reduced_term net A B k))
 
-def updated_reduced_term (net : BFNN) (A B : Set ℕ) (k : ℕ) : Set ℕ :=
-  match k with
-  | Nat.zero => propagate (hebb_star net A) (B ∪ 
-    reachable net (propagate net A) B)
-  | Nat.succ k => propagate (hebb_star net A) (updated_reduced_term net A B k ∪
-    reachable net (propagate net A) (updated_reduced_term net A B k))
-
 
 -- The inner part of reduced_term[k-1]
 -- is a subset of reduced_term[k].
@@ -1968,43 +1961,6 @@ lemma reduced_term_subset (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) :
 --------------------------------------------------------------------
   subset_trans sorry
     (inter_subset_right (propagate net S₁) (reduced_term net S₁ S₂ k))
-
-
-
--- A helper lemma, stating that *in the updated net*,
--- propagation(B) = ⋃ reduced_term[k]
---------------------------------------------------------------------
-lemma hebb_lifted_reduced_term (net : BFNN) (A B : Set ℕ) :
-  propagate (hebb_star net A) B =
-  (⋃ k, updated_reduced_term net A B k) := by 
---------------------------------------------------------------------
-  apply ext
-  intro (n : ℕ)
-  apply Iff.intro
-
-  -- Forward direction is easy; n ∈ reduced_term[0] 
-  case mp => 
-    intro h₁
-    have h₂ : n ∈ propagate (hebb_star net A) (B ∪ reachable net (propagate net A) B) :=
-      sorry -- Should be exactly hebb_lifted_propagate
-    exact Set.mem_unionᵢ.mpr ⟨0, h₂⟩
-
-  -- Backward direction; by induction on k
-  case mpr => 
-    intro h₁
-    have h₁ := Set.mem_unionᵢ.mp h₁
-    match h₁ with
-    | ⟨k, hk⟩ => 
-      -- We know that n ∈ reduced_term[k] for some k, so
-      -- by induction on *that* k.
-      induction k
-      case zero => 
-        simp only [updated_reduced_term] at hk
-        sorry -- Should be exactly hebb_lifted_propagate
-      case succ k IH => 
-        simp only [updated_reduced_term] at hk
-        sorry
-
 
 
 -- THE MAIN CONDITION
@@ -2023,28 +1979,33 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
-  -- have h₁ := Set.mem_unionᵢ.mp h₁
   
   -- By induction on the layer of the net containing n
   generalize hL : layer net n = L
   induction L using Nat.case_strong_induction_on generalizing n
 
+  --------------------------------
   -- Base Step
-  -- TODO: DOCS for both directions!
+  --------------------------------
   case hz =>
-    -- TODO: DOCS for both directions!
     apply Iff.intro
-
+    
+    ---------------------
     -- Forward Direction
-    case mp => 
+    ---------------------
+    -- TODO: Docs for both directions!
+    case mp =>
       simp only [propagate, Membership.mem, Set.Mem]
       rw [hebb_layers]
       rw [hL]
       simp only [propagate_acc]
 
-      exact fun h₁ => Set.mem_unionᵢ.mpr ⟨0, propagate_is_extens _ _ sorry⟩
+      exact fun h₁ => Set.mem_unionᵢ.mpr 
+        ⟨0, propagate_is_extens _ _ (mem_union_left _ h₁)⟩
     
-    -- Backwards Direction
+    ---------------------
+    -- Backward Direction
+    ---------------------
     case mpr => 
       intro h₁
       have h₁ := Set.mem_unionᵢ.mp h₁
@@ -2053,43 +2014,56 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
         -- We know that n ∈ reduced_term[k] for some k, so
         -- by induction on *that* k.
         induction k
-        case zero => exact hebb_extensive _ _ _ sorry
-        case succ k IH =>
-
-          -- Inductive Step;
-          -- TODO: Explain what's going on here, after simplifications!
+        
+        -- Inner Base step
+        case zero =>
+          -- Do some base case simplifications
           simp only [reduced_term] at hk
           simp only [propagate, Membership.mem, Set.Mem]
-          simp only [propagate, Membership.mem, Set.Mem] at IH
           simp only [propagate, Membership.mem, Set.Mem] at hk
           rw [hebb_layers]
-          rw [hebb_layers] at IH
           rw [hL]
-          rw [hL] at IH
           rw [hL] at hk
           simp only [propagate_acc]
-          simp only [propagate_acc] at IH
           simp only [propagate_acc] at hk
+          simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at hk
 
-          -- By cases; either n ∈ reduced_term[k],
-          -- or n ∈ reachable(...) 
+          -- Either n ∈ S₂ or n is reachable from S₂ using only
+          -- paths within Prop(S₁).
           cases hk
-          case inl h₂ => exact IH h₂
+          case inl h₂ => exact h₂
           case inr h₂ => 
-            -- If n ∈ reachable(Prop(S₁), reduced_term[k]),
-            -- then there's a path from m ∈ reduced_term[k] to n.
-            -- 
-            -- By IH, m ∈ S₂ ⊆ reduced_term[k-1],
-            -- and this gives us a way to show n ∈ reduced_term[k].
-            -- By our IH, we have n ∈ S₂ as well. 
-            match h₂ with
-            | ⟨m, hm⟩ =>
-              sorry
-              -- have h₃ : m ∈ S₂ := IH hm
-              -- have h₄ : n ∈ reduced_term net S₁ S₂ k := sorry
-              -- exact IH h₄
+            have heq : layer net n = 0 := Eq.trans (symm (hebb_layers net S₁)) hL
+            exact reach_layer_zero _ _ _ _ heq h₂
+        
+        -- Inner Inductive step (pretty much the same as the
+        -- inner base step, but this time we apply the inner IH₂.)
+        case succ k IH₂ =>
+          simp only [reduced_term] at hk
+          simp only [propagate, Membership.mem, Set.Mem]
+          simp only [propagate, Membership.mem, Set.Mem] at hk
+          simp only [propagate, Membership.mem, Set.Mem] at IH₂
+          rw [hebb_layers]
+          rw [hebb_layers] at IH₂
+          rw [hL]
+          rw [hL] at hk
+          rw [hL] at IH₂
+          simp only [propagate_acc]
+          simp only [propagate_acc] at hk
+          simp only [propagate_acc] at IH₂
+          simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at hk
 
+          -- Same as before; either n ∈ S₂ or n is reachable from 
+          -- S₂ using only paths within Prop(S₁).
+          cases hk
+          case inl h₂ => exact IH₂ h₂
+          case inr h₂ => 
+            have heq : layer net n = 0 := Eq.trans (symm (hebb_layers net S₁)) hL
+            exact IH₂ (reach_layer_zero _ _ _ _ heq h₂)
+        
+  --------------------------------
   -- Inductive Step
+  --------------------------------
   case hi L IH₁ => 
     apply Iff.intro
 
