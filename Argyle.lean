@@ -1962,6 +1962,12 @@ lemma reduced_term_subset (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) :
   subset_trans sorry
     (inter_subset_right (propagate net S₁) (reduced_term net S₁ S₂ k))
 
+--------------------------------------------------------------------
+lemma reduced_term_extens (net : BFNN) (S₁ S₂ : Set ℕ) (k : ℕ) :
+  S₂ ⊆ reduced_term net S₁ S₂ k :=
+--------------------------------------------------------------------
+  sorry
+
 
 -- THE MAIN CONDITION
 -- (∃ m, m ∈ preds
@@ -2067,7 +2073,60 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   case hi L IH₁ => 
     apply Iff.intro
 
+    ---------------------
+    -- Backward Direction
+    ---------------------
+    case mpr =>
+      intro h₁
+      have h₁ := Set.mem_unionᵢ.mp h₁
+      match h₁ with
+      | ⟨k, hk⟩ =>
+        -- We know that n ∈ reduced_term[k] for some k, so
+        -- by induction on *that* k.
+        induction k -- generalizing n
+
+        -- Inner Base Step
+        case zero => 
+          simp only [reduced_term] at hk
+
+          -- Just apply:
+          --   1. hebb_extensive 
+          --   2. hebb_lifted_reduction
+          have h₂ : n ∈ propagate (hebb_star net S₁) 
+            (S₂ ∪ reachable net (propagate net S₁) S₂) := 
+            hebb_extensive _ _ _ hk
+          
+          exact (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
+        
+        -- Inner Inductive Step
+        case succ k IH₂ => 
+          simp only [reduced_term] at hk
+
+          -- Just apply, in this order:
+          --   1. hebb_extensive
+          --   2. hebb_lifted_reduction
+          --   3. propagate_is_cumulative
+          --      (which we get from reduced_term_extens and our IH₂)
+          
+          have h₂ : n ∈ propagate (hebb_star net S₁) 
+            (reduced_term net S₁ S₂ k ∪ reachable net (propagate net S₁) 
+              (reduced_term net S₁ S₂ k)) := 
+            hebb_extensive _ _ _ hk
+
+          have h₃ : n ∈ propagate (hebb_star net S₁) (reduced_term net S₁ S₂ k) := 
+            (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
+          
+          have h₄ : S₂ ⊆ reduced_term net S₁ S₂ k := 
+            reduced_term_extens _ _ _ _
+          have h₅ : reduced_term net S₁ S₂ k ⊆ propagate (hebb_star net S₁) S₂ :=
+            sorry -- how to generalize n in our IH₂???
+          exact (Set.ext_iff.mp (propagate_is_cumulative (hebb_star net S₁) 
+            _ _ h₄ h₅) n).mpr h₃
+
+
+    ---------------------
     -- Forward Direction
+    ---------------------
     case mp => 
       intro h₁
       -- Now I can resume what I was doing with a much
@@ -2128,30 +2187,6 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
           have h₂ : activ net prev_activ n := sorry
           have h₃ : n ∈ propagate net S₂ := sorry
           exact ⟨0, sorry⟩
-
-        
-    -- Backwards Direction
-    case mpr =>
-      intro h₁
-      have h₁ := Set.mem_unionᵢ.mp h₁
-      match h₁ with
-      | ⟨k, hk⟩ =>
-        -- We know that n ∈ reduced_term[k] for some k, so
-        -- by induction on *that* k.
-        induction k
-        case zero => 
-          -- Just apply hebb_prop_reach and inclusion
-          simp only [reduced_term] at hk
-          have h₂ : n ∈ propagate (hebb_star net S₁) 
-            (S₂ ∪ reachable net (propagate net S₁) S₂) := 
-            hebb_extensive _ _ _ hk
-          sorry
-          -- rw [hebb_prop_reach net S₁ S₂] at h₂
-          -- exact h₂
-        case succ k IH₂ => 
-          simp only [reduced_term] at hk
-          sorry -- go through this carefully on paper!!
-
 
 -- -- This is the big theorem.
 -- -- It explains the behavior of hebb_star in terms of the net
