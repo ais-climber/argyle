@@ -2083,7 +2083,7 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
       | ⟨k, hk⟩ =>
         -- We know that n ∈ reduced_term[k] for some k, so
         -- by induction on *that* k.
-        induction k -- generalizing n
+        induction k
 
         -- Inner Base Step
         case zero => 
@@ -2096,7 +2096,9 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
             (S₂ ∪ reachable net (propagate net S₁) S₂) := 
             hebb_extensive _ _ _ hk
           
-          exact (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
+          have h₃ : n ∈ propagate (hebb_star net S₁) S₂ := 
+            (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
+          exact h₃
         
         -- Inner Inductive Step
         case succ k IH₂ => 
@@ -2105,8 +2107,9 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
           -- Just apply, in this order:
           --   1. hebb_extensive
           --   2. hebb_lifted_reduction
-          --   3. propagate_is_cumulative
-          --      (which we get from reduced_term_extens and our IH₂)
+          --   3. This gives us n ∈ Prop (hebb_star) reduced_term[k];
+          --      If we expand this out we get n ∈ reduced_term[k].
+          --      Then we can apply our IH.
           
           have h₂ : n ∈ propagate (hebb_star net S₁) 
             (reduced_term net S₁ S₂ k ∪ reachable net (propagate net S₁) 
@@ -2116,12 +2119,9 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
           have h₃ : n ∈ propagate (hebb_star net S₁) (reduced_term net S₁ S₂ k) := 
             (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
           
-          have h₄ : S₂ ⊆ reduced_term net S₁ S₂ k := 
-            reduced_term_extens _ _ _ _
-          have h₅ : reduced_term net S₁ S₂ k ⊆ propagate (hebb_star net S₁) S₂ :=
-            sorry -- how to generalize n in our IH₂???
-          exact (Set.ext_iff.mp (propagate_is_cumulative (hebb_star net S₁) 
-            _ _ h₄ h₅) n).mpr h₃
+          have h₄ : n ∈ reduced_term net S₁ S₂ k := 
+            sorry -- NOT EXACTLY TRUE!!!
+          exact IH₂ h₄
 
 
     ---------------------
