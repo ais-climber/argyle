@@ -2113,11 +2113,26 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
         rw [simp_propagate_acc (hebb_star net S₁) h] at hlifted
 
         -- I need the two activ's to be equal.
-        -- Somehow this relies on the fact that
-        -- n ∉ reachable (propagate net S₁) S₂
-
-        simp
-        simp at hlifted
+        -- Somehow this relies on:
+        --   1. the net being complete & transitively closed,
+        --   2. (related) n ∉ reachable (propagate net S₁) S₂
+        --   3. our inductive hypothesis
+        
+        -- Proof idea:
+        --   Lemma that says
+        --      IF    n ∉ reachable (propagate net S₁) S₂
+        --      THEN  activ (hebb_star net n) X n = 
+        --            activ net X n
+        --      
+        --      (this seems like it should be true,
+        --       but how to prove it???)
+        --   
+        --   From here, we have to prove that the two X's
+        --   are equal -- that is, the sets that the m's are in
+        --   are equal.  This is exactly what our IH says
+        --   BUT
+        --   we have to conv into our IH and apply hebb_lifted_reduction
+        --   internally (nested inside the IH).
         sorry
 
 
