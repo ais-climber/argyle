@@ -2046,15 +2046,61 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
   --------------------------------
   -- Inductive Step
   --------------------------------
-  case hi L IH => sorry
+  case hi L IH => 
+    apply Iff.intro
+    
+    ---------------------
+    -- Backward Direction
+    ---------------------
+    -- This is the easier direction; we just apply
+    -- hebb_extensive and hebb_lifted_reduction.
+    case mpr =>
+      intro h₁
+      -- rw [hL]
+      
+      -- First, apply hebb_extensive
+      have h₂ : n ∈ propagate (hebb_star net S₁) 
+        (S₂ ∪ reachable net (propagate net S₁) S₂) := by
+        apply hebb_acc_is_extens _ _ _ _ _
+        rw [hL]
+        exact h₁
+        
+      -- Then, apply hebb_lifted_reduction
+      have h₃ : n ∈ propagate (hebb_star net S₁) S₂ := by
+        exact (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
+      
+      simp only [Membership.mem, Set.Mem, propagate] at h₃
+      rw [hL] at h₃
+      exact h₃
 
-  --------------------------------
-  -- Base Step
-  --------------------------------
+    ---------------------
+    -- Forward Direction
+    ---------------------
+    -- This direction is a bit more tricky. This
+    -- is where we rely on the net being fully
+    -- connected & transitively closed.
+    case mp => 
+      intro h₁
+      
+      -- By cases; either n ∈ S₂ ∪ reachable net (propagate net S₁) S₂, 
+      -- or not.
+      by_cases n ∈ S₂ ∪ reachable net (propagate net S₁) S₂
+      case pos => 
+        -- In this case, just apply propagate_is_extens
+        rw [← hL]
+        rw [hebb_layers]
+        exact propagate_acc_is_extens _ _ h
 
-  ---------------------
-  -- Forward Direction
-  ---------------------
+      case neg => 
+        -- If n ∉ S₂ ∪ reachable ..., then n ∉ S₂ and n ∉ reachable ...
+        -- The fact that n ∉ reachable ... is going to be crucial later.
+        have n_not_in_S₂ : n ∉ S₂ :=
+          fun n_in_S₂ => absurd (Set.mem_union_left _ n_in_S₂) h
+        have n_not_in_reach : n ∉ reachable net (propagate net S₁) S₂ :=
+          fun n_in_reach => absurd (Set.mem_union_right _ n_in_reach) h
+        
+        sorry
+
 
 -- --------------------------------------------------------------------
 -- theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) : 
