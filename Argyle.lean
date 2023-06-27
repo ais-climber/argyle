@@ -20,7 +20,8 @@ open Set
 open Tactic
 open Classical
 
--- set_option maxHeartbeats 2000000
+-- Doesn't detect inefficient code!
+set_option maxHeartbeats 0
 
 -------------------------------------------------
 -- Goofing about with inductive types
@@ -726,6 +727,19 @@ def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
   let curr_activ := net.activation weight_sum
   curr_activ = 1.0
 
+/-
+activ net
+  (List.bind (List.range (List.length (predecessors net.toNet.graph n).data)) fun i =>
+    pure
+      (if
+          propagate_acc net (fun n => propagate_acc net S n (layer net n))
+            (List.get! (predecessors net.toNet.graph n).data i)
+            (layer net (List.get! (predecessors net.toNet.graph n).data i)) then
+        OfScientific.ofScientific 10 true 1
+      else OfScientific.ofScientific 0 true 1))
+  n
+-/
+
 -- Accumulator variation of propagate
 -- (We accumulate the layer of the net that n is in)
 @[simp]
@@ -790,6 +804,49 @@ lemma simp_propagate_acc (net : BFNN) :
     simp only [propagate_acc] at h₂
     exact Or.inr h₂
 
+
+-- Horribly messy!  What is this actually saying?  Is there any
+-- way to clean this up?
+--------------------------------------------------------------------
+lemma activ_agrees (net : BFNN) (S₁ S₂ : Set ℕ) (n : ℕ) :
+  (∀ (i : ℕ),
+  propagate_acc net 
+    (fun n => propagate_acc net S₁ n (layer net n))
+    (List.get! (predecessors net.toNet.graph n).data i) 
+    (layer net (List.get! (predecessors net.toNet.graph n).data i))
+  ↔ 
+  propagate_acc net 
+    (fun n => propagate_acc net S₂ n (layer net n))
+    (List.get! (predecessors net.toNet.graph n).data i) 
+    (layer net (List.get! (predecessors net.toNet.graph n).data i)))
+  
+  → activ net 
+    (List.bind (List.range (List.length (net.toNet.graph.predecessors n).data)) 
+    fun i => pure 
+      (if propagate_acc net (fun n => propagate_acc net S₁ n (layer net n))
+        (List.get! (predecessors net.toNet.graph n).data i)
+        (layer net (List.get! (predecessors net.toNet.graph n).data i)) 
+      then 1.0 else 0.0)) n 
+    
+  → activ net 
+      (List.bind (List.range (List.length (net.toNet.graph.predecessors n).data)) 
+    fun i => pure 
+      (if propagate_acc net (fun n => propagate_acc net S₂ n (layer net n))
+        (List.get! (predecessors net.toNet.graph n).data i)
+        (layer net (List.get! (predecessors net.toNet.graph n).data i)) 
+      then 1.0 else 0.0)) n  := by
+--------------------------------------------------------------------
+  intro h₁
+  intro h₂
+  convert h₂ using 5
+  rename_i i
+
+  -- See if I can generalize in the hypotheses and still get this to work!!!
+  -- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+  -- generalize hLm : layer net m = Lm
+
+  exact Iff.symm (h₁ i)
+  
 
 -- -- If S₁ and S₂ agree on all the predecessors of n, then they agree on n.
 -- -- TODO: We don't seem to need this lemma anymore!
@@ -1014,21 +1071,9 @@ theorem propagate_is_idempotent :
           simp [propagate] at h₂
           rw [simp_propagate_acc net h₂] at h₁
           
-          -- -- Setup for the activ_agrees lemma
-          -- intro preds
-          -- intro prev_activ₂
-          -- let prev_activ₁ := do
-          --   let i <- List.range preds.length
-          --   let m := preds.get! i
-          --   return if propagate_acc net S m (layer net m) then 1.0 else 0.0
-          -- have h₁ : activ net prev_activ₁ n := sorry -- should just follow from h₁
-          
           -- -- activ_agrees lemma goes here
-          -- sorry
-          simp
-          simp at h₁
-          
           -- TODO: Having lots of trouble with the activ_agrees lemma atm...
+          
           simp
           simp at h₁
           convert h₁ using 5
@@ -1047,7 +1092,7 @@ theorem propagate_is_idempotent :
             rw [symm hL]
             exact preds_decreasing net m n h₃
           exact IH Lm h₄ m hLm
-
+          
 
 
 -- This is essentially Hannes' proof.
@@ -2092,76 +2137,65 @@ theorem hebb_reduction (net : BFNN) (S₁ S₂ : Set ℕ) :
         exact propagate_acc_is_extens _ _ h
 
       case neg => 
-        -- If n ∉ S₂ ∪ reachable ..., then n ∉ reachable ...
+        -- If n ∉ S₂ ∪ reachable ..., then n ∉ S₂ and n ∉ reachable ...
         -- This is going to be crucial later, when reasoning about 'activ'
+        have n_not_in_S₂ : n ∉ S₂ :=
+          fun n_in_S₂ => absurd (Set.mem_union_left _ n_in_S₂) h
+
         have n_not_in_reach : n ∉ reachable net (propagate net S₁) S₂ :=
           fun n_in_reach => absurd (Set.mem_union_right _ n_in_reach) h
         
         -- Apply hebb_lifted_reduction to get the same inner set.
-        have hlifted : n ∈ propagate (hebb_star net S₁)
-          (S₂ ∪ reachable net (propagate net S₁) S₂) := by
-          apply (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mpr
-          simp only [Membership.mem, Set.Mem, propagate]
-          rw [hL]
-          exact h₁
+        -- have hlifted : n ∈ propagate (hebb_star net S₁)
+        --   (S₂ ∪ reachable net (propagate net S₁) S₂) := by
+        --   apply (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mpr
+        --   simp only [Membership.mem, Set.Mem, propagate]
+        --   rw [hL]
+        --   exact h₁
         
         -- Now for some simplifications and rewriting definitions
-        simp only [propagate, Membership.mem, Set.Mem] at hlifted
-        rw [hL] at hlifted
+        simp only [propagate, Membership.mem, Set.Mem] at h₁
+        -- rw [hL] at hlifted
         simp only [propagate] at h
         rw [simp_propagate_acc _ h]
-        rw [simp_propagate_acc (hebb_star net S₁) h] at hlifted
-
-        -- I need the two activ's to be equal.
-        -- Somehow this relies on:
-        --   1. the net being complete & transitively closed,
-        --   2. (related) n ∉ reachable (propagate net S₁) S₂
-        --   3. our inductive hypothesis
+        rw [simp_propagate_acc (hebb_star net S₁) n_not_in_S₂] at h₁
         
-        -- Proof idea:
-        --   Lemma that says
-        --      IF    n ∉ reachable (propagate net S₁) S₂
-        --      THEN  activ (hebb_star net n) X n = 
-        --            activ net X n
-        --      
-        --      (this seems like it should be true,
-        --       but how to prove it???)
-        --   
-        --   From here, we have to prove that the two X's
-        --   are equal -- that is, the sets that the m's are in
-        --   are equal.  This is exactly what our IH says
-        --   BUT
-        --   we have to conv into our IH and apply hebb_lifted_reduction
-        --   internally (nested inside the IH).
-        sorry
-
-
+        -- First, since n ∉ reachable (propagate net S₁) S₂,
+        -- the activ's for net and hebb_star(net) should be the same.
+        have h₂ : ∀ prev_activ, activ (hebb_star net S₁) prev_activ n = 
+          activ net prev_activ n := by
+          sorry
         
         -- TODO: This is the stuff that should go in the activ_agree lemma!
-        -- simp
-        -- simp at h₁
+        -- More simplifications, and setting up the IH.
+        -- The first few simplifications rewrite 'preds' and 'layers'
+        -- for the Hebbian net.
+        rw [h₂] at h₁
+        rw [hebb_preds net S₁] at h₁
+        conv at h₁ =>
+          enter [2, 2, i, m, 1]
+          rw [hebb_layers net S₁]
+        simp
+        simp at h₁
+        convert h₁ using 5
+        rename_i i
+        generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+        generalize hLm : layer net m = Lm
+        
+        -- We are now ready to apply our inductive hypothesis!
+        have h₄ : m ∈ preds net n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (predecessors net.toNet.graph n).data i
+        have h₅ : Lm ≤ L := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          rw [hebb_layers net S₁]
+          exact preds_decreasing net m n h₄
+        exact (symm (IH Lm h₅ m hLm).to_eq).to_iff
 
-        -- convert h₁ using 5
-        -- rename_i i
-        -- generalize hm : List.get! (predecessors (hebb_star net S₁).toNet.graph n).data i = m
-        -- generalize hLm : layer (hebb_star net S₁) m = Lm
 
-
-
-
-        -- -- Apply the inductive hypothesis!
-        -- have h₄ : m ∈ preds (hebb_star net S₁) n := by
-        --   rw [symm hm]
-        --   simp [preds]
-        --   exact get!_mem (predecessors (hebb_star net S₁).toNet.graph n).data i
-        -- have h₅ : Lm ≤ L := by
-        --   rw [symm hLm]
-        --   apply Nat.lt_succ.mp
-        --   rw [symm hL]
-        --   exact preds_decreasing (hebb_star net S₁) m n h₄
-        -- exact (symm (IH Lm h₅ m hLm).to_eq).to_iff
-
-            
 
 -- TODO: Prove that we can unravel these nets into ordinary
 -- feedforward nets
