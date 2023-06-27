@@ -1364,6 +1364,12 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
   exact match h₂ with
     | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
 
+-- --------------------------------------------------------------------
+-- theorem reach_within (net : BFNN) : ∀ (A B : Set ℕ),
+--   reachable net A B ⊆ A := by
+-- --------------------------------------------------------------------
+--   sorry
+
 -- TODO: Prove stuff about reachable.
 -- It looks like
 -- reachable A B ⊆ A,
@@ -1813,6 +1819,28 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
   sorry
 
 
+/-══════════════════════════════════════════════════════════════════
+  The more interesting/crucial properties
+══════════════════════════════════════════════════════════════════-/
+
+-- -- If n ∉ Prop(A), then any m⟶n in (hebb_star net) has
+-- -- the same weight as in the original net.
+-- --------------------------------------------------------------------
+-- theorem hebb_weights₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
+--   n ∉ propagate net A
+--   → activ (hebb_star net A) prev_activ n = activ net prev_activ n := by
+-- --------------------------------------------------------------------
+--   sorry
+
+-- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
+--------------------------------------------------------------------
+theorem hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
+  n ∉ propagate net A
+  → activ (hebb_star net A) prev_activ n = activ net prev_activ n := by
+--------------------------------------------------------------------
+  sorry
+
+
 -- If there is a path within Prop(A) from B to n, then, since this
 -- path is updated in hebb_star, n ∈ Prop(B).
 --------------------------------------------------------------------
@@ -1948,68 +1976,7 @@ lemma hebb_lifted_reduction (net : BFNN) (A B : Set ℕ) :
           exact preds_decreasing (hebb_star net A) m n h₄
         exact (symm (IH Lm h₅ m hLm).to_eq).to_iff
 
-    ---------------------
-    -- Backward Direction
-    -- (similar)
-    ---------------------    
-    case mpr =>
-      intro h₁
-
-      -- By cases; either n ∈ B ∪ reachable net (propagate net A) B, 
-      -- or not.
-      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
-      case pos => 
-        -- In this case, either n ∈ B or it is reachable from B
-        -- via a path entirely within Prop(A).  In this second case,
-        -- this path has been updated in the hebb_star net, so of course
-        -- n ∈ Prop (hebb_star net A) B!
-        -- (i.e. apply lemma 'hebb_updated_path')
-        simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at h
-        rw [symm hL]
-        cases h
-        case inl h₂ => 
-          apply hebb_acc_is_extens _ _ _ _ _
-          apply propagate_acc_is_extens _ _
-          simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
-          exact Or.inl h₂
-        case inr h₂ => 
-          have h₃ : n ∈ propagate (hebb_star net A) 
-            ((B ∪ reachable net (propagate net A) (propagate net B))) := 
-            hebb_updated_path _ _ _ (reach_is_monotone _ _ _ _ (subset_union_left B _) sorry)
-          simp only [propagate, Membership.mem, Set.Mem] at h₃
-          exact h₃
-
-      case neg => 
-        -- If n ∉ B ∪ reachable ..., then n ∉ B.
-        have n_not_in_B : n ∉ B :=
-          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
-        
-        -- Now for some simplifications and rewriting definitions
-        simp only [propagate, Membership.mem, Set.Mem]
-        simp only [propagate, Membership.mem, Set.Mem] at h₁
-        simp only [propagate] at h
-        rw [simp_propagate_acc _ n_not_in_B] at h₁
-        rw [simp_propagate_acc (hebb_star net A) h]
-
-        -- TODO: This is the stuff that should go in the activ_agree lemma!
-        simp
-        simp at h₁
-        convert h₁ using 5
-        rename_i i
-        generalize hm : List.get! (predecessors (hebb_star net A).toNet.graph n).data i = m
-        generalize hLm : layer (hebb_star net A) m = Lm
-
-        -- Apply the inductive hypothesis!
-        have h₄ : m ∈ preds (hebb_star net A) n := by
-          rw [symm hm]
-          simp [preds]
-          exact get!_mem (predecessors (hebb_star net A).toNet.graph n).data i
-        have h₅ : Lm ≤ L := by
-          rw [symm hLm]
-          apply Nat.lt_succ.mp
-          rw [symm hL]
-          exact preds_decreasing (hebb_star net A) m n h₄
-        exact (IH Lm h₅ m hLm)
+    case mpr => sorry
 
 
 -- These two are the big theorems.
@@ -2042,8 +2009,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
 
   --------------------------------
   -- Base Step
-  -- (same as base step for 
-  -- hebb_lifted_reduction)
   --------------------------------
   case hz => 
     -- First, do the base case simplifications
@@ -2058,8 +2023,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
     case mpr => 
       intro h₁
 
-      -- Either n ∈ B or n is reachable from B using only
-      -- paths within Prop(A).
+      -- Either n ∈ B or n is reachable from Prop(B) using only
+      -- paths within Prop(A).  At layer 0, this means n ∈ B.
       cases h₁
       case inl h₂ => exact h₂
       case inr h₂ => 
@@ -2075,26 +2040,71 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
     ---------------------
     -- Backward Direction
     ---------------------
-    -- This is the easier direction; we just apply
-    -- hebb_extensive and hebb_lifted_reduction.
+    -- This is definitely the easier direction, but it's still tricky.
+    -- Most of the work is in setting up the inductive hypothesis.
     case mpr =>
       intro h₁
-      -- rw [hL]
       
-      -- First, apply hebb_extensive
-      have h₂ : n ∈ propagate (hebb_star net A) 
-        (B ∪ reachable net (propagate net A) (propagate net B)) := by
-        apply hebb_acc_is_extens _ _ _ _ _
-        rw [hL]
-        exact h₁
+      -- By cases; either n ∈ B ∪ Reach(Prop(A), Prop(B)), or not.
+      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
+      case pos =>
+        rw [← hL]
+        rw [hebb_layers]
+
+        -- From here, we split again; either:
+        --    1. n ∈ B, and by extens n ∈ Prop(B) in (hebb_star net)
+        --    2. n ∈ Reach(Prop(A), Prop(B)).  In this case, this path
+        --       has been updated in the (hebb_star net), so of course
+        --       n ∈ Prop(B) in (hebb_star_net)
+        --       i.e. apply [hebb_updated_path]! 
+        cases h
+        case inl h₂ => exact propagate_acc_is_extens _ _ h₂
+        case inr h₂ =>
+          have h₃ : n ∈ propagate (hebb_star net A) B := 
+            hebb_updated_path _ _ _ h₂
+          simp only [propagate, Membership.mem, Set.Mem] at h₃
+          exact h₃
+
+      case neg h₂ => 
+        -- We get ready to simplify propagate_acc
+        have n_not_in_B : n ∉ B :=
+          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
+
+        -- In this case, we also have n ∉ Prop(A)
+        have n_not_in_propA : n ∉ propagate net A :=
+          sorry
+
+        -- Simplifications and rewriting, to prepare for IH
+        -- We also rewrite the 'preds', 'layers', and 'activ'
+        -- for (hebb_star net) in terms of the original 'net'.
+        simp only [propagate] at h
+        rw [simp_propagate_acc _ n_not_in_B]
+        rw [simp_propagate_acc _ h] at h₁
         
-      -- Then, apply hebb_lifted_reduction
-      have h₃ : n ∈ propagate (hebb_star net A) (B) := by
-        exact (Set.ext_iff.mp (hebb_lifted_reduction _ _ _) n).mp h₂
-      
-      simp only [Membership.mem, Set.Mem, propagate] at h₃
-      rw [hL] at h₃
-      exact h₃
+        rw [hebb_activ₁ _ _ _ n_not_in_propA] -- rewrite 'activ'
+        rw [hebb_preds net A] -- rewrite 'preds'
+        conv => -- rewrite 'layers'
+          enter [2, 2, i, m, 1]
+          rw [hebb_layers net A]
+        simp
+        simp at h₁
+        convert h₁ using 5
+        rename_i i
+        generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+        generalize hLm : layer net m = Lm
+        
+        -- We are now ready to apply our inductive hypothesis!
+        have h₄ : m ∈ preds net n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (predecessors net.toNet.graph n).data i
+        have h₅ : Lm ≤ L := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          rw [hebb_layers net A]
+          exact preds_decreasing net m n h₄
+        exact IH Lm h₅ m hLm
 
     ---------------------
     -- Forward Direction
