@@ -1340,9 +1340,7 @@ inductive focusedPath (g : Graph ℕ β) (S : Set ℕ) : ℕ → ℕ → Prop wh
 -- (including the initial and final nodes)
 def reachable (net : BFNN) (A B : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
-    -- TODO: FIX
     -- This is the actual definition, I got it wrong before
-    -- n ∈ B ∧ ∃ (m : ℕ), focusedPath net.graph A m n
     ∃ (m : ℕ), m ∈ B ∧ focusedPath net.graph A m n
 
 -- Argument: If there is a path from B to n, but n is in
@@ -1367,9 +1365,9 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
         (B : Set ℕ)
         (h₁ : A ⊆ B)
         (n : ℕ) (h₂ : n ∈ reachable net S A)
-
+  
   exact match h₂ with
-    | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
+    | ⟨m, hm⟩ => ⟨m, ⟨h₁ hm.1, hm.2⟩⟩
 
 -- --------------------------------------------------------------------
 -- theorem reach_within (net : BFNN) : ∀ (A B : Set ℕ),
@@ -1794,7 +1792,7 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
 -- of any node.
 --------------------------------------------------------------------
 theorem hebb_preds (net : BFNN) (S : Set ℕ) : 
-  preds (hebb_star net S) n = preds net n := by 
+  preds (hebb_star net S) n = preds net n := by
 --------------------------------------------------------------------
   sorry
 
@@ -1803,9 +1801,9 @@ theorem hebb_preds (net : BFNN) (S : Set ℕ) :
 -- on which layer of the net.
 --------------------------------------------------------------------
 theorem hebb_layers (net : BFNN) (S : Set ℕ) : 
-  layer (hebb_star net S) n = layer net n := by 
+  layer (hebb_star net S) n = layer net n :=
 --------------------------------------------------------------------
-  sorry
+  rfl
 
 
 -- Hebbian update hebb_star does not affect the activation function.
@@ -1824,6 +1822,7 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
     reachable net B := by 
 --------------------------------------------------------------------
   sorry
+  
 
 
 /-══════════════════════════════════════════════════════════════════
@@ -1839,13 +1838,57 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
 -- --------------------------------------------------------------------
 --   sorry
 
+/-
+have h₂ : ∀ prev_activ, activ (hebb_star net A) prev_activ n = 
+  activ net prev_activ n := by
+
+  intro prev_activ
+  simp only [activ]
+  rw [hebb_activation net A]
+  rw [hebb_preds net A]
+  conv =>
+    lhs; enter [1, 2, 1, 2, i, 1]
+    rw [hebb_weights]
+-/
+
+-- If n ∉ Prop(A), then the weights in the updated net are the same
+-- as the weights in the original net.
+--------------------------------------------------------------------
+theorem hebb_weights₁ (net : BFNN) : 
+  n ∉ propagate net A
+  → ∀ (i : ℕ),
+    (getEdgeWeight (hebb_star net A).toNet.graph ((preds net n).get! i) n =
+    getEdgeWeight net.toNet.graph ((preds net n).get! i) n) := by
+--------------------------------------------------------------------
+  sorry
+
+
+-- If all predecessors of n ∉ Prop(A), then the weights in the 
+-- updated net are the same as the weights in the original net.
+--------------------------------------------------------------------
+theorem hebb_weights₂ (net : BFNN) : 
+  (∀ x, x ∈ preds net n → x ∉ propagate net A)
+  → ∀ (i : ℕ),
+    (getEdgeWeight (hebb_star net A).toNet.graph ((preds net n).get! i) n =
+    getEdgeWeight net.toNet.graph ((preds net n).get! i) n) := by
+--------------------------------------------------------------------
+  sorry
+
+
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
 --------------------------------------------------------------------
 theorem hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
   n ∉ propagate net A
   → activ (hebb_star net A) prev_activ n = activ net prev_activ n := by
 --------------------------------------------------------------------
-  sorry
+  intro h₁
+  simp only [activ]
+  rw [hebb_activation net A]
+  rw [hebb_preds net A]
+  conv =>
+    lhs; enter [1, 2, 1, 2, i, 1]
+    rw [hebb_weights₁ _ h₁]
+
 
 -- If every predecessor of n ∉ Prop(A), then
 -- activ (hebb_star net A) _ n = activ net _ n.
@@ -1854,17 +1897,13 @@ theorem hebb_activ₂ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
   (∀ x, x ∈ preds net n → x ∉ propagate net A)
   → activ (hebb_star net A) prev_activ n = activ net prev_activ n := by
 --------------------------------------------------------------------
-  sorry
-
-
--- If there is a path within Prop(A) from B to n, then, since this
--- path is updated in hebb_star, n ∈ Prop(B).
---------------------------------------------------------------------
-theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
-  reachable net (propagate net A) (propagate net B)
-  ⊆ propagate (hebb_star net A) B := by
---------------------------------------------------------------------
-  sorry
+  intro h₁
+  simp only [activ]
+  rw [hebb_activation net A]
+  rw [hebb_preds net A]
+  conv =>
+    lhs; enter [1, 2, 1, 2, i, 1]
+    rw [hebb_weights₂ _ h₁]
 
 
 --------------------------------------------------------------------
@@ -1884,116 +1923,32 @@ theorem hebb_extensive (net : BFNN) (S : Set ℕ) :
   sorry
 
 
+-- If there is a path within Prop(A) from B to n, then, since this
+-- path is updated in hebb_star, n ∈ Prop(B).
+--------------------------------------------------------------------
+theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
+  reachable net (propagate net A) (propagate net B)
+  ⊆ propagate (hebb_star net A) B := by
+--------------------------------------------------------------------
+  intro (n : ℕ)
+  intro h₁
+  
+  -- We have a path from Prop(B) to n, going through Prop(A).
+  match h₁ with
+  | ⟨m, hm⟩ => 
+
+    -- By induction on the length of this path
+    induction hm.2
+    case trivial path_mm => exact hebb_extensive _ _ _ hm.1
+    case from_path v w path_mv edge_vw w_in_propA IH => 
+      -- This edge from v to w is key;
+      -- Got to go inside hebb_star to see what it's updating.
+      sorry
+
 
 /-══════════════════════════════════════════════════════════════════
   Reduction for Unstable Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
-
--- A helper lemma, stating that *in the updated net*,
--- propagation(B) = propagation(B ∪ Reach(Prop(A), B))
---------------------------------------------------------------------
-lemma hebb_lifted_reduction (net : BFNN) (A B : Set ℕ) :
-  propagate (hebb_star net A) 
-    (B ∪ reachable net (propagate net A) (propagate net B)) =
-  propagate (hebb_star net A) B := by 
---------------------------------------------------------------------
-  apply ext
-  intro (n : ℕ)
-  simp only [Membership.mem, Set.Mem, propagate]
-  
-  -- By induction on the layer of the net containing n
-  generalize hL : layer (hebb_star net A) n = L
-  induction L using Nat.case_strong_induction_on generalizing n
-
-  --------------------------------
-  -- Base Step
-  --------------------------------
-  case hz =>
-    -- First, do the base case simplifications
-    simp only [propagate_acc]
-    simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
-
-    -- Backwards direction is the easy part, so we do it first.
-    -- Forward direction relies on reach_layer_zero,
-    -- a fact about paths when we know n is at layer 0.
-    apply Iff.intro
-    case mpr => exact fun h₁ => Or.inl h₁
-    case mp => 
-      intro h₁
-
-      -- Either n ∈ B or n is reachable from B using only
-      -- paths within Prop(A).
-      cases h₁
-      case inl h₂ => exact h₂
-      case inr h₂ => 
-        have heq : layer net n = 0 := Eq.trans (symm (hebb_layers net A)) hL
-        exact prop_layer_zero _ _ _ heq (reach_layer_zero _ _ _ _ heq h₂)
-
-  --------------------------------
-  -- Inductive Step
-  --------------------------------
-  case hi L IH => 
-    apply Iff.intro
-    
-    ---------------------
-    -- Forward Direction
-    ---------------------
-    case mp => 
-      intro h₁
-
-      -- By cases; either n ∈ B ∪ reachable net (propagate net A) B, 
-      -- or not.
-      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
-      case pos => 
-        -- In this case, either n ∈ B or it is reachable from Prop(B)
-        -- via a path entirely within Prop(A).  In this second case,
-        -- this path has been updated in the hebb_star net, so of course
-        -- n ∈ Prop (hebb_star net A) B!
-        -- (i.e. apply lemma 'hebb_updated_path')
-        simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf] at h
-        rw [symm hL]
-        cases h
-        case inl h₂ => exact hebb_acc_is_extens _ _ _ _ _ (propagate_acc_is_extens _ _ h₂)
-        case inr h₂ => 
-          have h₃ : n ∈ propagate (hebb_star net A) B := 
-            hebb_updated_path _ _ _ h₂
-          simp only [propagate, Membership.mem, Set.Mem] at h₃
-          exact h₃
-
-      case neg => 
-        -- If n ∉ B ∪ reachable ..., then n ∉ B.
-        have n_not_in_B : n ∉ B :=
-          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
-        
-        -- Now for some simplifications and rewriting definitions
-        simp only [propagate, Membership.mem, Set.Mem]
-        simp only [propagate, Membership.mem, Set.Mem] at h₁
-        simp only [propagate] at h
-        rw [simp_propagate_acc _ n_not_in_B]
-        rw [simp_propagate_acc (hebb_star net A) h] at h₁
-
-        -- TODO: This is the stuff that should go in the activ_agree lemma!
-        simp
-        simp at h₁
-        convert h₁ using 5
-        rename_i i
-        generalize hm : List.get! (predecessors (hebb_star net A).toNet.graph n).data i = m
-        generalize hLm : layer (hebb_star net A) m = Lm
-
-        -- Apply the inductive hypothesis!
-        have h₄ : m ∈ preds (hebb_star net A) n := by
-          rw [symm hm]
-          simp [preds]
-          exact get!_mem (predecessors (hebb_star net A).toNet.graph n).data i
-        have h₅ : Lm ≤ L := by
-          rw [symm hLm]
-          apply Nat.lt_succ.mp
-          rw [symm hL]
-          exact preds_decreasing (hebb_star net A) m n h₄
-        exact (symm (IH Lm h₅ m hLm).to_eq).to_iff
-
-    case mpr => sorry
-
 
 -- These two are the big theorems.
 -- They explain what hebb_star learns in terms of what the net
@@ -2005,7 +1960,18 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
 
   propagate (hebb_star net A) B = propagate net B := by 
 --------------------------------------------------------------------
-  sorry
+  intro h_empty
+  apply ext
+  intro (n : ℕ)
+
+  -- Backwards direction is easy;
+  -- As for forward direction, TODO
+  apply Iff.intro
+  case mpr => exact fun h₁ => hebb_extensive _ _ _ h₁
+  case mp => 
+    intro h₁
+    sorry -- need to do induction!!!  (still easier than the big reduction)
+
 
 --------------------------------------------------------------------
 theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) : 
