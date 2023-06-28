@@ -1823,33 +1823,67 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
 --------------------------------------------------------------------
   sorry
   
+-- Every net N is a subnet of (hebb_star N)
+-- (i.e. hebb_star includes the previous propagations)
+-- (We had this property in The Logic of Hebbian Learning)
+--------------------------------------------------------------------
+theorem hebb_extensive (net : BFNN) (A : Set ℕ) : 
+  net ≼ (hebb_star net A) := by 
+--------------------------------------------------------------------
+  intro (B : Set ℕ)
+  intro (n : ℕ)
+  intro (h₁ : n ∈ propagate net B)
+  simp only [Membership.mem, Set.Mem, propagate]
+  simp only [Membership.mem, Set.Mem, propagate] at h₁
+  
+  -- By induction on the layer of the 
+  generalize hL : layer net n = L
+  induction L
+
+  --------------------------------
+  -- Base Step
+  --------------------------------
+  case zero => 
+    rw [hL] at h₁
+    simp only [propagate_acc]
+    simp only [propagate_acc] at h₁
+    exact h₁
+
+  --------------------------------
+  -- Inductive Step
+  --------------------------------
+  case succ k IH => 
+    -- By cases, to later simplify propagate_acc
+    by_cases n ∈ B
+    case pos => 
+      rw [← hL]
+      rw [← hebb_layers net A]
+      exact propagate_acc_is_extens _ _ h  
+    
+    case neg => 
+      -- Do simplifications and rewriting
+      rw [hL] at h₁
+      rw [simp_propagate_acc _ h]
+      rw [simp_propagate_acc _ h] at h₁
+
+      sorry -- need to argue here that 'activ' is *nondecreasing*
+            -- i.e. never decreases a weight.
+
+--------------------------------------------------------------------
+lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
+  propagate_acc net B n (layer net n) → 
+  propagate_acc (hebb_star net A) B n (layer net n) := by
+-------------------------------------------------------------------- 
+  intro h₁
+  have h₂ : n ∈ propagate (hebb_star net A) B := hebb_extensive _ _ _ h₁
+  simp only [Membership.mem, Set.Mem, propagate] at h₂
+  exact h₂
+
 
 
 /-══════════════════════════════════════════════════════════════════
   The more interesting/crucial properties
 ══════════════════════════════════════════════════════════════════-/
-
--- -- If n ∉ Prop(A), then any m⟶n in (hebb_star net) has
--- -- the same weight as in the original net.
--- --------------------------------------------------------------------
--- theorem hebb_weights₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
---   n ∉ propagate net A
---   → activ (hebb_star net A) prev_activ n = activ net prev_activ n := by
--- --------------------------------------------------------------------
---   sorry
-
-/-
-have h₂ : ∀ prev_activ, activ (hebb_star net A) prev_activ n = 
-  activ net prev_activ n := by
-
-  intro prev_activ
-  simp only [activ]
-  rw [hebb_activation net A]
-  rw [hebb_preds net A]
-  conv =>
-    lhs; enter [1, 2, 1, 2, i, 1]
-    rw [hebb_weights]
--/
 
 -- If n ∉ Prop(A), then the weights in the updated net are the same
 -- as the weights in the original net.
@@ -1906,23 +1940,6 @@ theorem hebb_activ₂ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
     rw [hebb_weights₂ _ h₁]
 
 
---------------------------------------------------------------------
-lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n L : ℕ) :
-  propagate_acc net B n L → 
-  propagate_acc (hebb_star net A) B n L := by
---------------------------------------------------------------------
-  sorry 
-
--- Every net N is a subnet of (hebb_star N)
--- (i.e. hebb_star includes the previous propagations)
--- (We had this property in The Logic of Hebbian Learning)
---------------------------------------------------------------------
-theorem hebb_extensive (net : BFNN) (S : Set ℕ) : 
-  net ≼ (hebb_star net S) := by 
---------------------------------------------------------------------
-  sorry
-
-
 -- If there is a path within Prop(A) from B to n, then, since this
 -- path is updated in hebb_star, n ∈ Prop(B).
 --------------------------------------------------------------------
@@ -1964,13 +1981,56 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
   apply ext
   intro (n : ℕ)
 
-  -- Backwards direction is easy;
-  -- As for forward direction, TODO
-  apply Iff.intro
-  case mpr => exact fun h₁ => hebb_extensive _ _ _ h₁
-  case mp => 
-    intro h₁
-    sorry -- need to do induction!!!  (still easier than the big reduction)
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+
+  --------------------------------
+  -- Base Step
+  --------------------------------
+  -- Easy; after simplifying, show that B = B.
+  case hz => 
+    simp only [Membership.mem, Set.Mem, propagate]
+    rw [hebb_layers net A]
+    rw [hL]
+    simp only [propagate_acc]
+
+  --------------------------------
+  -- Inductive Step
+  --------------------------------
+  case hi L IH => 
+    -- Backwards direction is easy;
+    -- As for forward direction, TODO
+    apply Iff.intro
+    case mpr => exact fun h₁ => hebb_extensive _ _ _ h₁
+    case mp =>
+      -- Split by whether n ∈ B, in order to simplify propagate_acc
+      by_cases n ∈ B
+      case pos => exact fun h₁ => propagate_is_extens _ _ h
+      case neg => 
+        intro h₁
+
+        -- From here, we split *again*, depending on whether n ∈ Prop(A).
+        by_cases n ∈ propagate net A
+
+        ---------------------
+        -- Case 1: n ∈ Prop(A)
+        ---------------------
+        case pos => sorry
+
+        ---------------------
+        -- Case 1: n ∉ Prop(A)
+        ---------------------
+        case neg => sorry
+
+
+  -- -- Backwards direction is easy;
+  -- -- As for forward direction, TODO
+  -- apply Iff.intro
+  -- case mpr => exact fun h₁ => hebb_extensive _ _ _ h₁
+  -- case mp => 
+  --   intro h₁
+  --   sorry -- need to do induction!!!  (still easier than the big reduction)
 
 
 --------------------------------------------------------------------
