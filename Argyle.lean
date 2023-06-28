@@ -1609,6 +1609,12 @@ def weight_update (net : BFNN) (S : Set ℕ)
   let activ₂ := if x₂ ∈ propagate net S then 1.0 else 0.0
   edge.weight + (net.rate * activ₁ * activ₂)
 
+noncomputable
+def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Float :=
+  { vertices := Array.map (fun v => 
+    { v with adjacencyList := Array.map (fun edge => 
+      { edge with weight := weight_update net S v.payload edge}) v.adjacencyList}) g.vertices }
+
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
 -- of all the edges x₁ ⟶ x₂ involved in that propagation
@@ -1616,24 +1622,22 @@ def weight_update (net : BFNN) (S : Set ℕ)
 noncomputable
 def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
 { net with
-  graph := { vertices := Array.map (fun v => 
-    { v with adjacencyList := Array.map (fun edge => 
-      { edge with weight := weight_update net S v.payload edge}) v.adjacencyList}) net.graph.vertices }
-  
+  graph := graph_update net net.graph S
+
   -- We have to ensure that the update doesn't create any cycles
   -- (In this case, we're only changing the weights.)
   acyclic := sorry
 }
 
 
--- Takes a neural network update function 'f' (e.g. 'hebb')
+-- Takes a graph update function 'f' (e.g. graph_update for Hebb)
 -- and iterates it 'no_times' times.
 -- netᵢ and Sᵢ are the initial inputs.
-def iterate (f : BFNN -> Set ℕ -> BFNN) (no_times : ℕ) 
-  (netᵢ : BFNN) (Sᵢ : Set ℕ) : BFNN :=
+def iterate (f : Graph ℕ Float → Set ℕ → Graph ℕ Float) 
+  (no_times : ℕ) (gᵢ : Graph ℕ Float) (Sᵢ : Set ℕ) : Graph ℕ Float :=
   match no_times with
-  | Nat.zero => netᵢ
-  | Nat.succ k => f (iterate f k netᵢ Sᵢ) Sᵢ
+  | Nat.zero => gᵢ
+  | Nat.succ k => f (iterate f k gᵢ Sᵢ) Sᵢ
 
 
 -- We score neurons by the total sum of *negative* weights coming 
@@ -1672,11 +1676,19 @@ def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
   -- sorry
 
 -- Iterated hebbian update, up to a certain fixed point.
--- We implement this as 'hebb' iterated 'hebb_unstable_point'
+-- We implement this as a new net, whose graph is
+-- 'graph_update' iterated 'hebb_unstable_point'
 -- number of times.
+-- FUTURE: Consider re-doing this using limits of graphs/categories
 noncomputable
 def hebb_star (net : BFNN) (S : Set ℕ) : BFNN := 
-  iterate hebb (hebb_unstable_point net S) net S
+{ net with
+  graph := iterate (graph_update net) (hebb_unstable_point net S) net.graph S
+  
+  -- We have to ensure that the update doesn't create any cycles
+  -- (In this case, we're only changing the weights.)
+  acyclic := sorry
+}
 
 
 
@@ -1801,9 +1813,9 @@ theorem hebb_preds (net : BFNN) (S : Set ℕ) :
 -- on which layer of the net.
 --------------------------------------------------------------------
 theorem hebb_layers (net : BFNN) (S : Set ℕ) : 
-  layer (hebb_star net S) n = layer net n :=
+  layer (hebb_star net S) n = layer net n := by
 --------------------------------------------------------------------
-  rfl
+  exact rfl
 
 
 -- Hebbian update hebb_star does not affect the activation function.
@@ -1811,7 +1823,7 @@ theorem hebb_layers (net : BFNN) (S : Set ℕ) :
 theorem hebb_activation (net : BFNN) (S : Set ℕ) : 
   (hebb_star net S).activation = net.activation := by 
 --------------------------------------------------------------------
-  sorry
+  exact rfl
 
 
 -- Hebbian update hebb_star does not affect graph reachability
@@ -1822,6 +1834,7 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
     reachable net B := by 
 --------------------------------------------------------------------
   sorry
+  
   
 -- Every net N is a subnet of (hebb_star N)
 -- (i.e. hebb_star includes the previous propagations)
@@ -1868,6 +1881,7 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
 
       sorry -- need to argue here that 'activ' is *nondecreasing*
             -- i.e. never decreases a weight.
+
 
 --------------------------------------------------------------------
 lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
