@@ -1687,12 +1687,18 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
 theorem hebb_once_preds (net : BFNN) (S : Set ℕ) : 
   preds (hebb net S) n = preds net n := by
 --------------------------------------------------------------------
-  have h₁ : ∀ m, m ∈ preds (hebb_star net S) n ↔ m ∈ preds net n := by
+  have h₁ : ∀ m, m ∈ preds (hebb net S) n ↔ m ∈ preds net n := by
     intro m
     rw [edge_from_preds net m n]
-    rw [edge_from_preds (hebb_star net S) m n]
-    sorry -- now we get to simp hebb_star and reason about the edges
-  
+    rw [edge_from_preds (hebb net S) m n]
+    
+    simp only [hebb, graph_update]
+    -- I might have to change the definition of graph_update
+    -- to encourage 'rfl' to match up the right things
+    -- (only the *weights* are changing; everything else is
+    --  staying the same!)
+    sorry
+    
   sorry -- now connect it to the original claim
   
 -- A single round of Hebbian update hebb does not affect which 
