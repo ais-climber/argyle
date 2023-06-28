@@ -4,6 +4,7 @@ import Mathlib.Mathport.Syntax
 import Std.Tactic.ShowTerm
 import Lean.Meta.Tactic.Simp.Main
 import Mathlib.Tactic.Basic
+import Mathlib.Data.List.Sigma
 
 import Lean.Parser.Tactic
 import Graph.Graph
@@ -35,116 +36,6 @@ inductive my_lte : ℕ → ℕ → Prop where
 
 
 
--------------------------------------------------
--- Extract Lets Tactic
--------------------------------------------------
-/-
-Copyright (c) 2023 Kyle Miller. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Kyle Miller
--/
-
-/-!
-# The `extract_lets at` tactic
-This module defines a tactic `extract_lets ... at h` that can be used to (in essence) do `cases`
-on a `let` expression.
--/
-
-
--- open Lean Elab Parser Meta Tactic
-
--- /-- Given a local hypothesis whose type is a `let` expression, then lift the `let` bindings to be
--- a new local definition. -/
--- def Lean.MVarId.extractLetsAt (mvarId : MVarId) (fvarId : FVarId) (names : Array Name) :
---     MetaM (Array FVarId × MVarId) := do
---   mvarId.checkNotAssigned `extractLetAt
---   mvarId.withReverted #[fvarId] fun mvarId fvarIds => mvarId.withContext do
---     let mut mvarId := mvarId
---     let mut fvarIds' := #[]
---     for name in names do
---       let ty ← Lean.instantiateMVars (← mvarId.getType)
---       mvarId ← match ty with
---         | .letE n t v b ndep => process mvarId t (.letE n · v b ndep)
---         | .forallE n t v b   => process mvarId t (.forallE n · v b)
---         | _ => throwTacticEx `extractLetAt mvarId "unexpected auxiliary target"
---       let (fvarId', mvarId') ← mvarId.intro name
---       fvarIds' := fvarIds'.push fvarId'
---       mvarId := mvarId'
---     return (fvarIds', fvarIds.map .some, mvarId)
--- where
---   /-- Check that `t` is a `let` and then do what's necessary to lift it over the binding
---   described by `mk`. -/
---   process (mvarId : MVarId) (t : Expr) (mk : Expr → Expr) : MetaM MVarId := do
---     let .letE n' t' v' b' _ := t.cleanupAnnotations
---       | throwTacticEx `extractLetAt mvarId "insufficient number of `let` expressions"
---     -- Lift the let
---     withLetDecl n' t' v' fun fvar => do
---       let b' := b'.instantiate1 fvar
---       let ty' ← mkLetFVars #[fvar] <| mk b'
---       mvarId.change ty'
-
--- /-- Counts the immediate depth of a nested `let` expression. -/
--- def Lean.Expr.letDepth : Expr → Nat
---   | .letE _ _ _ b _ => b.letDepth + 1
---   | _ => 0
-
--- /-- A more limited version of `Lean.MVarId.introN` that ensures the goal is a
--- nested `let` expression. -/
--- def Lean.MVarId.extractLets (mvarId : MVarId) (names : Array Name) :
---     MetaM (Array FVarId × MVarId) :=
---   mvarId.withContext do
---     let ty := (← Lean.instantiateMVars (← mvarId.getType)).cleanupAnnotations
---     if ty.letDepth < names.size then
---       throwTacticEx `extractLet mvarId "insufficient number of `let` expressions"
---     mvarId.introN names.size names.toList
-
--- namespace Mathlib
-
--- /-- The `extract_lets at h` tactic takes a local hypothesis of the form `h : let x := v; b`
--- and introduces a new local definition `x := v` while changing `h` to be `h : b`.  It can be thought
--- of as being a `cases` tactic for `let` expressions. It can also be thought of as being like
--- `intros at h` for `let` expressions.
--- For example, if `h : let x := 1; x = x`, then `extract_lets x at h` introduces `x : Nat := 1` and
--- changes `h` to `h : x = x`.
--- Just like `intros`, the `extract_lets` tactic either takes a list of names, in which case
--- that specifies the number of `let` bindings that must be extracted, or it takes no names, in which
--- case all the `let` bindings are extracted.
--- The tactic `extract_let at ⊢` is a weaker form of `intros` that only introduces obvious `let`s. -/
--- syntax (name := extractLets) "extract_lets " (colGt (ident <|> hole))* (ppSpace location) : tactic
-
--- @[tactic Mathlib.extractLets] def evalExtractLet : Tactic := fun stx => do
---   match stx with
---   | `(tactic| extract_lets $loc:location)         => doExtract none loc
---   | `(tactic| extract_lets $hs* $loc:location)    => doExtract hs loc
---   | _ => throwUnsupportedSyntax
--- where
---   setupNames (ids? : Option (TSyntaxArray [`ident, `Lean.Parser.Term.hole])) (ty : Expr) :
---       MetaM (Array Name) := do
---     if let some ids := ids? then
---       return ids.map getNameOfIdent'
---     else
---       return Array.mkArray (← instantiateMVars ty).cleanupAnnotations.letDepth `_
---   doExtract (ids? : Option (TSyntaxArray [`ident, `Lean.Parser.Term.hole]))
---       (loc : TSyntax `Lean.Parser.Tactic.location) :
---       TacticM Unit := do
---     let process (f : MVarId → Array Name → MetaM (Array FVarId × MVarId))
---         (ty : MVarId → MetaM Expr) : TacticM Unit := do
---       let fvarIds ← liftMetaTacticAux fun mvarId => do
---         let ids ← setupNames ids? (← ty mvarId)
---         let (fvarIds, mvarId) ← f mvarId ids
---         return (fvarIds, [mvarId])
---       if let some ids := ids? then
---         withMainContext do
---           for stx in ids, fvarId in fvarIds do
---             Term.addLocalVarInfo stx (.fvar fvarId)
---     withLocation (expandOptLocation (mkOptionalNode loc))
---       (atLocal := fun h ↦ do
---         process (fun mvarId ids => mvarId.extractLetsAt h ids) (fun _ => h.getType))
---       (atTarget := do
---         process (fun mvarId ids => mvarId.extractLets ids) (fun mvarId => mvarId.getType))
---       (failed := fun _ ↦ throwError "extract_let tactic failed")
-
--- end Mathlib
 
 
 -------------------------------------------------
@@ -173,30 +64,6 @@ def prod_comprehens (xs : List α) (ys : List β) : List (α × β) :=
 
 #eval [(x, y) | for x in [1, 2], for y in [3, 4]]
 
--------------------------------------------------
--- intro_lets tactic
--- https://leanprover.zulipchat.com/#narrow/stream/217875-Is-there-code-for-X.3F/topic/Pulling.20.60let.60s.20to.20the.20outside.20of.20a.20statement/near/315581119
--- Courtesy of Eric Wieser
--- 
--------------------------------------------------
--- This is written in Lean 3!
--- I need this but for Lean 4...
-
--- meta def mk_local_lets : expr → tactic (list expr × expr)
--- | (expr.elet n d v b) := do
---   p ← tactic.definev n d v,
---   (ps, r) ← mk_local_lets (expr.instantiate_var b p),
---   return ((p :: ps), r)
--- | (expr.app f x) := do
---     (fargs, f) ← mk_local_lets f,
---     (xargs, x) ← mk_local_lets x,
---     pure (fargs ++ xargs, f.app x)
--- | e := return ([], e)
-
--- meta def tactic.interactive.lift_lets : tactic unit :=
--- do
---   (lets, t) ← tactic.target >>= mk_local_lets,
---   tactic.change t
 
 -------------------------------------------------
 -- Graphs
@@ -284,6 +151,16 @@ instance decLte : Decidable (my_lte m n) :=
   -- deriving DecidableEq
   -- TODO: Make graph computable so that we can execute this code:
   -- #eval hasPath graphA 1 3
+
+/-
+def hasEdge (g : Graph α β) (u v : ℕ) : Bool :=
+  (g.successors u).contains v
+-/
+
+theorem edge_from_predecessor (g : Graph α β) (u v : ℕ) :
+  u ∈ (g.predecessors u) ↔ g.hasEdge u v := by
+  sorry
+
 
 theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
@@ -602,6 +479,12 @@ axiom get!_mem {α : Type} [Inhabited α] :
 @[simp]
 def preds (net : BFNN) (n : ℕ): List ℕ :=
   (predecessors net.toNet.graph n).toList
+
+theorem edge_from_preds (net : BFNN) (m n : ℕ) :
+  m ∈ preds net n ↔ net.graph.hasEdge m n :=
+  sorry
+
+-- edge_from_predecessor
 
 -- inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
 --   | trivial {u : ℕ} :
@@ -1794,51 +1677,107 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
 --------------------------------------------------------------------
   sorry
 
-
-
 /-══════════════════════════════════════════════════════════════════
-  Properties of Naive Hebbian Update
+  Properties of Single-Iteration Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
 -- Hebbian update hebb_star does not affect the predecessors
 -- of any node.
 --------------------------------------------------------------------
-theorem hebb_preds (net : BFNN) (S : Set ℕ) : 
-  preds (hebb_star net S) n = preds net n := by
+theorem hebb_once_preds (net : BFNN) (S : Set ℕ) : 
+  preds (hebb net S) n = preds net n := by
+--------------------------------------------------------------------
+  have h₁ : ∀ m, m ∈ preds (hebb_star net S) n ↔ m ∈ preds net n := by
+    intro m
+    rw [edge_from_preds net m n]
+    rw [edge_from_preds (hebb_star net S) m n]
+    sorry -- now we get to simp hebb_star and reason about the edges
+  
+  sorry -- now connect it to the original claim
+  
+-- A single round of Hebbian update hebb does not affect which 
+-- neurons are on which layer of the net.
+--------------------------------------------------------------------
+theorem hebb_once_layers (net : BFNN) (S : Set ℕ) : 
+  layer (hebb net S) n = layer net n := by
+--------------------------------------------------------------------
+  exact rfl
+
+-- A single round of Hebbian update hebb does not affect the 
+-- activation function.
+--------------------------------------------------------------------
+theorem hebb_once_activation (net : BFNN) (S : Set ℕ) : 
+  (hebb net S).activation = net.activation := by 
+--------------------------------------------------------------------
+  exact rfl
+
+-- A single round of Hebbian update hebb does not affect graph 
+-- reachability (It only affects the edge weights)
+--------------------------------------------------------------------
+theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) : 
+  reachable (hebb net A) B = reachable net B := by 
 --------------------------------------------------------------------
   sorry
 
 
+-- This lemma allows us to "lift" equational properties of hebb 
+-- to hebb_star.  (This holds *because* hebb_star is the fixed point
+-- of hebb.)
+--------------------------------------------------------------------
+theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) : 
+  (P (hebb net S) = P net)
+  → (P (hebb_star net S) = P net) := by 
+--------------------------------------------------------------------
+  sorry
+
+
+/-══════════════════════════════════════════════════════════════════
+  Properties of "Iterated" Naive Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
+-- Hebbian update hebb_star does not affect the predecessors
+-- of any node.
+-- [LIFTED from hebb_once_preds]
+--------------------------------------------------------------------
+theorem hebb_preds (net : BFNN) (S : Set ℕ) : 
+  preds (hebb_star net S) n = preds net n := by
+--------------------------------------------------------------------
+  exact hebb_lift _ _ (fun x => preds x n) (hebb_once_preds _ _)
+  
 -- Hebbian update hebb_star does not affect which neurons are
 -- on which layer of the net.
+-- [LIFTED from hebb_once_layers]
 --------------------------------------------------------------------
 theorem hebb_layers (net : BFNN) (S : Set ℕ) : 
   layer (hebb_star net S) n = layer net n := by
 --------------------------------------------------------------------
-  exact rfl
+  exact hebb_lift _ _ (fun x => layer x n) (hebb_once_layers _ _)
 
 
 -- Hebbian update hebb_star does not affect the activation function.
+-- [LIFTED from hebb_once_activation]
 --------------------------------------------------------------------
 theorem hebb_activation (net : BFNN) (S : Set ℕ) : 
   (hebb_star net S).activation = net.activation := by 
 --------------------------------------------------------------------
-  exact rfl
+  exact hebb_lift _ _ (fun x => x.activation) (hebb_once_activation _ _)
 
 
 -- Hebbian update hebb_star does not affect graph reachability
 -- (It only affects the edge weights)
+-- -- [LIFTED from hebb_once_reach]
 --------------------------------------------------------------------
 theorem hebb_reach (net : BFNN) (A B : Set ℕ) : 
   reachable (hebb_star net A) B = 
     reachable net B := by 
 --------------------------------------------------------------------
-  sorry
+  exact hebb_lift _ _ (fun x => reachable x B) (hebb_once_reach _ _ _)
   
   
 -- Every net N is a subnet of (hebb_star N)
 -- (i.e. hebb_star includes the previous propagations)
 -- (We had this property in The Logic of Hebbian Learning)
+-- TODO: Can we lift this from single-iteration hebb???
 --------------------------------------------------------------------
 theorem hebb_extensive (net : BFNN) (A : Set ℕ) : 
   net ≼ (hebb_star net A) := by 
@@ -1901,6 +1840,7 @@ lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
 
 -- If n ∉ Prop(A), then the weights in the updated net are the same
 -- as the weights in the original net.
+-- TODO: Can we lift this from single-iteration hebb?
 --------------------------------------------------------------------
 theorem hebb_weights₁ (net : BFNN) : 
   n ∉ propagate net A
@@ -1913,6 +1853,7 @@ theorem hebb_weights₁ (net : BFNN) :
 
 -- If all predecessors of n ∉ Prop(A), then the weights in the 
 -- updated net are the same as the weights in the original net.
+-- TODO: Can we lift this from single-iteration hebb?
 --------------------------------------------------------------------
 theorem hebb_weights₂ (net : BFNN) : 
   (∀ x, x ∈ preds net n → x ∉ propagate net A)
