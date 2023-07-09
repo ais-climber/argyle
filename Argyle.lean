@@ -113,13 +113,15 @@ def graphB : Graph String Float :=
 -- properties
 -------------------------------------------------
 namespace Graph
-variable {α : Type} [Inhabited α] {β : Type}
 
-def hasNode (g : Graph α β) (v : ℕ) : Bool :=
+def hasNode (g : Graph ℕ Float) (v : ℕ) : Bool :=
   g.getAllVertexIDs.contains v
 
-def hasEdge (g : Graph α β) (u v : ℕ) : Bool :=
-  (g.successors u).contains v
+-- Using 'predecessors' is slower than 'successors',
+-- but we will tend to look backwards from a node rather
+-- than forwards.
+def hasEdge (g : Graph ℕ Float) (u v : ℕ) : Bool :=
+  @Array.contains ℕ instBEq (g.predecessors v) u
 
 #eval hasEdge graphA 1 2
 #eval hasEdge graphA 1 3
@@ -138,7 +140,7 @@ def getEdgeWeight (g : Graph ℕ Float) (m n : ℕ) : Float :=
 #eval getEdgeWeight graphA 1 3 -- 0.9
 #eval getEdgeWeight graphA 4 2 -- 0.0
 
-inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
+inductive hasPath (g : Graph ℕ Float) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
       hasPath g u u
   | from_path {u v w : ℕ} : 
@@ -177,12 +179,14 @@ instance decLte : Decidable (my_lte m n) :=
       | from_path h e => cases e
 -/
 
-theorem edge_from_predecessor (g : Graph α β) (u v : ℕ) :
-  u ∈ (g.predecessors u) ↔ g.hasEdge u v := by
-  sorry
+-- Just follows from the definition of hasEdge
+theorem edge_from_predecessor (g : Graph ℕ Float) (u v : ℕ) :
+  u ∈ (g.predecessors v) ↔ g.hasEdge u v := by
+  
+  rfl
 
 
-theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
+theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ Float) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
 
   intro (h₁ : hasPath g u v)
@@ -194,19 +198,19 @@ theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
     exact hasPath.from_path path_ux edge_xy
 
 
-def is_refl (g : Graph α β) : Prop :=
+def is_refl (g : Graph ℕ Float) : Prop :=
   ∀ (u : ℕ),
     g.hasNode u → g.hasEdge u u
 
-def is_symm (g : Graph α β) : Prop :=
+def is_symm (g : Graph ℕ Float) : Prop :=
   ∀ (u v : ℕ),
     g.hasEdge u v → g.hasEdge v u
 
-def is_trans (g : Graph α β) : Prop :=
+def is_trans (g : Graph ℕ Float) : Prop :=
   ∀ (u v w : ℕ),
     g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
 
-def is_acyclic (g : Graph ℕ β) : Prop :=
+def is_acyclic (g : Graph ℕ Float) : Prop :=
   ∀ (u v : ℕ),
     g.hasPath u v → g.hasPath v u → u = v
 
@@ -289,12 +293,15 @@ end TopologicalSort
 -- (We should just be able to call 'Topological Sort'
 -- on the graph and check if that is successful.)
 -------------------------------------------------
-theorem graphA_is_acyclic : graphA.is_acyclic := by
-  intro (u : ℕ) (v : ℕ)
-        (path_uv : hasPath graphA u v)
-        (path_vu : hasPath graphA v u)
+-- Put in examples file! (and figure it out later, we don't need
+-- it right now)
+-- 
+-- theorem graphA_is_acyclic : graphA.is_acyclic := by
+--   intro (u : ℕ) (v : ℕ)
+--         (path_uv : hasPath graphA u v)
+--         (path_vu : hasPath graphA v u)
 
-  sorry
+--   sorry
 
 -------------------------------------------------
 -- Activation functions
@@ -401,18 +408,20 @@ structure BFNN extends Net where
   -- There is *some* x for which the activation is 1.0
   activ_pos : ∃ (x : Float), activation x = 1.0
 
-def myBFNN : BFNN :=
-  {
-    graph := graphA
-    activation := binary_step
-    rate := 1.0
+-- Put in examples file!  (We don't need to figure it out
+-- right now!)
+-- def myBFNN : BFNN :=
+--   {
+--     graph := graphA
+--     activation := binary_step
+--     rate := 1.0
 
-    binary := binary_step_is_binary
-    -- sort := (topSortUnsafe graphA).toList.reverse
-    acyclic := graphA_is_acyclic
-    activ_nondecr := binary_step_nondecr
-    activ_pos := sorry
-  }
+--     binary := binary_step_is_binary
+--     -- sort := (topSortUnsafe graphA).toList.reverse
+--     acyclic := graphA_is_acyclic
+--     activ_nondecr := binary_step_nondecr
+--     activ_pos := sorry
+--   }
 
 -- inductive Layer (net : BFNN) : List ℕ → Prop where
 --   | initial_layer : Layer net N₀
@@ -503,6 +512,20 @@ axiom get!_mem {α : Type} [Inhabited α] :
 def preds (net : BFNN) (n : ℕ): List ℕ :=
   (predecessors net.toNet.graph n).toList
 
+
+-- x is a member of the *list* arr.data
+-- iff the *array* arr contains x
+-- (the 'instBEq' here is just to get equality right later)
+-- What do I need to prove this in Lean?
+-- TODO: Ask in the Zulip!
+--------------------------------------------------------------------
+lemma mem_data_iff_contains (arr : Array ℕ) (x : ℕ) :
+  List.Mem x arr.data ↔ @Array.contains ℕ instBEq arr x := by
+--------------------------------------------------------------------
+  sorry
+
+-- @Array.contains ℕ instBEq (g.predecessors v) u
+
 -- Use theorem edge_from_predecessor!
 -- The sticky part here is about converting between Lists and Arrays.
 -- (kind of annoying!  But I should learn how to do it.)
@@ -510,29 +533,27 @@ def preds (net : BFNN) (n : ℕ): List ℕ :=
 theorem edge_from_preds (net : BFNN) (m n : ℕ) :
   m ∈ preds net n ↔ net.graph.hasEdge m n := by
 --------------------------------------------------------------------
-  simp only [preds]
-  -- simp only [Array.toList_eq]
-  -- simp only [Array.data]
-
-  apply Iff.intro
-  case mp => 
-    intro h₁
-    apply (edge_from_predecessor _ _ _).mp
-
-    sorry
-  case mpr => 
-    intro h₁
-    -- apply (edge_from_predecessor _ _ _).mpr
-    -- apply edge_from_predecessor 
-    sorry
-  -- -- rw [edge_from_predecessor]
+  simp only [preds, Array.toList_eq, Membership.mem]
+  rw [mem_data_iff_contains _ _]
+  exact 
+    ⟨fun h₁ => (edge_from_predecessor _ _ _).mp h₁, 
+    fun h₁ => (edge_from_predecessor _ _ _).mpr h₁⟩ 
 
 
--- (Weightless) graph distance from node m to n.  Just count
+-- (Weightless) *maximal* graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
+-- (just here in order to define layer -- but if there's
+--  a better way, I should use it!)
 def distance (graph : Graph ℕ Float) (m n : ℕ) : ℕ :=
   sorry
 
+-- The layer of n is the *maximal* distance from a node in layer 0
+-- to n.  I might want to make this an inductive type!
+-- (e.g. anything with no predecessors is in layer 0;
+--  anything with distance 1 away from layer L is in layer L+1)
+-- 
+-- Be prepared to refactor my code if I do this!  Everything
+-- depends on the layer of the net!!!
 def layer (net : BFNN) (n : ℕ) : ℕ :=
   sorry
 
@@ -543,18 +564,23 @@ def layer (net : BFNN) (n : ℕ) : ℕ :=
 axiom connected : ∀ (net : BFNN) (m n : ℕ), 
   layer net m < layer net n → net.graph.hasEdge m n
 
+-- If m is a predecessor of n, then it must be in a previous layer.
+lemma preds_decreasing (net : BFNN) (m n : ℕ) :
+  m ∈ preds net n 
+  → layer net m < layer net n := by
+  sorry
+
+/-
+OLD CODE; was only used to prove Minimal Cause property for Reach
+(no longer used with Conditional Reach)
 -- If m is a predecessor of n, then there is a path
 -- from m to n.
 lemma preds_path (net : BFNN) :
   m ∈ preds net n
   → hasPath net.graph m n := by
   sorry
+-/
 
--- If m is a predecessor of n, then it must be in a previous layer.
-lemma preds_decreasing (net : BFNN) (m n : ℕ) :
-  m ∈ preds net n 
-  → layer net m < layer net n := by
-  sorry
 
 noncomputable
 def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
@@ -1062,14 +1088,14 @@ theorem propagate_is_cumulative :
 
 -- A focused path is a path where every node is contained
 -- within the set S.
-inductive focusedPath (g : Graph ℕ β) (S : Set ℕ) : ℕ → ℕ → Prop where
+inductive focusedPath (g : Graph ℕ Float) (S : Set ℕ) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
       u ∈ S → focusedPath g S u u
   | from_path {u v w : ℕ} : 
       focusedPath g S u v → hasEdge g v w → w ∈ S → focusedPath g S u w
 
 -- focusedPath is transitive
-theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ β) (A : Set ℕ) :
+theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ Float) (A : Set ℕ) :
   focusedPath g A u v → focusedPath g A v w → focusedPath g A u w := by
 
   intro (h₁ : focusedPath g A u v)
