@@ -134,9 +134,9 @@ def getEdgeWeight (g : Graph ℕ Float) (m n : ℕ) : Float :=
   | some edge => edge.weight
   | none => 0.0
 
-#eval getEdgeWeight graphA 1 2
-#eval getEdgeWeight graphA 1 3
-#eval getEdgeWeight graphA 4 2
+#eval getEdgeWeight graphA 1 2 -- 0.8
+#eval getEdgeWeight graphA 1 3 -- 0.9
+#eval getEdgeWeight graphA 4 2 -- 0.0
 
 inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
@@ -795,7 +795,14 @@ lemma prop_layer_zero (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
   → n ∈ propagate net S
   → n ∈ S := by
 --------------------------------------------------------------------
-  sorry
+  intro (S : Set ℕ) (n : ℕ)
+        (hL : layer net n = 0)
+        (h₁ : n ∈ propagate net S)
+
+  simp only [propagate, Membership.mem, Set.Mem] at h₁
+  rw [hL] at h₁
+  simp only [propagate_acc] at h₁
+  exact h₁
 
 --------------------------------------------------------------------
 theorem propagate_is_extens : 
@@ -816,7 +823,7 @@ theorem propagate_is_extens :
     exact h₁
   
   -- Inductive Step
-  case succ k IH => 
+  case succ k _ => 
     simp only [propagate_acc]
     exact Or.inl h₁
 
@@ -1171,8 +1178,24 @@ theorem propagate_is_cumulative :
 /-══════════════════════════════════════════════════════════════════
   Conditional Graph Reachability
 ══════════════════════════════════════════════════════════════════-/
-
-
+-- reachable(A, B) is the set of all nodes reachable from B
+-- using a path where all nodes are inside A (i.e. there is a 
+-- focusedPath from B to n).
+-- 
+-- This is *precisely* what Van Benthem refers to as "conditional
+-- common knowledge" (although here we don't need the word "common"
+-- because we don't have group dynamics.)  
+-- Quote:
+-- CG(A, B) "is true in all worlds reachable via some finite path
+-- of accessibilities running entirely through worlds satisfying A"
+-- [Van Benthem, Belief Revision and Dynamic Logic, page 6]
+-- In this paper, he also talks about "pre-encoding" future
+-- information in order to get a reduction, which is exactly
+-- what we're doing here!
+-- 
+-- I don't know what the complete axioms are for this conditional
+-- knowledge.  But this isn't the main focus here.  I'll just
+-- prove a few sound things to give an idea about what it's like.
 
 -- A focused path is a path where every node is contained
 -- within the set S.
@@ -1182,14 +1205,24 @@ inductive focusedPath (g : Graph ℕ β) (S : Set ℕ) : ℕ → ℕ → Prop wh
   | from_path {u v w : ℕ} : 
       focusedPath g S u v → hasEdge g v w → w ∈ S → focusedPath g S u w
 
+-- focusedPath is transitive
+theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ β) (A : Set ℕ) :
+  focusedPath g A u v → focusedPath g A v w → focusedPath g A u w := by
 
--- Updated version!
+  intro (h₁ : focusedPath g A u v)
+  intro (h₂ : focusedPath g A v w)
+
+  induction h₂
+  case trivial => exact h₁
+  case from_path x y _ edge_xy hy path_ux => 
+    exact focusedPath.from_path path_ux edge_xy hy
+
+
 -- This is the set of all nodes reachable from B using
 -- paths where *every* node in the path is within A
 -- (including the initial and final nodes)
 def reachable (net : BFNN) (A B : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
-    -- This is the actual definition, I got it wrong before
     ∃ (m : ℕ), m ∈ B ∧ focusedPath net.graph A m n
 
 -- Argument: If there is a path from B to n, but n is in
@@ -1206,6 +1239,60 @@ lemma reach_layer_zero (net : BFNN) : ∀ (A B : Set ℕ) (n : ℕ),
 
 
 --------------------------------------------------------------------
+theorem reach_subset (net : BFNN) : ∀ (A B : Set ℕ),
+  reachable net A B ⊆ A := by
+--------------------------------------------------------------------
+  intro (A : Set ℕ)
+        (B : Set ℕ)
+        (n : ℕ) (h₁ : n ∈ reachable net A B)
+  
+  simp only [Membership.mem, Set.Mem] at h₁
+  match h₁ with
+  | ⟨m, hm⟩ => 
+    induction hm.2
+    case trivial hbase => exact hbase
+    case from_path _ y _ _ hy _ => exact hy 
+
+
+-- This is like propag_is_extens, except we also have to ensure
+-- that n ∈ A.
+--------------------------------------------------------------------
+theorem reach_is_extens (net : BFNN) : ∀ (A B : Set ℕ),
+  (A ∩ B) ⊆ reachable net A B := by
+--------------------------------------------------------------------
+  intro (A : Set ℕ)
+        (B : Set ℕ)
+        (n : ℕ) (h₁ : n ∈ A ∩ B)
+
+  have (h₂ : focusedPath net.toNet.graph A n n) := 
+    focusedPath.trivial h₁.1
+  exact ⟨n, ⟨h₁.2, h₂⟩⟩
+
+
+--------------------------------------------------------------------
+theorem reach_is_idempotent (net : BFNN) : ∀ (A B : Set ℕ),
+  reachable net A B = reachable net A (reachable net A B) := by
+--------------------------------------------------------------------
+  intro (A : Set ℕ)
+        (B : Set ℕ)
+  
+  exact Set.ext (fun (n : ℕ) =>
+    -- ⊆ direction
+    ⟨(fun (h₁ : n ∈ reachable net A B) => 
+      match h₁ with
+      | ⟨m, h₂⟩ =>
+        ⟨m, ⟨sorry, h₂.2⟩⟩),
+
+    -- ⊇ direction
+    (fun (h₁ : n ∈ reachable net A (reachable net A B)) =>
+      match h₁ with
+      | ⟨x, h₂⟩ => 
+        match h₂.1 with
+        | ⟨m, h₃⟩ =>
+          ⟨m, ⟨h₃.1, focusedPath_trans _ A h₃.2 h₂.2⟩⟩)⟩)
+
+
+--------------------------------------------------------------------
 theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
   A ⊆ B → reachable net S A ⊆ reachable net S B := by
 --------------------------------------------------------------------
@@ -1217,34 +1304,6 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
   
   exact match h₂ with
     | ⟨m, hm⟩ => ⟨m, ⟨h₁ hm.1, hm.2⟩⟩
-
--- --------------------------------------------------------------------
--- theorem reach_within (net : BFNN) : ∀ (A B : Set ℕ),
---   reachable net A B ⊆ A := by
--- --------------------------------------------------------------------
---   sorry
-
--- TODO: Prove stuff about reachable.
--- It looks like
--- reachable A B ⊆ A,
--- but I'm not sure about the complete rules surrounding it.
--- 
--- NOTE:
--- Van Benthem describes "conditional common knowledge" as
--- CG(A, B) "is true in all worlds reachable via some finite path
--- of accessibilities running entirely through worlds satisfying A"
--- [Van Benthem, Belief Revision and Dynamic Logic, page 6]
--- 
--- This is *exactly* what reachable is doing!!!
--- In this paper, he also talks about "pre-encoding" future
--- information in order to get a reduction, which is exactly
--- what we're doing here!
-
---------------------------------------------------------------------
-theorem reach_subset (net : BFNN) : ∀ (A B : Set ℕ),
-  reachable net A B ⊆ A := by
---------------------------------------------------------------------
-  sorry
 
 
 /-══════════════════════════════════════════════════════════════════
@@ -1828,7 +1887,6 @@ theorem hebb_weights₁ (net : BFNN) :
   intro i
   apply hebb_lift _ _ (fun x => getEdgeWeight x.toNet.graph ((preds net n).get! i) n)
   simp only [hebb, graph_update]
-  
 
   sorry
 
