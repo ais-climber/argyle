@@ -235,6 +235,73 @@
     nobody else has given it formal semantics or related it to KLM
     conditional logics or logics of preference upgrade.
   </enumerate>
+
+  <subsection*|Update:>
+
+  I figured out what preference upgrade operator satisfies Polya's inductive
+  rule! It's
+
+  <\equation*>
+    <around*|[|A|]>:<text|put all worlds where <with|font-shape|italic|some>
+    consequence of >A<text| holds up front>.
+  </equation*>
+
+  This is interesting, because in the sense that Elite Upgrade is a
+  strengthening of Lexicographic, this <math|<around*|[|A|]>> is a weakening
+  of Lexicographic (we put more worlds up front). Does this imply that some
+  strengthening of induction holds for Lexicographic and Elite upgrade? Is
+  this strengthening closer to the original spirit of induction? (Can this
+  analysis help us get at the correct formulation of induction?)
+
+  <section|Supervised Preference Upgrade>
+
+  Say we want to upgrade <math|<around*|[|A\<Rightarrow\>B|]>>, i.e. we want
+  to change the model to <with|font-shape|italic|force> the best
+  <math|A>-worlds to be <math|B>-worlds. One way to do this is what Rott
+  calls \Pbounded revision\Q, which I believe is:\ 
+
+  <\equation*>
+    <text|Put all >A<text|-worlds where >B<text| happens to be true up front>
+  </equation*>
+
+  Put all <math|A>-worlds where <math|B> happens to be true up front. In the
+  resulting model, the best <math|A>-worlds will also be <math|B>-worlds.
+  There are variations on this, for example:
+
+  <\equation*>
+    <text|Put the <with|font-shape|italic|best> >A<text|-worlds where
+    >B<text| happens to be true up front>
+  </equation*>
+
+  <\equation*>
+    <text|Put the <with|font-shape|italic|best> >A<text|-worlds that happen
+    to be <with|font-shape|italic|best> >B<text|-worlds up front>
+  </equation*>
+
+  These will also have the intended effect.
+
+  But more interesting is that we can have the same effect by being much more
+  conservative in our upgrade: We can restrict our focus only to
+  <math|A>-worlds when re-ordering, and just bring the <math|B>-ones (or
+  <with|font-shape|italic|best> <math|B>-ones) in front of the rest of the
+  <math|A>-worlds. For example:
+
+  <\equation*>
+    <text|Put the >A<text|-worlds where >B<text| happens to be true ahead of
+    the other <math|A>-worlds (but otherwise preserve the ordering)>
+  </equation*>
+
+  Notice that, in contrast with the previous operators, we can't just move
+  worlds up-front without consideration of other worlds. Instead, we have to
+  consider the overall global state of the ordering when we do the upgrade. I
+  suspect that this will correspond to the global effect that backpropagation
+  seems to necessarily have.
+
+  It would be nice if I could write down reduction axioms for all of these
+  operators, and figure out what corresponding neural network learning
+  policies would be.
+
+  \;
 </body>
 
 <\initial>
@@ -257,6 +324,8 @@
     <associate|auto-3|<tuple|1|2>>
     <associate|auto-4|<tuple|2|2>>
     <associate|auto-5|<tuple|3|3>>
+    <associate|auto-6|<tuple|2|?>>
+    <associate|auto-7|<tuple|3|?>>
   </collection>
 </references>
 

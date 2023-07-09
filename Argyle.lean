@@ -78,6 +78,20 @@ def graphA : Graph ℕ Float :=
     ⟨3, #[]⟩
   ]⟩
 
+-- Here is an alternative way to specify a graph.
+-- This example illustrates how the node labels and indices
+-- are treated -- notice that we give *indices* of the nodes
+-- (*not labels*) when we specify edges!
+-- 
+-- We assume that if we're given a graph with ℕ (Nat) labels,
+-- then the nodes are given in order from 0 to n.
+def graphB : Graph String Float :=
+  let v0 := ⟨"v0", #[⟨1, 0.5⟩]⟩
+  let v1 := ⟨"v1", #[⟨2, 0.9⟩]⟩
+  let v2 := ⟨"v2", #[⟨3, -0.5⟩, ⟨2, 0.0⟩]⟩
+  let v3 := ⟨"v3", #[⟨0, 0.5⟩]⟩
+  ⟨#[v0, v1, v2, v3]⟩
+
 #check graphA
 #eval graphA
 #eval graphA.edgeCount   -- evals to 7
@@ -111,14 +125,82 @@ def hasEdge (g : Graph α β) (u v : ℕ) : Bool :=
 #eval hasEdge graphA 1 3
 #eval hasEdge graphA 4 2
 
-def getEdgeWeight (g : Graph α β) (u v : ℕ) : β :=
+
+/-
+getEdgeWeight
+    {
+      vertices :=
+        Array.map
+          (fun v =>
+            { payload := v.payload,
+              adjacencyList :=
+                Array.map
+                  (fun edge =>
+                    { target := edge.target,
+                      weight :=
+                        ------------------------- RETURN THIS
+                        edge.weight +
+                          (net.toNet.rate *
+                              if v.payload ∈ propagate net A then OfScientific.ofScientific 10 true 1
+                              else OfScientific.ofScientific 0 true 1) *
+                            if edge.target ∈ propagate net A then OfScientific.ofScientific 10 true 1
+                            else OfScientific.ofScientific 0 true 1 })
+                        -------------------------
+                  v.adjacencyList })
+          net.toNet.graph.vertices }
+    (List.get! (preds net n) i) n
+-/
+
+/-
+def graphA : Graph ℕ Float :=
+  ⟨#[
+    ⟨0, #[⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
+    ⟨1, #[⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
+    ⟨2, #[⟨3, 1.0⟩, ⟨3, 5.0⟩]⟩, 
+    ⟨3, #[]⟩
+  ]⟩
+-/
+
+/-
+def successors (g : Graph α β) (id : Nat) : Array Nat := 
+  g.vertices[id]!.adjacencyList.map (λ e => e.target)
+-/
+
+-- TODO: This is written in a very roundabout, tortured way.
+-- This will probably make the proofs much harder!  Is there
+-- an easier, pattern-matchy way to do this?
+-- NOTE: Default value for a nonexistent weight is 0.0!!!
+-- def getEdgeWeightHelper (arr : Array (Vertex ℕ Float)) (u v : ℕ) : Float :=
+--   match arr with
+--   | #[] => 0.0
+--   | ⟨source, adjList⟩ :: xs => 
+--     if source = u then
+--       match adjList with
+--       | #[] => 0.0
+--       | ⟨target, weight⟩ :: ys => 
+--         if target = v then
+--           weight
+--         else
+--           getEdgeWeightHelper (⟨source, ys⟩ :: xs) u v
+--     else
+--       getEdgeWeightHelper xs u v
+    
+def getEdgeWeight (g : Graph ℕ Float) (u v : ℕ) : Float :=
   sorry
+  -- getEdgeWeightHelper g.vertices u v
 
 inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
       hasPath g u u
   | from_path {u v w : ℕ} : 
       hasPath g u v → hasEdge g v w → hasPath g u w
+
+/-
+TODO for later:  Make 'hasPath' computable so that we can execute
+this code:
+> #eval hasPath graphA 1 3
+
+Some old code when I was trying to do this:
 
 instance decPath : Decidable (hasPath g u v) :=
   sorry -- this should implement BFS!!!
@@ -129,7 +211,6 @@ instance decPath : Decidable (hasPath g u v) :=
   -- else
   --   sorry
 
-/-
 instance decLte : Decidable (my_lte m n) :=
   if h : m = n then
     .isTrue (h ▸ .trivial)
@@ -147,16 +228,6 @@ instance decLte : Decidable (my_lte m n) :=
       | from_path h e => cases e
 -/
 
-
-  -- deriving DecidableEq
-  -- TODO: Make graph computable so that we can execute this code:
-  -- #eval hasPath graphA 1 3
-
-/-
-def hasEdge (g : Graph α β) (u v : ℕ) : Bool :=
-  (g.successors u).contains v
--/
-
 theorem edge_from_predecessor (g : Graph α β) (u v : ℕ) :
   u ∈ (g.predecessors u) ↔ g.hasEdge u v := by
   sorry
@@ -170,7 +241,7 @@ theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ β) :
 
   induction h₂
   case trivial => exact h₁
-  case from_path x y path_vx edge_xy path_ux => 
+  case from_path x y _ edge_xy path_ux => 
     exact hasPath.from_path path_ux edge_xy
 
 
@@ -192,11 +263,16 @@ def is_acyclic (g : Graph ℕ β) : Prop :=
 
 end Graph
 
+/-
+TODO:  We want to be able to check if a graph is acyclic by
+just "computing" it -- i.e. we call Topological Sort on the
+graph, and if successful we know it is acyclic.
+
+So here is some old code I was using to try to do topological
+sort.  I'll need to come back to this when I want to make
+everything in this library computable.
 namespace TopologicalSort
 
--- match net.graph with
---   | _ => true if ... false ow
---   | _ => true if ... false ow
 
 -- holds iff u precedes v in array
 -- note that we assume lst elements are all distinct
@@ -244,8 +320,6 @@ def topOrder (g : Graph ℕ β) (u v : ℕ) : Prop :=
 --   | constr1 : sorry
 --   | constr2 : sorry
 
-
-
 -- Says that Topological Sort is actually correct, i.e.
 -- if there is an edge from x to y, then x ≺ y in the ordering.
 -- theorem topSort_is_ordered (g : Graph ℕ β) (u v : ℕ) :
@@ -256,9 +330,12 @@ def topOrder (g : Graph ℕ β) (u v : ℕ) : Prop :=
 --   sorry
 
 end TopologicalSort
+-/
 
 -------------------------------------------------
 -- Example:  Our graphA is acyclic
+-- (We should just be able to call 'Topological Sort'
+-- on the graph and check if that is successful.)
 -------------------------------------------------
 theorem graphA_is_acyclic : graphA.is_acyclic := by
   intro (u : ℕ) (v : ℕ)
@@ -266,20 +343,6 @@ theorem graphA_is_acyclic : graphA.is_acyclic := by
         (path_vu : hasPath graphA v u)
 
   sorry
-
-  -- TODO: Is there a way to just do cases on the specific
-  -- elements of 'graphA'?  Probably if I restrict it to 'Fin'...
-
-  -- induction path_uv
-  -- case trivial => rfl
-  -- case from_path x₁ y₁ path_ux₁ edge_x₁y₁ IH₁ => 
-    
-  --   induction path_vu
-  --   case trivial => rfl
-  --   case from_path x₂ y₂ path_y₁x₂ edge_x₂y₂ IH₂ => 
-  --     sorry
-
--- exact have (path_xu : hasPath graphA x u) := sorry
 
 -------------------------------------------------
 -- Activation functions
@@ -290,6 +353,14 @@ def binary_step (x : Float) : Float :=
   else
     0.0
 
+/-
+TODO: If I want to do this the *right* way, I should define
+a type of Real numbers that wrap around Floats.  I can *compute*
+things at the Float level, and *prove* things at the Reals level,
+but I should refuse to let the user *prove* things at the Float
+level. i.e. they cannot prove things by evaluating Floats; this
+is where Lean's Floats run into contradictions.
+-/
 axiom le_refl_float : ∀ (x : Float), x ≤ x
 axiom lt_or_ge_float : ∀ (x y : Float), x < y ∨ x ≥ y
 axiom le_not_lt_float : ∀ (x y : Float), x ≤ y → ¬ (y < x)
@@ -480,87 +551,32 @@ axiom get!_mem {α : Type} [Inhabited α] :
 def preds (net : BFNN) (n : ℕ): List ℕ :=
   (predecessors net.toNet.graph n).toList
 
+-- Use theorem edge_from_predecessor!
+-- The sticky part here is about converting between Lists and Arrays.
+-- (kind of annoying!  But I should learn how to do it.)
+--------------------------------------------------------------------
 theorem edge_from_preds (net : BFNN) (m n : ℕ) :
-  m ∈ preds net n ↔ net.graph.hasEdge m n :=
-  sorry
+  m ∈ preds net n ↔ net.graph.hasEdge m n := by
+--------------------------------------------------------------------
+  simp only [preds]
+  -- simp only [Array.toList_eq]
+  -- simp only [Array.data]
 
--- edge_from_predecessor
+  apply Iff.intro
+  case mp => 
+    intro h₁
+    apply (edge_from_predecessor _ _ _).mp
 
--- inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
---   | trivial {u : ℕ} :
---       hasPath g u u
---   | from_path {u v w : ℕ} : 
---       hasPath g u v → hasEdge g v w → hasPath g u w
-
--- -- OLD ACTIV FUNCTION
--- noncomputable
--- def activ (S : Set ℕ) (n : ℕ) : Bool :=
---   let preds := preds net n
---   -- We use 'do' to do a list comprehension.
---   -- Notice that we're collecting the *indices*.  This gives
---   -- us more information later;
---   -- to prove m ∈ preds, we can instead prove preds[i] ∈ preds.
---   let prev_activ := do
---     let i <- List.range preds.length
---     let m := preds.get! i
---     return if m ∈ S then 1.0 else 0.0
---   let weights := do
---     let i <- List.range preds.length
---     let m := preds.get! i
---     return net.graph.getEdgeWeight m n
---   let weight_sum := weighted_sum weights prev_activ
---   let curr_activ := net.activation weight_sum
---   if curr_activ = 1.0 then 
---     true
---   else false
-
--- -- We need another lemma about 'activ'...!
-
--- -- If A and B agree on all the predecessors of n, then they agree on n.
--- -- TODO: We don't seem to need this lemma anymore!
--- lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
---   let preds := preds net n
---   (∀ (m : ℕ), m ∈ preds → (m ∈ A ↔ m ∈ B))
---   → activ net A n
---   → activ net B n := by
-
---   intro preds
---         (h₁ : ∀ (m : ℕ), m ∈ preds → (m ∈ A ↔ m ∈ B))
---         (h₂ : activ net A n)
-
---   -- The two are definitionally equal; just go in and
---   -- substitute all of the preceding m's 
---   simp only [activ]
---   simp only [activ] at h₂
---   convert ← h₂ using 7
-  
---   rename_i i
---   let m := preds.get! i
---   have h₃ : m ∈ preds := get!_mem preds i
---   congr 2
---   apply Iff.to_eq
---   exact h₁ m h₃
+    sorry
+  case mpr => 
+    intro h₁
+    -- apply (edge_from_predecessor _ _ _).mpr
+    -- apply edge_from_predecessor 
+    sorry
+  -- -- rw [edge_from_predecessor]
 
 
--- OLD PROPAGATION
--- For a single node, propagateₚ holds iff that node is n ∈ S. 
--- Otherwise, check if we are looking at n.  If so,
--- propagateₚ holds iff either:
---   1. n ∈ S, or
---   2. The nodes m preceding n activate n.
---      (We check their activation values via propagateₚ on m)
--- If we aren't looking at n, just continue recursively.
--- 
--- This is recursion on the topological ordering of the graph!!!
--- (We can only do this because the graph is acyclic, but
---  that fact is implicit if we use topSortUnsafe.)
--- 
--- TODO: Make this computable!!!
--- change return type to 'Bool' instead of 'Prop'
--- and change 'Set' to be a finite set
--- and change net.graph to be finite as well!
--- 
--- Then unit-test all this with #eval!
+
 
 -- Can I make this into an inductive type, and then do
 -- induction over it?  (That gives me an IH; match does not.)
@@ -617,26 +633,28 @@ def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
   let curr_activ := net.activation weight_sum
   curr_activ = 1.0
 
-/-
-activ net
-  (List.bind (List.range (List.length (predecessors net.toNet.graph n).data)) fun i =>
-    pure
-      (if
-          propagate_acc net (fun n => propagate_acc net S n (layer net n))
-            (List.get! (predecessors net.toNet.graph n).data i)
-            (layer net (List.get! (predecessors net.toNet.graph n).data i)) then
-        OfScientific.ofScientific 10 true 1
-      else OfScientific.ofScientific 0 true 1))
-  n
--/
 
--- Accumulator variation of propagate
--- (We accumulate the layer of the net that n is in)
+-- FORWARD PROPAGATION IN A NET
+-- By recursion on the layers of our feedforward network.
+-- (_acc indicates that we are using the layer as an accumulator
+--  to do recursion.)
+-- 
+-- n ∈ propagate_acc(S) iff either:
+--   Base Case (L=0): n ∈ S
+--   Rcrs Case (L≥0): n ∈ S, or the nodes m preceding n activate n.
+--     (We check their activation values via propagate_acc on m)
+-- 
+-- TODO: Make this computable!!!
+-- change return type to 'Bool' instead of 'Prop'
+-- and change 'Set' to be a finite set
+-- and change net.graph to be finite as well!
+-- 
+-- Then unit-test all this with #eval!
 @[simp]
 def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
   match L with
   | Nat.zero => n ∈ S
-  | Nat.succ k =>
+  | Nat.succ _ =>
     let preds := preds net n
     let prev_activ := do
       let i <- List.range preds.length
@@ -1846,7 +1864,8 @@ lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
 
 -- If n ∉ Prop(A), then the weights in the updated net are the same
 -- as the weights in the original net.
--- TODO: Can we lift this from single-iteration hebb?
+-- IDEA: Lift this from single-iteration hebb!
+-- Then just go into the definition of hebb.
 --------------------------------------------------------------------
 theorem hebb_weights₁ (net : BFNN) : 
   n ∉ propagate net A
@@ -1854,6 +1873,12 @@ theorem hebb_weights₁ (net : BFNN) :
     (getEdgeWeight (hebb_star net A).toNet.graph ((preds net n).get! i) n =
     getEdgeWeight net.toNet.graph ((preds net n).get! i) n) := by
 --------------------------------------------------------------------
+  intro h₁
+  intro i
+  apply hebb_lift _ _ (fun x => getEdgeWeight x.toNet.graph ((preds net n).get! i) n)
+  simp only [hebb, graph_update, weight_update]
+  
+
   sorry
 
 
@@ -1867,6 +1892,9 @@ theorem hebb_weights₂ (net : BFNN) :
     (getEdgeWeight (hebb_star net A).toNet.graph ((preds net n).get! i) n =
     getEdgeWeight net.toNet.graph ((preds net n).get! i) n) := by
 --------------------------------------------------------------------
+  intro h₁
+  intro i
+  apply hebb_lift _ _ (fun x => getEdgeWeight x.toNet.graph ((preds net n).get! i) n)
   sorry
 
 
@@ -1899,6 +1927,20 @@ theorem hebb_activ₂ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
   conv =>
     lhs; enter [1, 2, 1, 2, i, 1]
     rw [hebb_weights₂ _ h₁]
+
+
+-- -- If *some* predecessor of n is ∈ Prop(A), and n ∈ Prop(A), then
+-- -- if m is activated in (hebb_star net) then n is too
+-- -- (the activation automatically goes through in (hebb_star net))
+-- --------------------------------------------------------------------
+-- theorem hebb_activ₃ (net : BFNN) :
+--   n ∈ propagate net A
+--   → m ∈ preds net n ∧ m ∈ propagate net A
+--   → m ∈ propagate (hebb_star net A) B
+--   → activ (hebb_star net A) prev_activ m := by
+-- --------------------------------------------------------------------
+--   sorry
+
 
 
 -- If there is a path within Prop(A) from B to n, then, since this
@@ -1950,7 +1992,7 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
   -- Base Step
   --------------------------------
   -- Easy; after simplifying, show that B = B.
-  case hz => 
+  case hz =>
     simp only [Membership.mem, Set.Mem, propagate]
     rw [hebb_layers net A]
     rw [hL]
