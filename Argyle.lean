@@ -528,24 +528,6 @@ theorem edge_from_preds (net : BFNN) (m n : ℕ) :
   -- -- rw [edge_from_predecessor]
 
 
-
-
--- Can I make this into an inductive type, and then do
--- induction over it?  (That gives me an IH; match does not.)
-
--- Note that Set ℕ is just defined as ℕ → Prop!
--- This simplifies our definitions.
--- @[simp]
--- def propagate (net : BFNN) (S : Set ℕ) (sort : List ℕ) : Set ℕ :=
---   fun (n : ℕ) =>
---     match sort with
---     | [] => n ∈ S
---     | x :: xs => 
---       if x = n then
---         n ∈ S ∨ activ net {m | m ∈ propagate net S xs} n
---       else
---         n ∈ propagate net S xs
-
 -- (Weightless) graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
 def distance (graph : Graph ℕ Float) (m n : ℕ) : ℕ :=
@@ -1055,125 +1037,6 @@ theorem propagate_is_cumulative :
 --    neural network has certain properties
 -- 2) #eval helps me debug errors
 
-/-══════════════════════════════════════════════════════════════════
-  Properties of Graph-reachability
-══════════════════════════════════════════════════════════════════-/
-
--- def reachable (net : BFNN) (S : Set ℕ) : Set ℕ :=
---   fun (n : ℕ) =>
---     ∃ (m : ℕ), (m ∈ S ∧ net.graph.hasPath m n)
-
--- -- hL: layer net n = 0
--- -- h₁: n ∈ B ∨ n ∈ A ∧ reachable net B n
--- -- ⊢ n ∈ B
-
--- -- Argument: If there is a path from S to n, but n is in
--- -- layer 0 -- there are *no* incoming nodes, so the path
--- -- must be of length 0.  So n must be that n ∈ S with
--- -- a path to n, i.e. n ∈ S.
--- --------------------------------------------------------------------
--- lemma reach_layer_zero (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
---   layer net n = 0
---   → n ∈ reachable net S
---   → n ∈ S := by
--- --------------------------------------------------------------------
---   sorry
-
--- --------------------------------------------------------------------
--- theorem reach_is_extens (net : BFNN) : ∀ (S : Set ℕ),
---   S ⊆ reachable net S := by
--- --------------------------------------------------------------------
---   intro (S : Set ℕ)
---         (n : ℕ) (h₁ : n ∈ S)
-
---   have (h₂ : hasPath net.toNet.graph n n) := hasPath.trivial
---   exact ⟨n, ⟨h₁, h₂⟩⟩
-  
--- --------------------------------------------------------------------
--- theorem reach_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
---   reachable net S = reachable net (reachable net S) := by
--- --------------------------------------------------------------------
---   intro (S : Set ℕ)
-  
---   exact Set.ext (fun (n : ℕ) =>
---     -- ⊆ direction (the easy direction; just apply 'extensive')
---     ⟨(fun (h₁ : n ∈ reachable net S) => 
---       let S_reach := reachable net S
---       reach_is_extens net S_reach h₁),
-
---     -- ⊇ direction
---     (fun (h₁ : n ∈ reachable net (reachable net S)) =>
---       match h₁ with
---       | ⟨x, h₂⟩ => 
---         match h₂.1 with
---         | ⟨m, h₃⟩ =>
---           have (h₄ : hasPath net.graph m n) := 
---             hasPath_trans net.graph h₃.2 h₂.2
---           ⟨m, ⟨h₃.1, h₄⟩⟩)⟩)
-
--- --------------------------------------------------------------------
--- theorem reach_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
---   A ⊆ B → reachable net A ⊆ reachable net B := by
--- --------------------------------------------------------------------
---   intro (A : Set ℕ) (B : Set ℕ)
---         (h₁ : A ⊆ B)
---         (n : ℕ) (h₂ : n ∈ reachable net A)
-
---   exact match h₂ with
---     | ⟨m, h₃⟩ => ⟨m, ⟨h₁ h₃.1, h₃.2⟩⟩ 
-
-
-/-══════════════════════════════════════════════════════════════════
-  Properties of Reverse Graph-reachability ("reached by")
-══════════════════════════════════════════════════════════════════-/
-
--- def reachedby (net : BFNN) (S : Set ℕ) : Set ℕ :=
---   fun (m : ℕ) =>
---     ∃ (n : ℕ), (n ∈ S ∧ net.graph.hasPath m n)
-
--- --------------------------------------------------------------------
--- theorem reachedby_is_extens (net : BFNN) : ∀ (S : Set ℕ),
---   S ⊆ reachedby net S := by
--- --------------------------------------------------------------------
---   intro (S : Set ℕ)
---         (n : ℕ) (h₁ : n ∈ S)
-
---   have (h₂ : hasPath net.toNet.graph n n) := hasPath.trivial
---   exact ⟨n, ⟨h₁, h₂⟩⟩
-  
--- --------------------------------------------------------------------
--- theorem reachedby_is_idempotent (net : BFNN) : ∀ (S : Set ℕ),
---   reachedby net S = reachedby net (reachedby net S) := by
--- --------------------------------------------------------------------
---   intro (S : Set ℕ)
---   apply ext
---   intro (m : ℕ)
---   apply Iff.intro
-
---   -- Forward direction (easy; just apply Extensive)
---   case mp => 
---     exact fun h₁ => reachedby_is_extens net (reachedby net S) h₁
-
---   -- Backwards direction
---   case mpr => 
---     intro (h₁ : m ∈ reachedby net (reachedby net S))
---     match h₁ with
---     | ⟨x, h₂⟩ => 
---       match h₂.1 with
---       | ⟨n, h₃⟩ => 
---         exact ⟨n, ⟨h₃.1, hasPath_trans _ h₂.2 h₃.2⟩⟩
-
--- --------------------------------------------------------------------
--- theorem reachedby_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
---   A ⊆ B → reachedby net A ⊆ reachedby net B := by
--- --------------------------------------------------------------------
---   intro (A : Set ℕ) (B : Set ℕ)
---         (h₁ : A ⊆ B)
---         (n : ℕ) (h₂ : n ∈ reachedby net A)
-
---   exact match h₂ with
---   | ⟨n, h₃⟩ => ⟨n, ⟨h₁ h₃.1, h₃.2⟩⟩  
-
 
 /-══════════════════════════════════════════════════════════════════
   Conditional Graph Reachability
@@ -1235,7 +1098,26 @@ lemma reach_layer_zero (net : BFNN) : ∀ (A B : Set ℕ) (n : ℕ),
   → n ∈ reachable net A B
   → n ∈ B := by
 --------------------------------------------------------------------
-  sorry
+  intro (A : Set ℕ)
+        (B : Set ℕ)
+        (n : ℕ) (hL : layer net n = 0)
+        (h₁ : n ∈ reachable net A B)
+  
+  match h₁ with
+  | ⟨m, h₂⟩ => 
+    -- By induction on the length of the path from B to n.
+    --   path length = 0 => m ∈ B means n ∈ B
+    --   path length ≥ 0 => this case should be impossible,
+    --                      because at layer 0 n has *no predecessors*! 
+    induction h₂.2
+    case trivial _ => exact h₂.1
+    case from_path x y _ edge_xy _ _ =>
+      -- Contradiction; y's layer is 0, but there is an edge from x to y!
+      -- (layer net x < layer net y, but that means layer net x < 0) 
+      have h₃ : layer net x < layer net y :=
+        preds_decreasing net x y ((edge_from_preds _ _ _).mpr edge_xy)
+      
+      exact absurd hL (Nat.not_eq_zero_of_lt h₃)
 
 
 --------------------------------------------------------------------
@@ -1277,11 +1159,10 @@ theorem reach_is_idempotent (net : BFNN) : ∀ (A B : Set ℕ),
         (B : Set ℕ)
   
   exact Set.ext (fun (n : ℕ) =>
-    -- ⊆ direction
+    -- ⊆ direction; easy, just apply reach_subset and reach_is_extens
     ⟨(fun (h₁ : n ∈ reachable net A B) => 
-      match h₁ with
-      | ⟨m, h₂⟩ =>
-        ⟨m, ⟨sorry, h₂.2⟩⟩),
+      have h₂ : n ∈ A := reach_subset _ _ _ h₁
+      reach_is_extens _ _ _ ⟨h₂, h₁⟩),
 
     -- ⊇ direction
     (fun (h₁ : n ∈ reachable net A (reachable net A B)) =>
