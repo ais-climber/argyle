@@ -125,69 +125,18 @@ def hasEdge (g : Graph α β) (u v : ℕ) : Bool :=
 #eval hasEdge graphA 1 3
 #eval hasEdge graphA 4 2
 
+-- Returns the weight of the edge m ⟶ n, if it exists.
+-- If it does not exist, we say the weight is 0.0
+-- TODO: In the future, it's better to use Option here
+-- and return none if none!!!
+def getEdgeWeight (g : Graph ℕ Float) (m n : ℕ) : Float :=
+  match g.vertices[m]!.adjacencyList.find? (fun e => e.target = n) with
+  | some edge => edge.weight
+  | none => 0.0
 
-/-
-getEdgeWeight
-    {
-      vertices :=
-        Array.map
-          (fun v =>
-            { payload := v.payload,
-              adjacencyList :=
-                Array.map
-                  (fun edge =>
-                    { target := edge.target,
-                      weight :=
-                        ------------------------- RETURN THIS
-                        edge.weight +
-                          (net.toNet.rate *
-                              if v.payload ∈ propagate net A then OfScientific.ofScientific 10 true 1
-                              else OfScientific.ofScientific 0 true 1) *
-                            if edge.target ∈ propagate net A then OfScientific.ofScientific 10 true 1
-                            else OfScientific.ofScientific 0 true 1 })
-                        -------------------------
-                  v.adjacencyList })
-          net.toNet.graph.vertices }
-    (List.get! (preds net n) i) n
--/
-
-/-
-def graphA : Graph ℕ Float :=
-  ⟨#[
-    ⟨0, #[⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
-    ⟨1, #[⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
-    ⟨2, #[⟨3, 1.0⟩, ⟨3, 5.0⟩]⟩, 
-    ⟨3, #[]⟩
-  ]⟩
--/
-
-/-
-def successors (g : Graph α β) (id : Nat) : Array Nat := 
-  g.vertices[id]!.adjacencyList.map (λ e => e.target)
--/
-
--- TODO: This is written in a very roundabout, tortured way.
--- This will probably make the proofs much harder!  Is there
--- an easier, pattern-matchy way to do this?
--- NOTE: Default value for a nonexistent weight is 0.0!!!
--- def getEdgeWeightHelper (arr : Array (Vertex ℕ Float)) (u v : ℕ) : Float :=
---   match arr with
---   | #[] => 0.0
---   | ⟨source, adjList⟩ :: xs => 
---     if source = u then
---       match adjList with
---       | #[] => 0.0
---       | ⟨target, weight⟩ :: ys => 
---         if target = v then
---           weight
---         else
---           getEdgeWeightHelper (⟨source, ys⟩ :: xs) u v
---     else
---       getEdgeWeightHelper xs u v
-    
-def getEdgeWeight (g : Graph ℕ Float) (u v : ℕ) : Float :=
-  sorry
-  -- getEdgeWeightHelper g.vertices u v
+#eval getEdgeWeight graphA 1 2
+#eval getEdgeWeight graphA 1 3
+#eval getEdgeWeight graphA 4 2
 
 inductive hasPath (g : Graph ℕ β) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
@@ -273,6 +222,9 @@ sort.  I'll need to come back to this when I want to make
 everything in this library computable.
 namespace TopologicalSort
 
+-- @[simp]
+-- def topol_sort (g : Graph ℕ Float) :=
+--   (topSortUnsafe g).toList.reverse
 
 -- holds iff u precedes v in array
 -- note that we assume lst elements are all distinct
@@ -669,10 +621,6 @@ decreasing_by exact preds_decreasing net m n (get!_mem preds i)
 @[simp]
 def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
   fun n => propagate_acc net S n (layer net n)
-
--- @[simp]
--- def topol_sort (g : Graph ℕ Float) :=
---   (topSortUnsafe g).toList.reverse
 
 -------------------------------------------------
 -- Some helper lemmas
@@ -1499,22 +1447,25 @@ So we need:
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- Increase the weight on the given edge x₁ ⟶ x₂  by
--- η * act(x₁) * act(x₂), *only if* the nodes are both within
--- propagate net S.
-noncomputable
-def weight_update (net : BFNN) (S : Set ℕ) 
-  (x₁ : ℕ) (edge : Edge Float) : Float := 
-  let x₂ := edge.target
-  let activ₁ := if x₁ ∈ propagate net S then 1.0 else 0.0
-  let activ₂ := if x₂ ∈ propagate net S then 1.0 else 0.0
-  edge.weight + (net.rate * activ₁ * activ₂)
+-- A richer form of mapEdges.  We update the edge weight x₁ ⟶ x₂,
+-- but we also allow information about the *nodes* x₁ and x₂.
+-- Credit to Peter Kementzey for the original mapEdges function.
+def mapEdgesWithNodes (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Graph ℕ Float := ⟨
+  g.vertices.map (λ vertex => 
+    { vertex with adjacencyList := vertex.adjacencyList.map (λ edge =>
+      { edge with weight := f vertex.payload edge.target edge.weight }
+  )})
+⟩
 
+-- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
+-- of that edge by η * act(m) * act(n).
 noncomputable
 def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Float :=
-  { vertices := Array.map (fun v => 
-    { v with adjacencyList := Array.map (fun edge => 
-      { edge with weight := weight_update net S v.payload edge}) v.adjacencyList}) g.vertices }
+  mapEdgesWithNodes g (fun m n weight => 
+    let activ_m := if m ∈ propagate net S then 1.0 else 0.0
+    let activ_n := if n ∈ propagate net S then 1.0 else 0.0
+    weight + (net.rate * activ_m * activ_n))
+
 
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
@@ -1876,7 +1827,7 @@ theorem hebb_weights₁ (net : BFNN) :
   intro h₁
   intro i
   apply hebb_lift _ _ (fun x => getEdgeWeight x.toNet.graph ((preds net n).get! i) n)
-  simp only [hebb, graph_update, weight_update]
+  simp only [hebb, graph_update]
   
 
   sorry
