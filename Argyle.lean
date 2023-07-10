@@ -556,15 +556,39 @@ def my_argmax (f : α → β) (l : List α) : Option α :=
 -- We get all predecessors of n, and take the predecessor m
 -- with the *maximum* layer.  Then layer(n) = layer(m) + 1.
 -- If n has no predecessors, then layer(n) = 0.
+-- 
+-- TODO: Prove terminating if I can!  (What exactly is decreasing
+--       here...)
+-- def layer (net : BFNN) (n : ℕ) : ℕ :=
+--   sorry
+-- partial
+axiom graph_ascending_order : ∀ (g : Graph ℕ Float) (m n : ℕ), 
+  m ∈ predecessors g n → m < n
+
 def layer (net : BFNN) (n : ℕ) : ℕ :=
-  let layers := List.map (fun x => layer net x) (preds net n)
+  let layers := do
+    let i <- List.range (preds net n).length
+    let m := (preds net n).get! i
+    return layer net m
   let max := layers.maximum
+
   match max with
   | some L => L + 1
   | none => 0
--- termination_by -- can I give an ordering i.e. m ∈ preds net n
---                                          means m is smaller? 
+termination_by layer net n => n
+decreasing_by 
+  apply graph_ascending_order net.graph _ _
+  simp only [sizeOf, InvImage, preds]
+  sorry -- stupid array to list conversion!
+  -- exact get!_mem (preds net n) i
+
+
+
+
 -- decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+-- using_well_founded sorry
+-- termination_by layer net n => sorry
+-- decreasing_by sorry
 
 -- TODO: #eval for a sanity check!
 
@@ -576,10 +600,45 @@ axiom connected : ∀ (net : BFNN) (m n : ℕ),
   layer net m < layer net n → net.graph.hasEdge m n
 
 -- If m is a predecessor of n, then it must be in a previous layer.
+--------------------------------------------------------------------
 lemma preds_decreasing (net : BFNN) (m n : ℕ) :
   m ∈ preds net n 
   → layer net m < layer net n := by
-  sorry
+--------------------------------------------------------------------
+  intro h₁
+
+  let layers := do
+    let m <- preds net n
+    return layer net m
+  let max := layers.maximum
+
+  induction max
+  case none =>
+    -- simp [layer]
+    sorry
+
+  case some L => 
+    -- simp [layer]
+
+    sorry  
+
+  -- cases max
+  -- case none => sorry
+  -- case some L => sorry
+
+  -- -- By induction on the maximum layer of n's predecessors.
+  -- induction max
+
+  -- -- Case: There are *no* predecessors of n whatsoever.  This
+  -- -- should give us a contradiction.
+  -- case none => 
+  --   sorry
+
+  -- -- Case: There is *some* predecessor of layer L.  So
+  -- -- layer(m)  ≤  (max = L)  <  (layer(n) = L+1)
+  -- case some _ L => 
+  --   sorry
+  
 
 /-
 OLD CODE; was only used to prove Minimal Cause property for Reach
@@ -1653,7 +1712,8 @@ theorem hebb_once_preds (net : BFNN) (S : Set ℕ) :
 theorem hebb_once_layers (net : BFNN) (S : Set ℕ) : 
   layer (hebb net S) n = layer net n := by
 --------------------------------------------------------------------
-  exact rfl
+  sorry
+
 
 -- A single round of Hebbian update hebb does not affect the 
 -- activation function.
@@ -1748,7 +1808,9 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
   -- Base Step
   --------------------------------
   case zero => 
+    rw [hebb_layers]
     rw [hL] at h₁
+    rw [hL]
     simp only [propagate_acc]
     simp only [propagate_acc] at h₁
     exact h₁
@@ -1760,12 +1822,14 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
     -- By cases, to later simplify propagate_acc
     by_cases n ∈ B
     case pos => 
-      rw [← hL]
+      rw [hebb_layers]
       rw [← hebb_layers net A]
       exact propagate_acc_is_extens _ _ h  
     
     case neg => 
       -- Do simplifications and rewriting
+      rw [hebb_layers]
+      rw [hL]
       rw [hL] at h₁
       rw [simp_propagate_acc _ h]
       rw [simp_propagate_acc _ h] at h₁
@@ -1782,6 +1846,7 @@ lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   intro h₁
   have h₂ : n ∈ propagate (hebb_star net A) B := hebb_extensive _ _ _ h₁
   simp only [Membership.mem, Set.Mem, propagate] at h₂
+  rw [hebb_layers] at h₂
   exact h₂
 
 
@@ -1976,7 +2041,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
   simp only [Membership.mem, Set.Mem, propagate]
   
   -- By induction on the layer of the net containing n
-  generalize hL : layer (hebb_star net A) n = L
+  generalize hL : layer net n = L
   induction L using Nat.case_strong_induction_on generalizing n
 
   --------------------------------
@@ -1984,6 +2049,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
   --------------------------------
   case hz => 
     -- First, do the base case simplifications
+    rw [hebb_layers]
+    rw [hL]
     simp only [propagate_acc]
     simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
 
@@ -2000,7 +2067,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
       cases h₁
       case inl h₂ => exact h₂
       case inr h₂ => 
-        have heq : layer net n = 0 := Eq.trans (symm (hebb_layers net A)) hL
+        have heq : layer net n = 0 := 
+          Eq.trans (symm (hebb_layers net A)) (Eq.trans (hebb_layers _ _) hL)
         exact prop_layer_zero _ _ _ heq (reach_layer_zero _ _ _ _ heq h₂)
 
   --------------------------------
@@ -2018,9 +2086,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
       -- By cases; either n ∈ B ∪ Reach(Prop(A), Prop(B)), or not.
       by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
       case pos =>
-        rw [← hL]
-        rw [hebb_layers]
-
         -- From here, we split again; either:
         --    1. n ∈ B, and by extens n ∈ Prop(B) in (hebb_star net)
         --    2. n ∈ Reach(Prop(A), Prop(B)).  In this case, this path
@@ -2079,7 +2144,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
                 exact hebb_updated_path _ _ _ h₆
               
               simp only [propagate, Membership.mem, Set.Mem] at h₇
-              rw [← hL]
               exact h₇
 
             ---------------------
@@ -2105,6 +2169,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               -- Simplifications and rewriting, to prepare for IH
               -- We also rewrite the 'preds', 'layers', and 'activ'
               -- for (hebb_star net) in terms of the original 'net'.
+              rw [hebb_layers]
+              rw [hL]
               simp only [propagate] at n_not_in_reach
               rw [simp_propagate_acc _ n_not_in_B]
               rw [simp_propagate_acc _ n_not_in_reach] at h₁
@@ -2122,6 +2188,10 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               rename_i i
               generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
               generalize hLm : layer net m = Lm
+              conv at IH => -- rewrite 'layers' in IH
+                enter [L, hL, m, hLm, 1]
+                rw [hebb_layers]
+                rw [hLm]
               
               -- We are now ready to apply our inductive hypothesis!
               have h₇ : m ∈ preds net n := by
@@ -2132,7 +2202,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
                 rw [symm hLm]
                 apply Nat.lt_succ.mp
                 rw [symm hL]
-                rw [hebb_layers net A]
                 exact preds_decreasing net m n h₇
               exact IH Lm h₈ m hLm
 
@@ -2150,6 +2219,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           -- Simplifications and rewriting, to prepare for IH
           -- We also rewrite the 'preds', 'layers', and 'activ'
           -- for (hebb_star net) in terms of the original 'net'.
+          rw [hebb_layers]
+          rw [hL]
           simp only [propagate] at n_not_in_reach
           rw [simp_propagate_acc _ n_not_in_B]
           rw [simp_propagate_acc _ n_not_in_reach] at h₁
@@ -2165,6 +2236,10 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           rename_i i
           generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
           generalize hLm : layer net m = Lm
+          conv at IH => -- rewrite 'layers' in IH
+            enter [L, hL, m, hLm, 1]
+            rw [hebb_layers]
+            rw [hLm]
           
           -- We are now ready to apply our inductive hypothesis!
           have h₂ : m ∈ preds net n := by
@@ -2175,7 +2250,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
             rw [symm hLm]
             apply Nat.lt_succ.mp
             rw [symm hL]
-            rw [hebb_layers net A]
             exact preds_decreasing net m n h₂
           exact IH Lm h₃ m hLm
 
@@ -2195,7 +2269,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
       case pos => 
         -- In this case, just apply propagate_is_extens
         rw [← hL]
-        rw [hebb_layers]
         simp only [propagate] at h
         exact propagate_acc_is_extens _ _ h
 
@@ -2267,6 +2340,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               -- Simplifications and rewriting, to prepare for IH
               -- We also rewrite the 'preds', 'layers', and 'activ'
               -- for (hebb_star net) in terms of the original 'net'.
+              rw [hebb_layers] at h₁
+              rw [hL] at h₁
               simp only [propagate] at n_not_in_reach
               rw [simp_propagate_acc _ n_not_in_B] at h₁
               rw [simp_propagate_acc _ n_not_in_reach]
@@ -2284,6 +2359,10 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               rename_i i
               generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
               generalize hLm : layer net m = Lm
+              conv at IH => -- rewrite 'layers' in IH
+                enter [L, hL, m, hLm, 1]
+                rw [hebb_layers]
+                rw [hLm]
               
               -- We are now ready to apply our inductive hypothesis!
               have h₇ : m ∈ preds net n := by
@@ -2294,7 +2373,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
                 rw [symm hLm]
                 apply Nat.lt_succ.mp
                 rw [symm hL]
-                rw [hebb_layers net A]
                 exact preds_decreasing net m n h₇
               exact (symm (IH Lm h₈ m hLm).to_eq).to_iff
         
@@ -2313,6 +2391,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           -- Simplifications and rewriting, to prepare for IH
           -- We also rewrite the 'preds', 'layers', and 'activ'
           -- for (hebb_star net) in terms of the original 'net'.
+          rw [hebb_layers] at h₁
+          rw [hL] at h₁
           simp only [propagate] at n_not_in_reach
           rw [simp_propagate_acc _ n_not_in_B] at h₁
           rw [simp_propagate_acc _ n_not_in_reach]
@@ -2328,7 +2408,11 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           rename_i i
           generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
           generalize hLm : layer net m = Lm
-          
+          conv at IH => -- rewrite 'layers' in IH
+            enter [L, hL, m, hLm, 1]
+            rw [hebb_layers]
+            rw [hLm]
+
           -- We are now ready to apply our inductive hypothesis!
           have h₂ : m ∈ preds net n := by
             rw [symm hm]
@@ -2338,7 +2422,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
             rw [symm hLm]
             apply Nat.lt_succ.mp
             rw [symm hL]
-            rw [hebb_layers net A]
             exact preds_decreasing net m n h₂
           exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
         
