@@ -540,22 +540,33 @@ theorem edge_from_preds (net : BFNN) (m n : ℕ) :
     fun h₁ => (edge_from_predecessor _ _ _).mpr h₁⟩ 
 
 
--- (Weightless) *maximal* graph distance from node m to n.  Just count
+-- (Weightless) *minimal* graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
 -- (just here in order to define layer -- but if there's
 --  a better way, I should use it!)
-def distance (graph : Graph ℕ Float) (m n : ℕ) : ℕ :=
-  sorry
+-- def distance (graph : Graph ℕ Float) (m n : ℕ) : ℕ :=
+--   sorry
 
--- The layer of n is the *maximal* distance from a node in layer 0
--- to n.  I might want to make this an inductive type!
--- (e.g. anything with no predecessors is in layer 0;
---  anything with distance 1 away from layer L is in layer L+1)
--- 
--- Be prepared to refactor my code if I do this!  Everything
--- depends on the layer of the net!!!
+/-
+def my_argmax (f : α → β) (l : List α) : Option α :=
+  l.foldl (argAux fun b c => f c < f b) none
+-/
+
+-- The layer of n.
+-- We get all predecessors of n, and take the predecessor m
+-- with the *maximum* layer.  Then layer(n) = layer(m) + 1.
+-- If n has no predecessors, then layer(n) = 0.
 def layer (net : BFNN) (n : ℕ) : ℕ :=
-  sorry
+  let layers := List.map (fun x => layer net x) (preds net n)
+  let max := layers.maximum
+  match max with
+  | some L => L + 1
+  | none => 0
+-- termination_by -- can I give an ordering i.e. m ∈ preds net n
+--                                          means m is smaller? 
+-- decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+
+-- TODO: #eval for a sanity check!
 
 -- AXIOM: We assume the net is fully connected!
 -- This is essentially the statement we need, which might
