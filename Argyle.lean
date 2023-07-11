@@ -7,8 +7,8 @@ import Mathlib.Tactic.Basic
 import Mathlib.Data.List.Sigma
 
 import Lean.Parser.Tactic
-import Graph.Graph
-import Graph.TopologicalSort
+-- import Graph.Graph
+-- import Graph.TopologicalSort
 import Mathlib.Init.Set
 import Mathlib.Data.List.Defs
 import Mathlib.Init.Propext
@@ -16,7 +16,7 @@ import Mathlib.Data.Set.Basic
 import Mathlib.Logic.Basic
 import Mathlib.Logic.Function.Basic
 
-open Graph
+-- open Graph
 open Set
 open Tactic
 open Classical
@@ -66,8 +66,63 @@ def prod_comprehens (xs : List α) (ys : List β) : List (α × β) :=
 
 
 -------------------------------------------------
--- Graphs
+-- *Finite* Directed Acyclic Graphs
+-- 
+-- Unlike the standard weighted DAGs, these
+-- weighted DAGs are defined recursively.  
+-- This makes them acyclic by construction,
+-- and allows us to do induction on them.
+-- 
+-- NOTE: We define edges by giving the *predecessors*
+-- of a node (*NOT successors*!).  The idea
+-- is that each node can only "see" the nodes behind
+-- it in the graph.
+-- 
+-- NOTE: For hygiene, we expect that the vertices
+-- are natural numbers given in order, i.e. 0, 1, 2, ...
+-- You can pick any other labels for your vertices,
+-- but if you're like me you'll confuse yourself :-)
 -------------------------------------------------
+
+structure Vertex (α β : Type) (k : ℕ) where
+  label : α 
+  predecessors : List (Fin k × β)
+
+-- α is the type of the nodes
+-- β is the type of the weights
+inductive Graph (α β : Type) : ℕ → Type where
+  | empty : Graph α β 0
+  | from_graph {k : ℕ} : 
+      Graph α β k
+    → Vertex α β k
+    → Graph α β (Nat.succ k)
+
+def example_graph₁ : Graph ℕ Float 4 :=
+  Graph.from_graph 
+    (Graph.from_graph 
+      (Graph.from_graph 
+        (Graph.from_graph 
+          Graph.empty 
+          ⟨0, []⟩) -- has no predecessors 
+        ⟨1, [⟨0, 0.5⟩]⟩) 
+      ⟨2, [⟨0, 0.6⟩, ⟨1, 0.8⟩]⟩) 
+    ⟨3, [⟨0, 0.7⟩, ⟨1, 0.9⟩, ⟨2, 1.0⟩, ⟨2, 3.0⟩]⟩
+
+-- This example is laborious and tortured, so here's
+-- a better DAG syntax.
+syntax (priority := high) "DAG⟨" term,+ "⟩" : term
+
+macro_rules
+  | `(DAG⟨$x⟩) => `(Graph.from_graph Graph.empty $x)
+  | `(DAG⟨$xs:term,*, $x⟩) => `(Graph.from_graph DAG⟨$xs,*⟩ $x)
+
+def example_graph₂ : Graph ℕ Float 4 :=
+  DAG⟨⟨0, []⟩, 
+      ⟨1, [⟨0, 0.5⟩]⟩, 
+      ⟨2, [⟨0, 0.6⟩, ⟨1, 0.8⟩]⟩, 
+      ⟨3, [⟨0, 0.7⟩, ⟨1, 0.9⟩, ⟨2, 1.0⟩, ⟨2, 3.0⟩]⟩⟩
+
+
 -- This is a graph with ℕ nodes
 -- and Float edge weights.
 def graphA : Graph ℕ Float :=
@@ -562,6 +617,10 @@ def my_argmax (f : α → β) (l : List α) : Option α :=
 -- def layer (net : BFNN) (n : ℕ) : ℕ :=
 --   sorry
 -- partial
+
+-- TODO: I can do away with this axiom, and define 'layer'
+-- more naturally if I define acyclic graphs recursively
+-- in the first place!  Then I can do induction on 'net.graph'!
 axiom graph_ascending_order : ∀ (g : Graph ℕ Float) (m n : ℕ), 
   m ∈ predecessors g n → m < n
 
