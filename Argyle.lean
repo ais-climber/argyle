@@ -66,134 +66,106 @@ def prod_comprehens (xs : List α) (ys : List β) : List (α × β) :=
 
 
 -------------------------------------------------
--- *Finite* Directed Acyclic Graphs
+-- Weighted Directed Graphs
 -- 
--- Unlike the standard weighted DAGs, these
--- weighted DAGs are defined recursively.  
--- This makes them acyclic by construction,
--- and allows us to do induction on them.
+-- Since graphs are internally represented by lists,
+-- we can just do induction on this inner list.
 -- 
--- NOTE: We define edges by giving the *predecessors*
--- of a node (*NOT successors*!).  The idea
--- is that each node can only "see" the nodes behind
--- it in the graph.
+-- It's common for graph theory proofs to go by
+-- induction on the graph:  "Suppose P holds for the
+-- subgraph, and now add a new node."  In this case
+-- what you probably want is to do induction on
+-- *Graph.vertices.reverse*, so that each new node
+-- can only "see" those nodes that come *before* it.
 -- 
 -- NOTE: For hygiene, we expect that the vertices
 -- are natural numbers given in order, i.e. 0, 1, 2, ...
--- You can pick any other labels for your vertices,
--- but if you're like me you'll confuse yourself :-)
+-- In principle, you can pick any other labels for your 
+-- vertices, but I will be relying on the fact that they come
+-- in this order.  My apologies.
+-- 
+-- These graphs are based on Peter Kementzey's 
+-- implementation, but modified slightly.
 -------------------------------------------------
-
-structure Vertex (α β : Type) (k : ℕ) where
-  label : α 
-  predecessors : List (Fin k × β)
 
 -- α is the type of the nodes
 -- β is the type of the weights
-inductive Graph (α β : Type) : ℕ → Type where
-  | empty : Graph α β 0
-  | from_graph {k : ℕ} : 
-      Graph α β k
-    → Vertex α β k
-    → Graph α β (Nat.succ k)
+structure Vertex (α β : Type) where
+  label : α 
+  successors : List (ℕ × β)
+deriving Repr
 
-def example_graph₁ : Graph ℕ Float 4 :=
-  Graph.from_graph 
-    (Graph.from_graph 
-      (Graph.from_graph 
-        (Graph.from_graph 
-          Graph.empty 
-          ⟨0, []⟩) -- has no predecessors 
-        ⟨1, [⟨0, 0.5⟩]⟩) 
-      ⟨2, [⟨0, 0.6⟩, ⟨1, 0.8⟩]⟩) 
-    ⟨3, [⟨0, 0.7⟩, ⟨1, 0.9⟩, ⟨2, 1.0⟩, ⟨2, 3.0⟩]⟩
+instance [Inhabited α] : Inhabited (Vertex α β) := 
+  ⟨ { label := default, successors := default } ⟩
 
--- This example is laborious and tortured, so here's
--- a better DAG syntax.
-syntax (priority := high) "DAG⟨" term,+ "⟩" : term
+structure Graph (α : Type) (β : Type) where
+  vertices : List (Vertex α β) := []
+deriving Repr
 
-macro_rules
-  | `(DAG⟨$x⟩) => `(Graph.from_graph Graph.empty $x)
-  | `(DAG⟨$xs:term,*, $x⟩) => `(Graph.from_graph DAG⟨$xs,*⟩ $x)
-
-def example_graph₂ : Graph ℕ Float 4 :=
-  DAG⟨⟨0, []⟩, 
-      ⟨1, [⟨0, 0.5⟩]⟩, 
-      ⟨2, [⟨0, 0.6⟩, ⟨1, 0.8⟩]⟩, 
-      ⟨3, [⟨0, 0.7⟩, ⟨1, 0.9⟩, ⟨2, 1.0⟩, ⟨2, 3.0⟩]⟩⟩
-
-
--- This is a graph with ℕ nodes
--- and Float edge weights.
+-- Notice that this graph is acyclic, since each predecessor
+-- list only refers to nodes above the current node.  This
+-- is foreshadowing.
 def graphA : Graph ℕ Float :=
-  ⟨#[
-    ⟨0, #[⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
-    ⟨1, #[⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
-    ⟨2, #[⟨3, 1.0⟩, ⟨3, 5.0⟩]⟩, 
-    ⟨3, #[]⟩
-  ]⟩
-
--- Here is an alternative way to specify a graph.
--- This example illustrates how the node labels and indices
--- are treated -- notice that we give *indices* of the nodes
--- (*not labels*) when we specify edges!
--- 
--- We assume that if we're given a graph with ℕ (Nat) labels,
--- then the nodes are given in order from 0 to n.
-def graphB : Graph String Float :=
-  let v0 := ⟨"v0", #[⟨1, 0.5⟩]⟩
-  let v1 := ⟨"v1", #[⟨2, 0.9⟩]⟩
-  let v2 := ⟨"v2", #[⟨3, -0.5⟩, ⟨2, 0.0⟩]⟩
-  let v3 := ⟨"v3", #[⟨0, 0.5⟩]⟩
-  ⟨#[v0, v1, v2, v3]⟩
+  ⟨[⟨0, [⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
+    ⟨1, [⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
+    ⟨2, [⟨3, 1.0⟩, ⟨3, 3.0⟩]⟩, 
+    ⟨3, []⟩]⟩
 
 #check graphA
 #eval graphA
-#eval graphA.edgeCount   -- evals to 7
-#eval graphA.order       -- evals to 4
-#eval graphA.toArray     -- evals to #[0, 1, 2, 3]
-
-#eval graphA.inDegree 1      -- evals to 1
-#eval graphA.outDegree 1     -- evals to 2
-#eval graphA.successors 1    -- evals to #[2, 3]
-#eval graphA.predecessors 1  -- evals to #[0]
-
-#eval graphA.inDegree 2      -- evals to 2
-#eval graphA.outDegree 2     -- evals to 2
-#eval graphA.successors 2    -- evals to #[3, 3]
-#eval graphA.predecessors 2  -- evals to #[0, 1]
 
 -------------------------------------------------
--- My own graph functions and convenience
--- properties
+-- Graph functions
 -------------------------------------------------
+
+-- TODO: for convenience, define 'map', 'foldl', 'filter',
+-- 'find?', 'zip', 'some', 'any', and 'all' over graph vertices.
+
+-- TODO: Make graph functions computable! (this shouldn't be
+-- hard -- right now it just depends on 'Prop')
 namespace Graph
 
-def hasNode (g : Graph ℕ Float) (v : ℕ) : Bool :=
-  g.getAllVertexIDs.contains v
+def get_vertices (g : Graph ℕ Float) : List ℕ :=
+  g.vertices.map (fun ⟨label, _⟩ => label)
+
+def successors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
+  g.vertices[n]!.successors.unzip.1
+
+def predecessors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
+  List.filter (fun v => n ∈ (g.successors v)) g.get_vertices
 
 -- Using 'predecessors' is slower than 'successors',
 -- but we will tend to look backwards from a node rather
 -- than forwards.
-def hasEdge (g : Graph ℕ Float) (u v : ℕ) : Bool :=
-  @Array.contains ℕ instBEq (g.predecessors v) u
-
-#eval hasEdge graphA 1 2
-#eval hasEdge graphA 1 3
-#eval hasEdge graphA 4 2
+def hasEdge (g : Graph ℕ Float) (m n : ℕ) : Bool :=
+  m ∈ (g.predecessors n)
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
 -- If it does not exist, we say the weight is 0.0
 -- TODO: In the future, it's better to use Option here
 -- and return none if none!!!
 def getEdgeWeight (g : Graph ℕ Float) (m n : ℕ) : Float :=
-  match g.vertices[m]!.adjacencyList.find? (fun e => e.target = n) with
-  | some edge => edge.weight
+  match g.vertices[m]!.successors.find? (fun ⟨label, _⟩ => label = n) with
+  | some ⟨_, weight⟩ => weight
   | none => 0.0
 
-#eval getEdgeWeight graphA 1 2 -- 0.8
-#eval getEdgeWeight graphA 1 3 -- 0.9
-#eval getEdgeWeight graphA 4 2 -- 0.0
+-- Some sanity checks
+#eval get_vertices graphA
+#eval successors graphA 0
+#eval successors graphA 1
+#eval successors graphA 2
+#eval successors graphA 3
+#eval predecessors graphA 0
+#eval predecessors graphA 1
+#eval predecessors graphA 2
+#eval predecessors graphA 3
+#eval hasEdge graphA 1 2
+#eval hasEdge graphA 1 3
+#eval hasEdge graphA 4 2
+#eval getEdgeWeight graphA 1 2
+#eval getEdgeWeight graphA 1 3
+#eval getEdgeWeight graphA 4 2
+
 
 inductive hasPath (g : Graph ℕ Float) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
@@ -235,10 +207,12 @@ instance decLte : Decidable (my_lte m n) :=
 -/
 
 -- Just follows from the definition of hasEdge
+--------------------------------------------------------------------
 theorem edge_from_predecessor (g : Graph ℕ Float) (u v : ℕ) :
   u ∈ (g.predecessors v) ↔ g.hasEdge u v := by
-  
-  rfl
+--------------------------------------------------------------------
+  simp only [hasEdge]
+  rw [Bool.decide_iff]
 
 
 theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ Float) :
