@@ -206,18 +206,11 @@ instance decLte : Decidable (my_lte m n) :=
       | from_path h e => cases e
 -/
 
--- Just follows from the definition of hasEdge
---------------------------------------------------------------------
-theorem edge_from_predecessor (g : Graph ℕ Float) (u v : ℕ) :
-  u ∈ (g.predecessors v) ↔ g.hasEdge u v := by
---------------------------------------------------------------------
-  simp only [hasEdge]
-  rw [Bool.decide_iff]
 
-
+--------------------------------------------------------------------
 theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ Float) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
-
+--------------------------------------------------------------------
   intro (h₁ : hasPath g u v)
   intro (h₂ : hasPath g v w)
 
@@ -227,26 +220,25 @@ theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ Float) :
     exact hasPath.from_path path_ux edge_xy
 
 
-def is_refl (g : Graph ℕ Float) : Prop :=
-  ∀ (u : ℕ),
-    g.hasNode u → g.hasEdge u u
+def is_refl (g : Graph ℕ Float) : Prop := ∀ (u : ℕ), 
+  u ∈ g.get_vertices → g.hasEdge u u
 
-def is_symm (g : Graph ℕ Float) : Prop :=
-  ∀ (u v : ℕ),
-    g.hasEdge u v → g.hasEdge v u
+def is_symm (g : Graph ℕ Float) : Prop := ∀ (u v : ℕ), 
+  g.hasEdge u v → g.hasEdge v u
 
-def is_trans (g : Graph ℕ Float) : Prop :=
-  ∀ (u v w : ℕ),
-    g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
+def is_trans (g : Graph ℕ Float) : Prop := ∀ (u v w : ℕ),
+  g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
 
-def is_acyclic (g : Graph ℕ Float) : Prop :=
-  ∀ (u v : ℕ),
-    g.hasPath u v → g.hasPath v u → u = v
+def is_acyclic (g : Graph ℕ Float) : Prop := ∀ (u v : ℕ),
+  g.hasPath u v → g.hasPath v u → u = v
 
 end Graph
 
 /-
-TODO:  We want to be able to check if a graph is acyclic by
+TODO:  Define 'acyclic' as:  Recursively on graph.vertices,
+every vertex can only "see" the vertices ahead of it.
+
+TODO: We want to be able to check if a graph is acyclic by
 just "computing" it -- i.e. we call Topological Sort on the
 graph, and if successful we know it is acyclic.
 
@@ -447,7 +439,7 @@ structure BFNN extends Net where
 
 --     binary := binary_step_is_binary
 --     -- sort := (topSortUnsafe graphA).toList.reverse
---     acyclic := graphA_is_acyclic
+--     acyclic := sorry -- graphA_is_acyclic
 --     activ_nondecr := binary_step_nondecr
 --     activ_pos := sorry
 --   }
@@ -492,14 +484,12 @@ example : setC ⊆ setA := by
   have (h₃ : 5 ≤ 10) := (by native_decide)
   exact show n ∈ setA from le_trans h₂ h₃
 
-
 -- Prove that a set is contained in its powerset
 example : ∀ (S : Set α), S ∈ 𝒫 S := by
   intro (S : Set α)
   intro (a : α)
   intro (h : a ∈ S)
   exact h
-
 
 -- TODO Next: Define graph reachability and propagate
 -- Prove that the above BFNN is acyclic, just to make sure
@@ -510,8 +500,6 @@ theorem setExample : 3 ∈ setC := by
   have (h₁ : 3 ≤ 4) := by native_decide
   constructor
   exact h₁
-
-
 
 /-══════════════════════════════════════════════════════════════════
   Forward propagation in a net
@@ -539,34 +527,14 @@ axiom get!_mem {α : Type} [Inhabited α] :
 
 @[simp]
 def preds (net : BFNN) (n : ℕ): List ℕ :=
-  (predecessors net.toNet.graph n).toList
+  net.toNet.graph.predecessors n
 
-
--- x is a member of the *list* arr.data
--- iff the *array* arr contains x
--- (the 'instBEq' here is just to get equality right later)
--- What do I need to prove this in Lean?
--- TODO: Ask in the Zulip!
---------------------------------------------------------------------
-lemma mem_data_iff_contains (arr : Array ℕ) (x : ℕ) :
-  List.Mem x arr.data ↔ @Array.contains ℕ instBEq arr x := by
---------------------------------------------------------------------
-  sorry
-
--- @Array.contains ℕ instBEq (g.predecessors v) u
-
--- Use theorem edge_from_predecessor!
--- The sticky part here is about converting between Lists and Arrays.
--- (kind of annoying!  But I should learn how to do it.)
 --------------------------------------------------------------------
 theorem edge_from_preds (net : BFNN) (m n : ℕ) :
   m ∈ preds net n ↔ net.graph.hasEdge m n := by
 --------------------------------------------------------------------
-  simp only [preds, Array.toList_eq, Membership.mem]
-  rw [mem_data_iff_contains _ _]
-  exact 
-    ⟨fun h₁ => (edge_from_predecessor _ _ _).mp h₁, 
-    fun h₁ => (edge_from_predecessor _ _ _).mpr h₁⟩ 
+  simp only [preds, Graph.hasEdge]
+  rw [Bool.decide_iff]
 
 
 -- (Weightless) *minimal* graph distance from node m to n.  Just count
@@ -596,34 +564,51 @@ def my_argmax (f : α → β) (l : List α) : Option α :=
 -- more naturally if I define acyclic graphs recursively
 -- in the first place!  Then I can do induction on 'net.graph'!
 axiom graph_ascending_order : ∀ (g : Graph ℕ Float) (m n : ℕ), 
-  m ∈ predecessors g n → m < n
+  m ∈ g.predecessors n → m < n
+
+-- Accumulator-style helper function for 'layer'
+-- Defined recursively on the *reverse* of the vertex list
+-- (this means we are looking at vertices backwards -- each
+--  vertex can only "see" the vertices preceding it.)
+def layer_acc (net : BFNN) (n : ℕ) (ls : List (Vertex ℕ Float)) : ℕ :=
+  match ls with -- net.graph.vertices.reverse
+  | [] => 0
+  | ⟨_, _⟩ :: rest =>
+      let layers := List.map (fun x => layer_acc net x rest) (preds net n)
+      -- let layers := do
+      --   let i <- List.range (preds net n).length
+      --   let m := (preds net n).get! i
+      --   return layer_acc net m rest
+      let max := layers.maximum
+      
+      match max with
+      | some L => L + 1
+      | none => 0
 
 def layer (net : BFNN) (n : ℕ) : ℕ :=
-  let layers := do
-    let i <- List.range (preds net n).length
-    let m := (preds net n).get! i
-    return layer net m
-  let max := layers.maximum
+  layer_acc net n (net.graph.vertices.reverse)
 
-  match max with
-  | some L => L + 1
-  | none => 0
-termination_by layer net n => n
-decreasing_by 
-  apply graph_ascending_order net.graph _ _
-  simp only [sizeOf, InvImage, preds]
-  sorry -- stupid array to list conversion!
-  -- exact get!_mem (preds net n) i
+-- 0 jumps to 2, 1 jumps to 3, short connection from 1 to 2
+def layer_test_graph : Graph ℕ Float :=
+  ⟨[⟨0, [⟨2, 0.5⟩]⟩, -- ⟨4, 0.5⟩
+    ⟨1, [⟨2, 0.5⟩, ⟨3, 0.5⟩]⟩, -- ⟨4, 0.5⟩
+    ⟨2, []⟩, -- ⟨4, 0.5⟩
+    ⟨3, [⟨4, 0.5⟩]⟩, -- remove ⟨4, 0.5⟩
+    
+    -- Add a new edge, and toggle which previous edge jumps to it.
+    ⟨4, []⟩]⟩
 
+def layer_test_net : BFNN :=
+  { graph := layer_test_graph, activation := binary_step, rate := 1.0,
+    binary := binary_step_is_binary, acyclic := sorry,
+    activ_nondecr := binary_step_nondecr, activ_pos := sorry
+  }
 
-
-
--- decreasing_by exact preds_decreasing net m n (get!_mem preds i)
--- using_well_founded sorry
--- termination_by layer net n => sorry
--- decreasing_by sorry
-
--- TODO: #eval for a sanity check!
+#eval layer layer_test_net 0
+#eval layer layer_test_net 1
+#eval layer layer_test_net 2
+#eval layer layer_test_net 3
+#eval layer layer_test_net 4
 
 -- AXIOM: We assume the net is fully connected!
 -- This is essentially the statement we need, which might
@@ -633,27 +618,55 @@ axiom connected : ∀ (net : BFNN) (m n : ℕ),
   layer net m < layer net n → net.graph.hasEdge m n
 
 -- If m is a predecessor of n, then it must be in a previous layer.
+-- Proof idea:
+-- layer(m)  ≤  max({layer(v) | v ∈ preds(n)})  <  layer(n)
 --------------------------------------------------------------------
 lemma preds_decreasing (net : BFNN) (m n : ℕ) :
   m ∈ preds net n 
   → layer net m < layer net n := by
 --------------------------------------------------------------------
   intro h₁
+  simp only [layer]
 
-  let layers := do
-    let m <- preds net n
-    return layer net m
-  let max := layers.maximum
+  generalize hls : net.graph.vertices.reverse = ls
+  induction ls
+  case nil =>
+    -- This case is impossible;
+    -- m ∈ preds(n) means that there is *something* in the graph.
+    -- This contradicts the fact that the graph is empty!
+    have h₂ : net.toNet.graph.vertices = [] := sorry
 
-  induction max
-  case none =>
-    -- simp [layer]
-    sorry
+    simp [preds, Graph.predecessors, Graph.get_vertices] at h₁
+    rw [h₂] at h₁
+    rw [List.map_nil] at h₁
+    rw [List.filter_nil] at h₁
+    exact False.elim ((List.mem_nil_iff _).mp h₁)
 
-  case some L => 
-    -- simp [layer]
+  case cons vertex rest IH => sorry
 
-    sorry  
+
+  -- let ls := net.graph.vertices.reverse
+
+  -- induction ls
+  -- case nil => 
+  --   simp [layer, layer_acc]
+  --   sorry
+  -- case cons vertex rest IH => exact IH   
+
+  -- let layers := do
+  --   let m <- preds net n
+  --   return layer net m
+  -- let max := layers.maximum
+
+  -- induction max
+  -- case none =>
+  --   -- simp [layer]
+  --   sorry
+
+  -- case some L => 
+  --   -- simp [layer]
+
+  --   sorry  
 
   -- cases max
   -- case none => sorry
@@ -671,19 +684,6 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
   -- -- layer(m)  ≤  (max = L)  <  (layer(n) = L+1)
   -- case some _ L => 
   --   sorry
-  
-
-/-
-OLD CODE; was only used to prove Minimal Cause property for Reach
-(no longer used with Conditional Reach)
--- If m is a predecessor of n, then there is a path
--- from m to n.
-lemma preds_path (net : BFNN) :
-  m ∈ preds net n
-  → hasPath net.graph m n := by
-  sorry
--/
-
 
 noncomputable
 def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
@@ -1016,14 +1016,14 @@ theorem propagate_is_idempotent :
           simp at h₁
           convert h₁ using 5
           rename_i i
-          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
 
           -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (predecessors net.toNet.graph n).data i
+            exact get!_mem (net.toNet.graph.predecessors n) i
           have h₄ : Lm ≤ k := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -1097,14 +1097,14 @@ theorem propagate_is_cumulative :
           simp at h₃
           convert h₃ using 5
           rename_i i
-          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
 
           -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (predecessors net.toNet.graph n).data i
+            exact get!_mem (net.toNet.graph.predecessors n) i
           have h₄ : Lm ≤ k := by 
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -1141,14 +1141,14 @@ theorem propagate_is_cumulative :
           simp at h₃
           convert h₃ using 5
           rename_i i
-          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
 
           -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (predecessors net.toNet.graph n).data i
+            exact get!_mem (net.toNet.graph.predecessors n) i
           have h₄ : Lm ≤ k := by 
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -1195,7 +1195,7 @@ inductive focusedPath (g : Graph ℕ Float) (S : Set ℕ) : ℕ → ℕ → Prop
   | trivial {u : ℕ} :
       u ∈ S → focusedPath g S u u
   | from_path {u v w : ℕ} : 
-      focusedPath g S u v → hasEdge g v w → w ∈ S → focusedPath g S u w
+      focusedPath g S u v → g.hasEdge v w → w ∈ S → focusedPath g S u w
 
 -- focusedPath is transitive
 theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ Float) (A : Set ℕ) :
@@ -1520,9 +1520,9 @@ So we need:
 -- but we also allow information about the *nodes* x₁ and x₂.
 -- Credit to Peter Kementzey for the original mapEdges function.
 def mapEdgesWithNodes (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Graph ℕ Float := ⟨
-  g.vertices.map (λ vertex => 
-    { vertex with adjacencyList := vertex.adjacencyList.map (λ edge =>
-      { edge with weight := f vertex.payload edge.target edge.weight }
+  g.vertices.map (fun vertex => 
+    { vertex with successors := vertex.successors.map (fun 
+      ⟨target, weight⟩ => ⟨target, f vertex.label target weight⟩
   )})
 ⟩
 
@@ -1896,12 +1896,12 @@ lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
 theorem hebb_weights₁ (net : BFNN) : 
   n ∉ propagate net A
   → ∀ (i : ℕ),
-    (getEdgeWeight (hebb_star net A).toNet.graph ((preds net n).get! i) n =
-    getEdgeWeight net.toNet.graph ((preds net n).get! i) n) := by
+    ((hebb_star net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
+    net.toNet.graph.getEdgeWeight ((preds net n).get! i) n) := by
 --------------------------------------------------------------------
   intro h₁
   intro i
-  apply hebb_lift _ _ (fun x => getEdgeWeight x.toNet.graph ((preds net n).get! i) n)
+  apply hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n)
   simp only [hebb, graph_update]
 
   sorry
@@ -1914,12 +1914,12 @@ theorem hebb_weights₁ (net : BFNN) :
 theorem hebb_weights₂ (net : BFNN) : 
   (∀ x, x ∈ preds net n → x ∉ propagate net A)
   → ∀ (i : ℕ),
-    (getEdgeWeight (hebb_star net A).toNet.graph ((preds net n).get! i) n =
-    getEdgeWeight net.toNet.graph ((preds net n).get! i) n) := by
+    ((hebb_star net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
+    net.toNet.graph.getEdgeWeight ((preds net n).get! i) n) := by
 --------------------------------------------------------------------
   intro h₁
   intro i
-  apply hebb_lift _ _ (fun x => getEdgeWeight x.toNet.graph ((preds net n).get! i) n)
+  apply hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n)
   sorry
 
 
@@ -2219,7 +2219,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               simp at h₁
               convert h₁ using 5
               rename_i i
-              generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+              generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
               generalize hLm : layer net m = Lm
               conv at IH => -- rewrite 'layers' in IH
                 enter [L, hL, m, hLm, 1]
@@ -2230,7 +2230,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               have h₇ : m ∈ preds net n := by
                 rw [symm hm]
                 simp [preds]
-                exact get!_mem (predecessors net.toNet.graph n).data i
+                exact get!_mem (net.toNet.graph.predecessors n) i
               have h₈ : Lm ≤ L := by
                 rw [symm hLm]
                 apply Nat.lt_succ.mp
@@ -2267,7 +2267,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           simp at h₁
           convert h₁ using 5
           rename_i i
-          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
           conv at IH => -- rewrite 'layers' in IH
             enter [L, hL, m, hLm, 1]
@@ -2278,7 +2278,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           have h₂ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (predecessors net.toNet.graph n).data i
+            exact get!_mem (net.toNet.graph.predecessors n) i
           have h₃ : Lm ≤ L := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -2390,7 +2390,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               simp at h₁
               convert h₁ using 5
               rename_i i
-              generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+              generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
               generalize hLm : layer net m = Lm
               conv at IH => -- rewrite 'layers' in IH
                 enter [L, hL, m, hLm, 1]
@@ -2401,7 +2401,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               have h₇ : m ∈ preds net n := by
                 rw [symm hm]
                 simp [preds]
-                exact get!_mem (predecessors net.toNet.graph n).data i
+                exact get!_mem (net.toNet.graph.predecessors n) i
               have h₈ : Lm ≤ L := by
                 rw [symm hLm]
                 apply Nat.lt_succ.mp
@@ -2439,7 +2439,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           simp at h₁
           convert h₁ using 5
           rename_i i
-          generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
           conv at IH => -- rewrite 'layers' in IH
             enter [L, hL, m, hLm, 1]
@@ -2450,7 +2450,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           have h₂ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (predecessors net.toNet.graph n).data i
+            exact get!_mem (net.toNet.graph.predecessors n) i
           have h₃ : Lm ≤ L := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
