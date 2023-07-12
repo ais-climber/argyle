@@ -1652,80 +1652,6 @@ example : example_net ≡ example_net :=
   ⟨fun _ _ h => h, fun _ _ h => h⟩  
 
 
--- propagate_N (S) = propagate_hebb(N, S) (S)
--- This essentially says that repeated hebbian update
--- is well-defined; *after* updating on S, we can update
--- on S again and increase weights within the same propagation.
--- (The propagation of S doesn't suddenly change, which is
---  something we might be worried about.)
--- TODO: Not sure if I need this anymore!
--- It's somewhat interesting, but might not help with the
--- reduction.
--- --------------------------------------------------------------------
--- theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
---   propagate (hebb net S) S = propagate net S := by
--- --------------------------------------------------------------------
---   apply ext
---   intro (n : ℕ)
---   simp only [Membership.mem, Set.Mem, propagate]
-
---   -- By induction on the layer of the net containing n
---   generalize hL : layer net n = L
---   induction L using Nat.case_strong_induction_on generalizing n
-
---   -- Base Step
---   case hz =>
---     apply Iff.intro
---     case mp => 
---       simp only [propagate_acc]
---       exact fun x => x
---     case mpr => 
---       simp only [propagate_acc]
---       exact fun x => x
-
---   -- Inductive Step
---   case hi k IH => 
---     apply Iff.intro
-
---     -- Forward Direction
---     case mp => 
---       intro h₁
---       simp only [propagate_acc] at h₁
---       simp only [propagate_acc]
-
---       cases h₁
---       case inl h₂ => exact Or.inl h₂
---       case inr h₂ =>
---         apply Or.inr
-
---         -- TODO: This is the stuff that should go in the activ_agree lemma!        
---         simp
---         simp at h₂
---         sorry
---         -- I do not have the tools to show this at this point.
---         -- I need a lemma about activations in the hebbian updated net.
-
---         -- show_term convert h₂
-
---     -- Backwards Direction
---     case mpr => sorry
-
--- This says that 'hebb_star' is a fixed point of 'hebb'
--- (with respect to ≡).  i.e. in the following sense, f(X) = X:
---   hebb(X, S) ≡ X,
--- where X = hebb_star net S
--- 
--- I may need additional lemmas (e.g. an activation function
--- within Prop(S) in hebb_star will simply go through.)
--- 
--- One important lemma:  If an edge is not in the propagation of S,
--- its weight is unaffected.
---------------------------------------------------------------------
-theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) : 
-  hebb (hebb_star net S) S ≡ hebb_star net S := by 
---------------------------------------------------------------------
-  sorry
-
 /-══════════════════════════════════════════════════════════════════
   Properties of Single-Iteration Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
@@ -2008,15 +1934,32 @@ theorem hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
 -- -- If *some* predecessor of n is ∈ Prop(A), and n ∈ Prop(A), then
 -- -- if m is activated in (hebb_star net) then n is too
 -- -- (the activation automatically goes through in (hebb_star net))
--- --------------------------------------------------------------------
--- theorem hebb_activ₃ (net : BFNN) :
---   n ∈ propagate net A
---   → m ∈ preds net n ∧ m ∈ propagate net A
---   → m ∈ propagate (hebb_star net A) B
---   → activ (hebb_star net A) prev_activ m := by
--- --------------------------------------------------------------------
---   sorry
+--------------------------------------------------------------------
+theorem hebb_activ₃ (net : BFNN) (A B : Set ℕ) :
+  let preds := preds net n
+  let prev_activ := do
+    let i <- List.range preds.length
+    let m := preds.get! i
+    return if propagate_acc (hebb_star net A) B m 
+      (layer (hebb_star net A) m) then 1.0 else 0.0
+  
+  n ∈ propagate net A
+  → m ∈ preds ∧ m ∈ propagate net A  
+  → m ∈ propagate (hebb_star net A) B
+  → activ (hebb_star net A) prev_activ n := by
+--------------------------------------------------------------------
+  intro preds
+  intro prev_activ
+  intro h₁
+  intro h₂
+  intro h₃
 
+  simp only [activ]
+  rw [hebb_activation net A]
+  rw [hebb_preds net A]
+  
+  sorry -- I have the proof written on paper, I should consult that.
+        -- Depends on things like the monotonicity of 'activation', etc.
 
 
 -- If there is a path within Prop(A) from B to n, then, since this
@@ -2029,18 +1972,61 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
   intro (n : ℕ)
   intro h₁
   
-  -- We have a path from Prop(B) to n, going through Prop(A).
-  match h₁ with
-  | ⟨m, hm⟩ => 
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
 
-    -- By induction on the length of this path
-    induction hm.2
-    case trivial path_mm => exact hebb_extensive _ _ _ hm.1
-    case from_path v w path_mv edge_vw w_in_propA IH => 
-      -- This edge from v to w is key;
-      -- Got to go inside hebb_star to see what it's updating.
-      sorry
+  --------------------------------
+  -- Base Step
+  --------------------------------
+  -- Easy; after simplifying, show that n ∈ B → n ∈ B.
+  case hz => sorry
 
+  --------------------------------
+  -- Inductive Step
+  --------------------------------
+  case hi L IH₁ => 
+    -- We have a path from Prop(B) to n, going through Prop(A).
+    match h₁ with
+    | ⟨m, hm⟩ => 
+
+      -- By induction on the length of this path
+      induction hm.2
+
+      case trivial path_mm => exact hebb_extensive _ _ _ hm.1
+      case from_path x y path_mx edge_xy hy IH₂ => 
+        -- Split by whether y ∈ B in order to simplify propagate_acc
+        by_cases y ∈ B
+        case pos => exact propagate_is_extens _ _ h
+        case neg =>
+          -- Simplifications and rewriting
+          simp only [propagate, Membership.mem, Set.Mem]
+          rw [hebb_layers]
+          rw [hL]
+          rw [simp_propagate_acc _ h]
+          simp
+
+          -- Apply our inductive hypothesis: x ∈ Prop(B) in (hebb_star net) 
+          have hpreds : x ∈ preds net y := sorry
+          have hx_A : x ∈ propagate net A := sorry 
+          have hx_B : x ∈ propagate (hebb_star net A) B := sorry
+
+          -- Apply hebb_activ₃, which says:
+          --  x, y ∈ Prop(A)
+          --  There's an edge from x ⟶ y
+          --  x ∈ Prop(B) in (hebb_star net)
+          --  -------------------------------
+          --  y is activ in hebb_star net
+          sorry
+          -- TODO: this takes forever.  Why doesn't it just work?
+          -- exact hebb_activ₃ net A B hy ⟨hpreds, hx_A⟩ hx_B
+
+/-
+  n ∈ propagate net A
+  → m ∈ preds ∧ m ∈ propagate net A  
+  → m ∈ propagate (hebb_star net A) B
+  → activ (hebb_star net A) prev_activ n := by
+-/
 
 /-══════════════════════════════════════════════════════════════════
   Reduction for Unstable Hebbian Update
@@ -2571,3 +2557,81 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
 
 
 
+
+
+-- propagate_N (S) = propagate_hebb(N, S) (S)
+-- This essentially says that repeated hebbian update
+-- is well-defined; *after* updating on S, we can update
+-- on S again and increase weights within the same propagation.
+-- (The propagation of S doesn't suddenly change, which is
+--  something we might be worried about.)
+-- TODO: Not sure if I need this anymore!
+-- It's somewhat interesting, but might not help with the
+-- reduction.
+-- --------------------------------------------------------------------
+-- theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
+--   propagate (hebb net S) S = propagate net S := by
+-- --------------------------------------------------------------------
+--   apply ext
+--   intro (n : ℕ)
+--   simp only [Membership.mem, Set.Mem, propagate]
+
+--   -- By induction on the layer of the net containing n
+--   generalize hL : layer net n = L
+--   induction L using Nat.case_strong_induction_on generalizing n
+
+--   -- Base Step
+--   case hz =>
+--     apply Iff.intro
+--     case mp => 
+--       simp only [propagate_acc]
+--       exact fun x => x
+--     case mpr => 
+--       simp only [propagate_acc]
+--       exact fun x => x
+
+--   -- Inductive Step
+--   case hi k IH => 
+--     apply Iff.intro
+
+--     -- Forward Direction
+--     case mp => 
+--       intro h₁
+--       simp only [propagate_acc] at h₁
+--       simp only [propagate_acc]
+
+--       cases h₁
+--       case inl h₂ => exact Or.inl h₂
+--       case inr h₂ =>
+--         apply Or.inr
+
+--         -- TODO: This is the stuff that should go in the activ_agree lemma!        
+--         simp
+--         simp at h₂
+--         sorry
+--         -- I do not have the tools to show this at this point.
+--         -- I need a lemma about activations in the hebbian updated net.
+
+--         -- show_term convert h₂
+
+--     -- Backwards Direction
+--     case mpr => sorry
+
+-- This says that 'hebb_star' is a fixed point of 'hebb'
+-- (with respect to ≡).  i.e. in the following sense, f(X) = X:
+--   hebb(X, S) ≡ X,
+-- where X = hebb_star net S
+-- 
+-- I may need additional lemmas (e.g. an activation function
+-- within Prop(S) in hebb_star will simply go through.)
+-- 
+-- One important lemma:  If an edge is not in the propagation of S,
+-- its weight is unaffected.
+-- 
+-- NOTE: Not sure if I need this before.  It's interesting,
+-- but I'm not sure if it helps with the proof for the reduction.
+-- --------------------------------------------------------------------
+-- theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) : 
+--   hebb (hebb_star net S) S ≡ hebb_star net S := by 
+-- --------------------------------------------------------------------
+--   sorry
