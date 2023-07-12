@@ -527,7 +527,7 @@ axiom get!_mem {α : Type} [Inhabited α] :
 
 @[simp]
 def preds (net : BFNN) (n : ℕ): List ℕ :=
-  net.toNet.graph.predecessors n
+  net.graph.predecessors n
 
 --------------------------------------------------------------------
 theorem edge_from_preds (net : BFNN) (m n : ℕ) :
@@ -575,10 +575,6 @@ def layer_acc (net : BFNN) (n : ℕ) (ls : List (Vertex ℕ Float)) : ℕ :=
   | [] => 0
   | ⟨_, _⟩ :: rest =>
       let layers := List.map (fun x => layer_acc net x rest) (preds net n)
-      -- let layers := do
-      --   let i <- List.range (preds net n).length
-      --   let m := (preds net n).get! i
-      --   return layer_acc net m rest
       let max := layers.maximum
       
       match max with
@@ -588,6 +584,7 @@ def layer_acc (net : BFNN) (n : ℕ) (ls : List (Vertex ℕ Float)) : ℕ :=
 def layer (net : BFNN) (n : ℕ) : ℕ :=
   layer_acc net n (net.graph.vertices.reverse)
 
+/- -- Put in test file!
 -- 0 jumps to 2, 1 jumps to 3, short connection from 1 to 2
 def layer_test_graph : Graph ℕ Float :=
   ⟨[⟨0, [⟨2, 0.5⟩]⟩, -- ⟨4, 0.5⟩
@@ -609,6 +606,7 @@ def layer_test_net : BFNN :=
 #eval layer layer_test_net 2
 #eval layer layer_test_net 3
 #eval layer layer_test_net 4
+-/
 
 -- AXIOM: We assume the net is fully connected!
 -- This is essentially the statement we need, which might
@@ -634,7 +632,7 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
     -- This case is impossible;
     -- m ∈ preds(n) means that there is *something* in the graph.
     -- This contradicts the fact that the graph is empty!
-    have h₂ : net.toNet.graph.vertices = [] := sorry
+    have h₂ : net.graph.vertices = [] := sorry
 
     simp [preds, Graph.predecessors, Graph.get_vertices] at h₁
     rw [h₂] at h₁
@@ -642,48 +640,30 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
     rw [List.filter_nil] at h₁
     exact False.elim ((List.mem_nil_iff _).mp h₁)
 
-  case cons vertex rest IH => sorry
+  case cons vertex rest IH =>
+    generalize hmax : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max
+    -- generalize hmax_m : (List.map (fun x => layer_acc net x rest) (preds net m)).maximum = max_m
+    -- let max := layers.maximum
+    
+    simp only [layer_acc]
+    match max with
+    | none =>
+        -- This case is also impossible;
+        -- m ∈ preds(n) means that there is *some* maximum in preds(n),
+        -- which contradicts the fact that the max is empty. 
+        rw [hmax]
+        conv => rhs; simp
 
+        sorry
 
-  -- let ls := net.graph.vertices.reverse
-
-  -- induction ls
-  -- case nil => 
-  --   simp [layer, layer_acc]
-  --   sorry
-  -- case cons vertex rest IH => exact IH   
-
-  -- let layers := do
-  --   let m <- preds net n
-  --   return layer net m
-  -- let max := layers.maximum
-
-  -- induction max
-  -- case none =>
-  --   -- simp [layer]
-  --   sorry
-
-  -- case some L => 
-  --   -- simp [layer]
-
-  --   sorry  
-
-  -- cases max
-  -- case none => sorry
-  -- case some L => sorry
-
-  -- -- By induction on the maximum layer of n's predecessors.
-  -- induction max
-
-  -- -- Case: There are *no* predecessors of n whatsoever.  This
-  -- -- should give us a contradiction.
-  -- case none => 
-  --   sorry
-
-  -- -- Case: There is *some* predecessor of layer L.  So
-  -- -- layer(m)  ≤  (max = L)  <  (layer(n) = L+1)
-  -- case some _ L => 
-  --   sorry
+    | some L =>
+        -- layer(m)  ≤  max({layer(v) | v ∈ preds(n)})  <  layer(n)
+        rw [hmax]
+        conv => rhs; simp
+        sorry
+        
+        -- I'm not sure how to proceed...
+        
 
 noncomputable
 def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
@@ -839,13 +819,13 @@ lemma simp_propagate_acc (net : BFNN) :
 --   simp at h₂
 --   convert h₂ using 5
 --   rename_i i
---   generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+--   generalize hm : List.get! (predecessors net.graph n).data i = m
 --   -- generalize hLm : layer net m = Lm
 
 --   have h₃ : m ∈ preds net n := by
 --     rw [symm hm]
 --     simp [preds]
---     exact get!_mem (predecessors net.toNet.graph n).data i
+--     exact get!_mem (predecessors net.graph n).data i
 --   have h₄ : layer net m ≤ layer net n := by
 --     apply le_of_lt
 --     exact preds_decreasing net m n h₃
@@ -874,7 +854,7 @@ lemma simp_propagate_acc (net : BFNN) :
 
 --   convert h₂ using 5
 --   rename_i i
---   generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+--   generalize hm : List.get! (predecessors net.graph n).data i = m
 --   sorry
   -- -- Just go in and subsitute m ∈ A for m ∈ B.
   -- intro (h₁ : ∀ (m : ℕ), layer net m ≤ layer net n → (m ∈ A ↔ m ∈ B))
@@ -884,13 +864,13 @@ lemma simp_propagate_acc (net : BFNN) :
   -- simp at h₂
   -- convert h₂ using 5
   -- rename_i i
-  -- generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+  -- generalize hm : List.get! (predecessors net.graph n).data i = m
   -- -- generalize hLm : layer net m = Lm
 
   -- have h₃ : m ∈ preds net n := by
   --   rw [symm hm]
   --   simp [preds]
-  --   exact get!_mem (predecessors net.toNet.graph n).data i
+  --   exact get!_mem (predecessors net.graph n).data i
   -- have h₄ : layer net m ≤ layer net n := by
   --   apply le_of_lt
   --   exact preds_decreasing net m n h₃
@@ -1016,14 +996,14 @@ theorem propagate_is_idempotent :
           simp at h₁
           convert h₁ using 5
           rename_i i
-          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+          generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
 
           -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (net.toNet.graph.predecessors n) i
+            exact get!_mem (net.graph.predecessors n) i
           have h₄ : Lm ≤ k := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -1097,14 +1077,14 @@ theorem propagate_is_cumulative :
           simp at h₃
           convert h₃ using 5
           rename_i i
-          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+          generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
 
           -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (net.toNet.graph.predecessors n) i
+            exact get!_mem (net.graph.predecessors n) i
           have h₄ : Lm ≤ k := by 
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -1141,14 +1121,14 @@ theorem propagate_is_cumulative :
           simp at h₃
           convert h₃ using 5
           rename_i i
-          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+          generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
 
           -- Apply the inductive hypothesis!
           have h₃ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (net.toNet.graph.predecessors n) i
+            exact get!_mem (net.graph.predecessors n) i
           have h₄ : Lm ≤ k := by 
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -1275,7 +1255,7 @@ theorem reach_is_extens (net : BFNN) : ∀ (A B : Set ℕ),
         (B : Set ℕ)
         (n : ℕ) (h₁ : n ∈ A ∩ B)
 
-  have (h₂ : focusedPath net.toNet.graph A n n) := 
+  have (h₂ : focusedPath net.graph A n n) := 
     focusedPath.trivial h₁.1
   exact ⟨n, ⟨h₁.2, h₂⟩⟩
 
@@ -1385,14 +1365,14 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
 --         simp at h₂
 --         convert h₂ using 5
 --         rename_i i
---         generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+--         generalize hm : List.get! (predecessors net.graph n).data i = m
 --         generalize hLm : layer net m = Lm
 
 --         -- Apply the inductive hypothesis!
 --         have h₄ : m ∈ preds net n := by
 --           rw [symm hm]
 --           simp [preds]
---           exact get!_mem (predecessors net.toNet.graph n).data i
+--           exact get!_mem (predecessors net.graph n).data i
 --         have h₅ : Lm ≤ k := by
 --           rw [symm hLm]
 --           apply Nat.lt_succ.mp
@@ -1427,14 +1407,14 @@ theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
 --         simp at h₂
 --         convert h₂ using 5
 --         rename_i i
---         generalize hm : List.get! (predecessors net.toNet.graph n).data i = m
+--         generalize hm : List.get! (predecessors net.graph n).data i = m
 --         generalize hLm : layer net m = Lm
 
 --         -- Apply the inductive hypothesis!
 --         have h₄ : m ∈ preds net n := by
 --           rw [symm hm]
 --           simp [preds]
---           exact get!_mem (predecessors net.toNet.graph n).data i
+--           exact get!_mem (predecessors net.graph n).data i
 --         have h₅ : Lm ≤ k := by
 --           rw [symm hLm]
 --           apply Nat.lt_succ.mp
@@ -1516,10 +1496,11 @@ So we need:
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- A richer form of mapEdges.  We update the edge weight x₁ ⟶ x₂,
--- but we also allow information about the *nodes* x₁ and x₂.
+-- A function to map edges in the graph.  
+-- We update the edge weight x₁ ⟶ x₂, but we also allow information 
+-- about the *nodes* x₁ and x₂.
 -- Credit to Peter Kementzey for the original mapEdges function.
-def mapEdgesWithNodes (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Graph ℕ Float := ⟨
+def map_edges (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Graph ℕ Float := ⟨
   g.vertices.map (fun vertex => 
     { vertex with successors := vertex.successors.map (fun 
       ⟨target, weight⟩ => ⟨target, f vertex.label target weight⟩
@@ -1530,10 +1511,40 @@ def mapEdgesWithNodes (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float
 -- of that edge by η * act(m) * act(n).
 noncomputable
 def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Float :=
-  mapEdgesWithNodes g (fun m n weight => 
+  map_edges g (fun m n weight => 
     let activ_m := if m ∈ propagate net S then 1.0 else 0.0
     let activ_n := if n ∈ propagate net S then 1.0 else 0.0
     weight + (net.rate * activ_m * activ_n))
+
+-- This graph update does not affect the vertices of the graph.
+--------------------------------------------------------------------
+lemma graph_update_vertices (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
+  (graph_update net net.graph S).get_vertices = net.graph.get_vertices := by
+--------------------------------------------------------------------
+  simp only [graph_update, map_edges]
+  simp only [Graph.get_vertices]
+
+  -- Go in and compose the maps.  This seems to do the trick.
+  conv => lhs; rw [List.map_map]
+
+
+-- This graph update does not affect the *successor/edge* structure
+-- of the graph (it only affects weights!!!)
+--------------------------------------------------------------------
+lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (n : ℕ) :
+  (graph_update net net.graph S).successors n = net.graph.successors n := by
+--------------------------------------------------------------------
+  simp only [graph_update, map_edges] -- map_edges
+  simp only [Graph.successors]
+
+  -- Go in and rewrite the 'unzip' as a 'map'
+  rw [List.unzip_eq_map]
+  rw [List.unzip_eq_map]
+  simp only [Prod.fst]
+
+  -- Now go in and compose the maps.
+  -- conv => lhs; rw [List.map_map]
+  sorry -- Why the FUCK won't this rewrite work???
 
 
 -- A single step of Hebbian update.
@@ -1719,34 +1730,37 @@ theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) :
   Properties of Single-Iteration Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- Hebbian update hebb_star does not affect the predecessors
--- of any node.
+-- A single round of Hebbian update does not affect the predecessors
+-- of any node.  To prove this, we just show that Hebbian update
+-- does not affect the vertices of the graph, or the successor
+-- structure of the graph.
 --------------------------------------------------------------------
-theorem hebb_once_preds (net : BFNN) (S : Set ℕ) : 
+theorem hebb_once_preds (net : BFNN) (S : Set ℕ) (n : ℕ) : 
   preds (hebb net S) n = preds net n := by
 --------------------------------------------------------------------
-  have h₁ : ∀ m, m ∈ preds (hebb net S) n ↔ m ∈ preds net n := by
-    intro m
-    rw [edge_from_preds net m n]
-    rw [edge_from_preds (hebb net S) m n]
-    
-    simp only [hebb, graph_update]
-    -- I might have to change the definition of graph_update
-    -- to encourage 'rfl' to match up the right things
-    -- (only the *weights* are changing; everything else is
-    --  staying the same!)
-    sorry
-    
-  sorry -- now connect it to the original claim
+  simp only [preds, hebb]
+  simp only [Graph.predecessors]
+  congr 1
+
+  -- graph_update doesn't affect successors of a node
+  case _ => 
+    funext v
+    congr 2
+    exact graph_update_successors _ (net.graph) _ v
+
+  -- graph_update doesn't affect vertices of the graph
+  case _ => exact graph_update_vertices _ (net.graph) _
+
   
 -- A single round of Hebbian update hebb does not affect which 
 -- neurons are on which layer of the net.
+-- TODO: Try induction on the graph, the way I usually prove
+-- things about the layers???
 --------------------------------------------------------------------
 theorem hebb_once_layers (net : BFNN) (S : Set ℕ) : 
   layer (hebb net S) n = layer net n := by
 --------------------------------------------------------------------
   sorry
-
 
 -- A single round of Hebbian update hebb does not affect the 
 -- activation function.
@@ -1760,9 +1774,29 @@ theorem hebb_once_activation (net : BFNN) (S : Set ℕ) :
 -- reachability (It only affects the edge weights)
 --------------------------------------------------------------------
 theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) : 
-  reachable (hebb net A) B = reachable net B := by 
+  reachable (hebb net A) A B = reachable net A B := by 
 --------------------------------------------------------------------
-  sorry
+  apply ext
+  intro (n : ℕ)
+  -- simp only [reachable]
+  
+  apply Iff.intro
+  case mp => 
+    intro h₁
+    exact match h₁ with
+    | ⟨m, hm⟩ => by -- ⟨m, ⟨hm.1, _⟩⟩ 
+      induction hm.2
+      case trivial => exact ⟨m, ⟨hm.1, sorry⟩⟩  
+      case from_path x y path_mx edge_xy hy IH =>
+        -- Drop the path and edge from (hebb net) to the original net.
+        -- Wait -- where do we apply the IH???
+        -- have h₂ : focusedPath (hebb net A).toNet.graph A m x := sorry -- use path_mx
+        -- have h₃ : Graph.hasEdge net.graph x y = true := sorry -- use edge_xy
+        
+        have h₂ : x ∈ reachable net A B := sorry -- Apply IH!
+        have h₃ : Graph.hasEdge net.graph x y = true := sorry
+        exact ⟨m, ⟨hm.1, (focusedPath.from_path sorry h₃ hy)⟩⟩ 
+  case mpr => sorry
 
 
 -- This lemma allows us to "lift" equational properties of hebb 
@@ -1787,7 +1821,7 @@ theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) :
 theorem hebb_preds (net : BFNN) (S : Set ℕ) : 
   preds (hebb_star net S) n = preds net n := by
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => preds x n) (hebb_once_preds _ _)
+  exact hebb_lift _ _ (fun x => preds x n) (hebb_once_preds _ _ _)
   
 -- Hebbian update hebb_star does not affect which neurons are
 -- on which layer of the net.
@@ -1813,11 +1847,10 @@ theorem hebb_activation (net : BFNN) (S : Set ℕ) :
 -- -- [LIFTED from hebb_once_reach]
 --------------------------------------------------------------------
 theorem hebb_reach (net : BFNN) (A B : Set ℕ) : 
-  reachable (hebb_star net A) B = 
-    reachable net B := by 
+  reachable (hebb_star net A) A B = 
+    reachable net A B := by 
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => reachable x B) (hebb_once_reach _ _ _)
-  
+  exact hebb_lift _ _ (fun x => reachable x A B) (hebb_once_reach _ _ _)
   
 -- Every net N is a subnet of (hebb_star N)
 -- (i.e. hebb_star includes the previous propagations)
@@ -1897,7 +1930,7 @@ theorem hebb_weights₁ (net : BFNN) :
   n ∉ propagate net A
   → ∀ (i : ℕ),
     ((hebb_star net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
-    net.toNet.graph.getEdgeWeight ((preds net n).get! i) n) := by
+    net.graph.getEdgeWeight ((preds net n).get! i) n) := by
 --------------------------------------------------------------------
   intro h₁
   intro i
@@ -1915,7 +1948,7 @@ theorem hebb_weights₂ (net : BFNN) :
   (∀ x, x ∈ preds net n → x ∉ propagate net A)
   → ∀ (i : ℕ),
     ((hebb_star net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
-    net.toNet.graph.getEdgeWeight ((preds net n).get! i) n) := by
+    net.graph.getEdgeWeight ((preds net n).get! i) n) := by
 --------------------------------------------------------------------
   intro h₁
   intro i
@@ -2219,7 +2252,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               simp at h₁
               convert h₁ using 5
               rename_i i
-              generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+              generalize hm : List.get! (net.graph.predecessors n) i = m
               generalize hLm : layer net m = Lm
               conv at IH => -- rewrite 'layers' in IH
                 enter [L, hL, m, hLm, 1]
@@ -2230,7 +2263,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               have h₇ : m ∈ preds net n := by
                 rw [symm hm]
                 simp [preds]
-                exact get!_mem (net.toNet.graph.predecessors n) i
+                exact get!_mem (net.graph.predecessors n) i
               have h₈ : Lm ≤ L := by
                 rw [symm hLm]
                 apply Nat.lt_succ.mp
@@ -2267,7 +2300,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           simp at h₁
           convert h₁ using 5
           rename_i i
-          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+          generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
           conv at IH => -- rewrite 'layers' in IH
             enter [L, hL, m, hLm, 1]
@@ -2278,7 +2311,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           have h₂ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (net.toNet.graph.predecessors n) i
+            exact get!_mem (net.graph.predecessors n) i
           have h₃ : Lm ≤ L := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
@@ -2390,7 +2423,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               simp at h₁
               convert h₁ using 5
               rename_i i
-              generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+              generalize hm : List.get! (net.graph.predecessors n) i = m
               generalize hLm : layer net m = Lm
               conv at IH => -- rewrite 'layers' in IH
                 enter [L, hL, m, hLm, 1]
@@ -2401,7 +2434,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               have h₇ : m ∈ preds net n := by
                 rw [symm hm]
                 simp [preds]
-                exact get!_mem (net.toNet.graph.predecessors n) i
+                exact get!_mem (net.graph.predecessors n) i
               have h₈ : Lm ≤ L := by
                 rw [symm hLm]
                 apply Nat.lt_succ.mp
@@ -2439,7 +2472,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           simp at h₁
           convert h₁ using 5
           rename_i i
-          generalize hm : List.get! (net.toNet.graph.predecessors n) i = m
+          generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
           conv at IH => -- rewrite 'layers' in IH
             enter [L, hL, m, hLm, 1]
@@ -2450,7 +2483,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           have h₂ : m ∈ preds net n := by
             rw [symm hm]
             simp [preds]
-            exact get!_mem (net.toNet.graph.predecessors n) i
+            exact get!_mem (net.graph.predecessors n) i
           have h₃ : Lm ≤ L := by
             rw [symm hLm]
             apply Nat.lt_succ.mp
