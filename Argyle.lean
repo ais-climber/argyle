@@ -1518,7 +1518,7 @@ def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Fl
 
 -- This graph update does not affect the vertices of the graph.
 --------------------------------------------------------------------
-lemma graph_update_vertices (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
+lemma graph_update_vertices (net : BFNN) (_ : Graph ℕ Float) (S : Set ℕ) :
   (graph_update net net.graph S).get_vertices = net.graph.get_vertices := by
 --------------------------------------------------------------------
   simp only [graph_update, map_edges]
@@ -1649,7 +1649,7 @@ infixl:65   " ≡ " => net_eq
 
 -- A super easy example, just to briefly test ≼ and ≡
 example : example_net ≡ example_net :=
-  ⟨fun S n h => h, fun S n h => h⟩  
+  ⟨fun _ _ h => h, fun _ _ h => h⟩  
 
 
 -- propagate_N (S) = propagate_hebb(N, S) (S)
@@ -2065,34 +2065,82 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
     apply Iff.intro
     case mpr => exact fun h₁ => hebb_extensive _ _ _ h₁
     case mp =>
+      intro h₁
+
       -- Split by whether n ∈ B, in order to simplify propagate_acc
       by_cases n ∈ B
-      case pos => exact fun h₁ => propagate_is_extens _ _ h
-      case neg => 
-        intro h₁
+      case pos => exact propagate_is_extens _ _ h
+      case neg =>
+        -- Proof Idea:
+        -- Since n ∈ Prop(B) in (hebb_star net),
+        -- its active predecessors m are ∈ Prop(B) in (hebb_star net).
+        -- But by IH these m ∈ Prop(B) in the original net.
+        -- Since Prop(A) ∩ Prop(B) is empty, these m ∉ Prop(A).
+        -- 
+        -- By [lemma activ₂], Prop(B) is the same in both nets.
+        
+        -- Simplifications and rewriting, to prepare for IH
+        simp only [propagate, Membership.mem, Set.Mem]
+        simp only [propagate, Membership.mem, Set.Mem] at h₁
+        simp only [propagate, Membership.mem, Set.Mem] at IH
+        rw [hebb_layers] at h₁
+        rw [hL] at h₁
+        rw [hL]
+        rw [simp_propagate_acc _ h]
+        rw [simp_propagate_acc _ h] at h₁
+        
+        sorry
 
-        -- From here, we split *again*, depending on whether n ∈ Prop(A).
-        by_cases n ∈ propagate net A
-
-        ---------------------
-        -- Case 1: n ∈ Prop(A)
-        ---------------------
-        case pos => sorry
-
+        /-
         ---------------------
         -- Case 1: n ∉ Prop(A)
         ---------------------
-        case neg => sorry
+        -- In this case, the activ's are the same, so we can
+        -- straightforwardly apply our inductive hypothesis.
+        case neg =>
+          -- We get ready to simplify propagate_acc
+          rename_i n_not_in_B
 
+          -- Simplifications and rewriting, to prepare for IH
+          -- We also rewrite the 'preds', 'layers', and 'activ'
+          -- for (hebb_star net) in terms of the original 'net'.
+          simp only [propagate, Membership.mem, Set.Mem]
+          simp only [propagate, Membership.mem, Set.Mem] at h₁
+          simp only [propagate, Membership.mem, Set.Mem] at IH
+          rw [hebb_layers] at h₁
+          rw [hL] at h₁
+          rw [hL]
+          rw [simp_propagate_acc _ n_not_in_B]
+          rw [simp_propagate_acc _ n_not_in_B] at h₁
 
-  -- -- Backwards direction is easy;
-  -- -- As for forward direction, TODO
-  -- apply Iff.intro
-  -- case mpr => exact fun h₁ => hebb_extensive _ _ _ h₁
-  -- case mp => 
-  --   intro h₁
-  --   sorry -- need to do induction!!!  (still easier than the big reduction)
+          rw [hebb_activ₁ _ _ _ h] at h₁ -- rewrite 'activ'
+          rw [hebb_preds net A] at h₁ --rewrite 'preds'
+          conv at h₁ => -- rewrite 'layers'
+            enter [2, 2, i, m, 1]
+            rw [hebb_layers net A]
+          simp
+          simp at h₁
+          convert h₁ using 5
+          rename_i i
+          generalize hm : List.get! (net.graph.predecessors n) i = m
+          generalize hLm : layer net m = Lm
+          conv at IH => -- rewrite 'layers' in IH
+            enter [L, hL, m, hLm]
+            rw [hebb_layers]
+            rw [hLm]
 
+          -- We are now ready to apply our inductive hypothesis!
+          have h₂ : m ∈ preds net n := by
+            rw [symm hm]
+            simp [preds]
+            exact get!_mem (net.graph.predecessors n) i
+          have h₃ : Lm ≤ L := by
+            rw [symm hLm]
+            apply Nat.lt_succ.mp
+            rw [symm hL]
+            exact preds_decreasing net m n h₂
+          exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
+          -/
 
 --------------------------------------------------------------------
 theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) : 
