@@ -84,6 +84,12 @@ def prod_comprehens (xs : List α) (ys : List β) : List (α × β) :=
 -- vertices, but I will be relying on the fact that they come
 -- in this order.  My apologies.
 -- 
+-- WARNING: We will also assume that graphs are acyclic.
+-- But NOTHING in this file directly enforces that.
+-- Whenever I construct a new graph, I will check that
+-- it preserves acyclic-ness.  But when making a graph
+-- from scratch, kindly refrain from creating cycles.
+-- 
 -- These graphs are based on Peter Kementzey's 
 -- implementation, but modified slightly.
 -------------------------------------------------
@@ -346,6 +352,9 @@ axiom lt_or_ge_float : ∀ (x y : Float), x < y ∨ x ≥ y
 axiom le_not_lt_float : ∀ (x y : Float), x ≤ y → ¬ (y < x)
 axiom lt_le_lt_float : ∀ (x y z : Float), x < y → y ≤ z → x < z
 axiom zero_le_one_float : 0.0 ≤ 1.0
+axiom zero_mult : ∀ (x : Float), x * 0.0 = 0.0
+axiom zero_plus : ∀ (x : Float), x + 0.0 = x
+axiom commutative_mult_float : ∀ (x y : Float), x * y = y * x
 
 theorem binary_step_is_binary (x : Float) :
     (binary_step x = 0.0) ∨ (binary_step x = 1.0) :=
@@ -418,9 +427,6 @@ structure BFNN extends Net where
   -- The activation function is binary
   binary : ∀ (x : Float), 
     (activation x = 0.0) ∨ (activation x = 1.0)
-
-  -- Our graph is acyclic
-  acyclic : graph.is_acyclic
 
   -- The activation function is nondecreasing
   activ_nondecr : ∀ (x₁ x₂ : Float),
@@ -1507,6 +1513,24 @@ def map_edges (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Grap
   )})
 ⟩
 
+--------------------------------------------------------------------
+lemma map_edges_apply (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) (m n : ℕ) :
+  (map_edges g f).getEdgeWeight m n = (f m n (g.getEdgeWeight m n)) := by
+--------------------------------------------------------------------
+  -- I have no idea... this one's tough, and it's hard to see
+  -- what's going on.
+  simp only [Graph.getEdgeWeight, map_edges]
+  split
+  case _ op₁ target₁ weight₁ hop₁ => 
+    split
+    case _ op₂ target₂ weight₂ hop₂ => sorry
+    case _ op₂ hop₂ => sorry
+  case _ op₁ hop₁ => 
+    split
+    case _ op₂ target₂ weight₂ hop₂ => sorry
+    case _ op₂ hop₂ => sorry
+
+
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by η * act(m) * act(n).
 noncomputable
@@ -1515,6 +1539,8 @@ def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Fl
     let activ_m := if m ∈ propagate net S then 1.0 else 0.0
     let activ_n := if n ∈ propagate net S then 1.0 else 0.0
     weight + (net.rate * activ_m * activ_n))
+
+
 
 -- This graph update does not affect the vertices of the graph.
 --------------------------------------------------------------------
@@ -1547,6 +1573,31 @@ lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (
   sorry -- Why the FUCK won't this rewrite work???
 
 
+-- This graph update preserves whether the graph is acyclic.
+--------------------------------------------------------------------
+lemma graph_update_acyclic (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
+  (graph_update net g S).is_acyclic ↔ g.is_acyclic := by
+--------------------------------------------------------------------
+  simp only [Graph.is_acyclic]
+  apply Iff.intro
+  
+  case mp => sorry
+  case mpr =>
+    intro g_acyclic
+    intro u v
+    intro path_uv
+    intro path_vu
+
+    -- We have a path in the updated graph from u to v
+    -- and another path from v to u.
+    -- We now need to show that u = v.
+    -- By induction on the length of this first path.
+    induction path_uv
+    case trivial => exact rfl
+    case from_path x y path_ux edge_xy IH => 
+      sorry
+
+
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
 -- of all the edges x₁ ⟶ x₂ involved in that propagation
@@ -1555,73 +1606,7 @@ noncomputable
 def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
 { net with
   graph := graph_update net net.graph S
-
-  -- We have to ensure that the update doesn't create any cycles
-  -- (In this case, we're only changing the weights.)
-  acyclic := sorry
 }
-
-
--- Takes a graph update function 'f' (e.g. graph_update for Hebb)
--- and iterates it 'no_times' times.
--- netᵢ and Sᵢ are the initial inputs.
-def iterate (f : Graph ℕ Float → Set ℕ → Graph ℕ Float) 
-  (no_times : ℕ) (gᵢ : Graph ℕ Float) (Sᵢ : Set ℕ) : Graph ℕ Float :=
-  match no_times with
-  | Nat.zero => gᵢ
-  | Nat.succ k => f (iterate f k gᵢ Sᵢ) Sᵢ
-
-
--- We score neurons by the total sum of *negative* weights coming 
--- into them.  The neuron with the lowest score is the least likely
--- to activate (in the worst case where all of its negative signals
--- activate but none of its positive ones do).  If a neuron has
--- no negative incoming weights, we give it a score of 0.
-def neg_weight_score (net : BFNN) (n : ℕ) : Float :=
-  sorry
-
-
--- This is the exact number of iterations of Hebbian learning
--- on 'net' and 'S' that we need to make the network unstable,
--- i.e. any activation involved within Prop(S) simply goes through.
--- 
--- This is the trickiest part to get right -- we actually need
--- to *construct* this number, based on the net's activation
--- function and the edge weights within Prop(S)!
--- 
--- We first pick the neuron with the lowest 'neg_weight_score' n_min.
--- The number of iterations is that number which would (in the worst
--- case) guarantee that n_min gets activated.
--- 
--- If n_score is n_min's score, and X is that point at which
--- our activation function is guranteed to be 1.0, and η is the
--- learning rate, then we return
--- 
--- (X - n_score) / η   *(I think!)*
-def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
-  sorry
-  -- let x := choose net.activ_pos
-  -- have h₁ : net.activation x = 1.0 := sorry
-
-  -- let n_min := @List.minimum (Vertex ℕ Float) sorry sorry net.graph.vertices.toList
-  -- let n_score := sorry
-  -- sorry
-
--- Iterated hebbian update, up to a certain fixed point.
--- We implement this as a new net, whose graph is
--- 'graph_update' iterated 'hebb_unstable_point'
--- number of times.
--- FUTURE: Consider re-doing this using limits of graphs/categories
-noncomputable
-def hebb_star (net : BFNN) (S : Set ℕ) : BFNN := 
-{ net with
-  graph := iterate (graph_update net) (hebb_unstable_point net S) net.graph S
-  
-  -- We have to ensure that the update doesn't create any cycles
-  -- (In this case, we're only changing the weights.)
-  acyclic := sorry
-}
-
 
 
 /-══════════════════════════════════════════════════════════════════
@@ -1655,6 +1640,16 @@ example : example_net ≡ example_net :=
 /-══════════════════════════════════════════════════════════════════
   Properties of Single-Iteration Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
+
+-- First, we check that a single round of hebb preserves whether
+-- the graph is acyclic. (This is a rehash of graph_update_acyclic,
+-- but it helps to write it out so we can lift it later to hebb_star.)
+--------------------------------------------------------------------
+lemma hebb_once_acyclic (net : BFNN) (S : Set ℕ) : 
+  (hebb net S).graph.is_acyclic = net.graph.is_acyclic := by
+--------------------------------------------------------------------
+  simp only [hebb]
+  rw [graph_update_acyclic]
 
 -- A single round of Hebbian update does not affect the predecessors
 -- of any node.  To prove this, we just show that Hebbian update
@@ -1725,6 +1720,129 @@ theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) :
   case mpr => sorry
 
 
+-- If n ∉ Prop(A), then the weights in the *once* updated net are 
+-- the same as the weights in the original net.
+--------------------------------------------------------------------
+theorem hebb_once_weights₁ (net : BFNN) : 
+  n ∉ propagate net A
+  → ∀ (i : ℕ),
+    ((hebb net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
+    net.graph.getEdgeWeight ((preds net n).get! i) n) := by
+--------------------------------------------------------------------
+  intro h₁
+  intro i
+  simp only [hebb, graph_update]
+  rw [map_edges_apply _ _ _ _]
+
+  -- n ∉ propagate net A, and so the term that we're updating by
+  -- reduces to weight + 0 = weight.
+  rw [if_neg h₁]
+  rw [zero_mult]
+  rw [zero_plus]
+
+-- If every *active* predecessor of n ∉ Prop(A), then the weights in 
+-- the *once* updated net are the same as the weights in the original net.
+--------------------------------------------------------------------
+theorem hebb_once_weights₂ (net : BFNN) : 
+  let preds := preds net n
+  (∀ x, (x ∈ preds ∧ x ∈ propagate net B) → x ∉ propagate net A)
+  → ∀ (i : ℕ),
+    ((hebb net A).toNet.graph.getEdgeWeight (preds.get! i) n =
+    net.graph.getEdgeWeight (preds.get! i) n) := by
+--------------------------------------------------------------------
+  intro preds
+  intro h₁
+  intro i
+  simp only [hebb, graph_update]
+  rw [map_edges_apply _ _ _ _]
+
+  -- Since *every active* predecessor m of n ∉ propagate net A,
+  -- in particular (preds net n).get! i isn't (we have to
+  -- show that this one is active... how?).
+  -- So again this term that we're updating by reduces to 
+  -- weight + 0 = weight.
+  generalize hm : List.get! preds i = m
+  have mpreds : List.get! preds i ∈ preds := get!_mem preds i
+  rw [hm] at mpreds
+  
+  have mpropB : m ∈ propagate net B := sorry -- we will need to bake this in
+
+  rw [if_neg (h₁ m ⟨mpreds, mpropB⟩)]
+  rw [zero_mult]
+  rw [commutative_mult_float]
+  rw [zero_mult]
+  rw [zero_plus]
+
+
+/-══════════════════════════════════════════════════════════════════
+  "Iterated"/Fixed-Point Naive Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
+-- Takes a graph update function 'f' (e.g. graph_update for Hebb)
+-- and iterates it 'no_times' times.
+-- netᵢ and Sᵢ are the initial inputs.
+def iterate (f : Graph ℕ Float → Set ℕ → Graph ℕ Float) 
+  (no_times : ℕ) (gᵢ : Graph ℕ Float) (Sᵢ : Set ℕ) : Graph ℕ Float :=
+  match no_times with
+  | Nat.zero => gᵢ
+  | Nat.succ k => f (iterate f k gᵢ Sᵢ) Sᵢ
+
+-- We score neurons by the total sum of *negative* weights coming 
+-- into them.  The neuron with the lowest score is the least likely
+-- to activate (in the worst case where all of its negative signals
+-- activate but none of its positive ones do).  If a neuron has
+-- no negative incoming weights, we give it a score of 0.
+def neg_weight_score (net : BFNN) (n : ℕ) : Float :=
+  sorry
+
+
+-- This is the exact number of iterations of Hebbian learning
+-- on 'net' and 'S' that we need to make the network unstable,
+-- i.e. any activation involved within Prop(S) simply goes through.
+-- 
+-- This is the trickiest part to get right -- we actually need
+-- to *construct* this number, based on the net's activation
+-- function and the edge weights within Prop(S)!
+-- 
+-- We first pick the neuron with the lowest 'neg_weight_score' n_min.
+-- The number of iterations is that number which would (in the worst
+-- case) guarantee that n_min gets activated.
+-- 
+-- If n_score is n_min's score, and X is that point at which
+-- our activation function is guranteed to be 1.0, and η is the
+-- learning rate, then we return
+-- 
+-- (X - n_score) / η   *(I think!)*
+def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
+  sorry
+  -- let x := choose net.activ_pos
+  -- have h₁ : net.activation x = 1.0 := sorry
+
+  -- let n_min := @List.minimum (Vertex ℕ Float) sorry sorry net.graph.vertices.toList
+  -- let n_score := sorry
+  -- sorry
+
+-- Iterated hebbian update, up to a certain fixed point.
+-- We implement this as a new net, whose graph is
+-- 'graph_update' iterated 'hebb_unstable_point'
+-- number of times.
+-- FUTURE: Consider re-doing this using limits of graphs/categories
+noncomputable
+def hebb_star (net : BFNN) (S : Set ℕ) : BFNN := 
+{ net with
+  graph := iterate (graph_update net) (hebb_unstable_point net S) net.graph S
+}
+
+/-══════════════════════════════════════════════════════════════════
+  Facts we will need about the unstable point
+══════════════════════════════════════════════════════════════════-/
+
+
+
+/-══════════════════════════════════════════════════════════════════
+  Properties of "Iterated" Naive Hebbian Update
+══════════════════════════════════════════════════════════════════-/
+
 -- This lemma allows us to "lift" equational properties of hebb 
 -- to hebb_star.  (This holds *because* hebb_star is the fixed point
 -- of hebb.)
@@ -1735,10 +1853,14 @@ theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) :
 --------------------------------------------------------------------
   sorry
 
-
-/-══════════════════════════════════════════════════════════════════
-  Properties of "Iterated" Naive Hebbian Update
-══════════════════════════════════════════════════════════════════-/
+-- Hebbian update hebb_star preserves the acyclicness of the graph.
+-- (So the updated net is still acyclic.)
+-- [LIFTED from hebb_once_acyclic]
+--------------------------------------------------------------------
+lemma hebb_acyclic (net : BFNN) (S : Set ℕ) : 
+  (hebb_star net S).graph.is_acyclic = net.graph.is_acyclic := by
+--------------------------------------------------------------------
+  exact hebb_lift _ _ (fun x => x.graph.is_acyclic) (hebb_once_acyclic _ _)
 
 -- Hebbian update hebb_star does not affect the predecessors
 -- of any node.
@@ -1758,7 +1880,6 @@ theorem hebb_layers (net : BFNN) (S : Set ℕ) :
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => layer x n) (hebb_once_layers _ _)
 
-
 -- Hebbian update hebb_star does not affect the activation function.
 -- [LIFTED from hebb_once_activation]
 --------------------------------------------------------------------
@@ -1766,7 +1887,6 @@ theorem hebb_activation (net : BFNN) (S : Set ℕ) :
   (hebb_star net S).activation = net.activation := by 
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => x.activation) (hebb_once_activation _ _)
-
 
 -- Hebbian update hebb_star does not affect graph reachability
 -- (It only affects the edge weights)
@@ -1860,10 +1980,8 @@ theorem hebb_weights₁ (net : BFNN) :
 --------------------------------------------------------------------
   intro h₁
   intro i
-  apply hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n)
-  simp only [hebb, graph_update]
-
-  sorry
+  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n) 
+    (hebb_once_weights₁ _ h₁ _)
 
 -- If every *active* predecessor of n ∉ Prop(A), then the weights in the 
 -- updated net are the same as the weights in the original net.
@@ -1871,21 +1989,16 @@ theorem hebb_weights₁ (net : BFNN) :
 --------------------------------------------------------------------
 theorem hebb_weights₂ (net : BFNN) : 
   let preds := preds net n
-  let prev_activ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if propagate_acc (hebb_star net A) B m 
-      (layer (hebb_star net A) m) then 1.0 else 0.0
-  
   (∀ x, (x ∈ preds ∧ x ∈ propagate net B) → x ∉ propagate net A)
   → ∀ (i : ℕ),
     ((hebb_star net A).toNet.graph.getEdgeWeight (preds.get! i) n =
     net.graph.getEdgeWeight (preds.get! i) n) := by
 --------------------------------------------------------------------
+  intro preds
   intro h₁
   intro i
-  -- apply hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n)
-  sorry
+  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight (preds.get! i) n) 
+    (hebb_once_weights₂ _ h₁ _)
 
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
@@ -2103,8 +2216,8 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
         rw [simp_propagate_acc _ h]
         rw [simp_propagate_acc _ h] at h₁
 
-        -- Use hebb_activ₂, which says that if all
-        -- of the preds ∉ Prop(A), the activ's are the same.
+        -- Use hebb_activ₂, which says that if all of the *active* 
+        -- preds ∉ Prop(A), the activ's are the same.
         rw [hebb_preds net A] at h₁
         rw [hebb_activ₂ _ _ _ h₂] at h₁
         conv at h₁ => -- rewrite 'layers'
@@ -2280,8 +2393,8 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               rw [simp_propagate_acc _ n_not_in_B]
               rw [simp_propagate_acc _ n_not_in_reach] at h₁
               
-              -- TODO: Use hebb_activ₂, which says that if all
-              -- of the preds ∉ Prop(A), the activ's are the same.
+              -- TODO: Use hebb_activ₂, which says that if all of the 
+              -- *active* preds ∉ Prop(A), the activ's are the same.
               rw [hebb_preds net A] -- rewrite 'preds'
               rw [hebb_activ₂ _ _ _ h₆] -- rewrite 'activ'
               conv => -- rewrite 'layers'
@@ -2453,7 +2566,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               rw [simp_propagate_acc _ n_not_in_reach]
               
               -- TODO: Use hebb_activ₂, which says that if all
-              -- of the preds ∉ Prop(A), the activ's are the same.
+              -- of the *active* preds ∉ Prop(A), the activ's are the same.
               rw [hebb_preds net A] at h₁ -- rewrite 'preds'
               rw [hebb_activ₂ _ _ _ h₆] at h₁ -- rewrite 'activ'
               conv at h₁ => -- rewrite 'layers'
