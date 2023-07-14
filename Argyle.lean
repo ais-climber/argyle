@@ -598,21 +598,25 @@ axiom graph_ascending_order : ∀ (g : Graph ℕ Float) (m n : ℕ),
 -- Defined recursively on the *reverse* of the vertex list
 -- (this means we are looking at vertices backwards -- each
 --  vertex can only "see" the vertices preceding it.)
-def layer_acc (net : BFNN) (n : ℕ) (ls : List (Vertex ℕ Float)) : ℕ :=
-  match ls with -- net.graph.vertices.reverse
+def layer_acc (net : BFNN) (n : ℕ) (ls : List ℕ) : ℕ :=
+  match ls with
   | [] => 0
-  | ⟨_, _⟩ :: rest =>
+  | v :: rest =>
+    if v = n then
       let layers := List.map (fun x => layer_acc net x rest) (preds net n)
       let max := layers.maximum
-      
+
       match max with
       | some L => L + 1
       | none => 0
 
-def layer (net : BFNN) (n : ℕ) : ℕ :=
-  layer_acc net n (net.graph.vertices.reverse)
+    else layer_acc net n rest
 
-/- -- Put in test file!
+def layer (net : BFNN) (n : ℕ) : ℕ :=
+  layer_acc net n (net.graph.get_vertices.reverse)
+
+/-
+-- Put in test file!
 -- 0 jumps to 2, 1 jumps to 3, short connection from 1 to 2
 def layer_test_graph : Graph ℕ Float :=
   ⟨[⟨0, [⟨2, 0.5⟩]⟩, -- ⟨4, 0.5⟩
@@ -625,7 +629,7 @@ def layer_test_graph : Graph ℕ Float :=
 
 def layer_test_net : BFNN :=
   { graph := layer_test_graph, activation := binary_step, rate := 1.0,
-    binary := binary_step_is_binary, acyclic := sorry,
+    binary := binary_step_is_binary,
     activ_nondecr := binary_step_nondecr, activ_pos := sorry
   }
 
@@ -669,11 +673,14 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
     exact False.elim ((List.mem_nil_iff _).mp h₁)
 
   case cons vertex rest IH =>
-    generalize hmax : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max
+    -- generalize hmax : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max
+    -- simp only [layer_acc]
     -- generalize hmax_m : (List.map (fun x => layer_acc net x rest) (preds net m)).maximum = max_m
     -- let max := layers.maximum
     
-    simp only [layer_acc]
+    -- TODO: Try by cases?
+    sorry
+    /-
     match max with
     | none =>
         -- This case is also impossible;
@@ -691,7 +698,7 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
         sorry
         
         -- I'm not sure how to proceed...
-        
+    -/  
 
 noncomputable
 def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
@@ -1603,7 +1610,7 @@ lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (
   induction g.vertices
   case nil => 
     simp only [Graph.successor_pairs]
-    
+
   case cons v rest IH => 
     simp only [Graph.successor_pairs]
 
@@ -1699,6 +1706,15 @@ lemma hebb_once_acyclic (net : BFNN) (S : Set ℕ) :
   simp only [hebb]
   rw [graph_update_acyclic]
 
+-- A single round of Hebbian update does not affect the vertices
+-- of the graph.
+--------------------------------------------------------------------
+theorem hebb_once_vertices (net : BFNN) (S : Set ℕ) (n : ℕ) : 
+  (hebb net S).graph.get_vertices = net.graph.get_vertices := by
+--------------------------------------------------------------------
+  simp only [hebb]
+  rw [graph_update_vertices]
+
 -- A single round of Hebbian update does not affect the predecessors
 -- of any node.  To prove this, we just show that Hebbian update
 -- does not affect the vertices of the graph, or the successor
@@ -1723,13 +1739,39 @@ theorem hebb_once_preds (net : BFNN) (S : Set ℕ) (n : ℕ) :
   
 -- A single round of Hebbian update hebb does not affect which 
 -- neurons are on which layer of the net.
--- TODO: Try induction on the graph, the way I usually prove
--- things about the layers???
 --------------------------------------------------------------------
 theorem hebb_once_layers (net : BFNN) (S : Set ℕ) : 
   layer (hebb net S) n = layer net n := by
 --------------------------------------------------------------------
-  sorry
+  simp only [layer]
+  rw [hebb_once_vertices net S n] -- vertices are the same
+
+  -- By induction on the reverse of the graph's vertex list
+  -- (We are looking at vertices backwards -- each
+  --  vertex can only "see" the vertices preceding it.)
+  induction List.reverse (Graph.get_vertices net.toNet.graph) generalizing n
+  case nil => 
+    simp only [layer_acc]
+  case cons v rest IH => 
+    simp only [layer_acc]
+
+    -- By cases; either vertex.label = n or not.
+    -- If so, this follows from our IH and the fact that the predecessors
+    -- are the same in both nets.
+    by_cases v = n
+    case pos => 
+      rw [if_pos h]
+      rw [if_pos h]
+      rw [hebb_once_preds]
+      congr
+      funext m
+      exact @IH m
+
+    -- If not, just apply our IH
+    case neg => 
+      rw [if_neg h]
+      rw [if_neg h]
+      exact IH
 
 -- A single round of Hebbian update hebb does not affect the 
 -- activation function.
@@ -1752,20 +1794,62 @@ theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) :
   apply Iff.intro
   case mp => 
     intro h₁
-    exact match h₁ with
-    | ⟨m, hm⟩ => by -- ⟨m, ⟨hm.1, _⟩⟩ 
+
+    -- There is some m with focused path from m to n in the *updated* net
+    match h₁ with
+    | ⟨m, hm⟩ =>
       induction hm.2
-      case trivial => exact ⟨m, ⟨hm.1, sorry⟩⟩  
+      case trivial hma => exact reach_is_extens _ _ _ ⟨hma, hm.1⟩
       case from_path x y path_mx edge_xy hy IH =>
-        -- Drop the path and edge from (hebb net) to the original net.
-        -- Wait -- where do we apply the IH???
-        -- have h₂ : focusedPath (hebb net A).toNet.graph A m x := sorry -- use path_mx
-        -- have h₃ : Graph.hasEdge net.graph x y = true := sorry -- use edge_xy
+        -- First, apply our IH to get x ∈ Reach(A, B)
+        have h₂ : x ∈ reachable (hebb net A) A B := ⟨m, ⟨hm.1, path_mx⟩⟩
+        have h₃ : x ∈ reachable net A B := IH h₂ ⟨hm.1, path_mx⟩
+
+        -- So there is some u ∈ B with focused path from u to x
+        -- (in the *original* net)
+        -- We extend this path with the edge from x to y.
+        match h₃ with
+        | ⟨u, hu⟩ =>
+
+          -- We have an edge from x to y in the *updated* net,
+          -- but we have to bring it down to the *original* net.
+          have h₄ : Graph.hasEdge net.graph x y = true := by
+            rw [← edge_from_preds]
+            rw [← edge_from_preds] at edge_xy
+            convert edge_xy using 1
+            exact symm (hebb_once_preds _ _ _)
+
+          exact ⟨u, ⟨hu.1, (focusedPath.from_path hu.2 h₄ hy)⟩⟩
+
+  -- This direction is very similar.
+  case mpr => 
+    intro h₁
+
+    -- There is some m with focused path from m to n in the *original* net
+    match h₁ with
+    | ⟨m, hm⟩ =>
+      induction hm.2
+      case trivial hma => exact reach_is_extens _ _ _ ⟨hma, hm.1⟩
+      case from_path x y path_mx edge_xy hy IH =>
+        -- First, apply our IH to get x ∈ Reach(A, B)
+        have h₂ : x ∈ reachable net A B := ⟨m, ⟨hm.1, path_mx⟩⟩
+        have h₃ : x ∈ reachable (hebb net A) A B := IH h₂ ⟨hm.1, path_mx⟩
         
-        have h₂ : x ∈ reachable net A B := sorry -- Apply IH!
-        have h₃ : Graph.hasEdge net.graph x y = true := sorry
-        exact ⟨m, ⟨hm.1, (focusedPath.from_path sorry h₃ hy)⟩⟩ 
-  case mpr => sorry
+        -- So there is some u ∈ B with focused path from u to x
+        -- (in the *updated* net)
+        -- We extend this path with the edge from x to y.
+        match h₃ with
+        | ⟨u, hu⟩ =>
+
+          -- We have an edge from x to y in the *original* net,
+          -- but we have to bring it down to the *updated* net.
+          have h₄ : Graph.hasEdge (hebb net A).graph x y = true := by
+            rw [← edge_from_preds]
+            rw [← edge_from_preds] at edge_xy
+            convert edge_xy using 1
+            exact hebb_once_preds _ _ _
+            
+          exact ⟨u, ⟨hu.1, (focusedPath.from_path hu.2 h₄ hy)⟩⟩
 
 
 -- If n ∉ Prop(A), then the weights in the *once* updated net are 
@@ -1909,6 +1993,13 @@ lemma hebb_acyclic (net : BFNN) (S : Set ℕ) :
   (hebb_star net S).graph.is_acyclic = net.graph.is_acyclic := by
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => x.graph.is_acyclic) (hebb_once_acyclic _ _)
+
+-- Hebbian update hebb_star does not affect the vertices of the graph.
+--------------------------------------------------------------------
+theorem hebb_vertices (net : BFNN) (S : Set ℕ) (n : ℕ) : 
+  (hebb_star net S).graph.get_vertices = net.graph.get_vertices := by
+--------------------------------------------------------------------
+  exact hebb_lift _ _ (fun x => x.graph.get_vertices) (hebb_once_vertices _ _ n)
 
 -- Hebbian update hebb_star does not affect the predecessors
 -- of any node.
