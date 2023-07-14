@@ -132,13 +132,33 @@ def graphA : Graph ℕ Float :=
 namespace Graph
 
 def get_vertices (g : Graph ℕ Float) : List ℕ :=
-  g.vertices.map (fun ⟨label, _⟩ => label)
+  List.map (fun ⟨label, _⟩ => label) g.vertices
 
-def successors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
-  g.vertices[n]!.successors.unzip.1
+-- We filter all vertices that are in n's successor list
+def successors (g : Graph ℕ Float) (v : Vertex ℕ Float) : List ℕ :=
+  -- g.vertices[n]!.successors.unzip.1
+  v.successors.unzip.1
+
+  -- List.filter 
+  --   (fun m => m ∈ g.vertices[n]!.successors.unzip.1) 
+  --   g.get_vertices
+
+  -- List.filter 
+  --   (fun m => m ∈ g.vertices[n]!.successors.unzip.1)
+  --   g.get_vertices
+
+/-
+(List.unzip l).fst = List.map Prod.fst l
+-/
+
 
 def predecessors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
-  List.filter (fun v => n ∈ (g.successors v)) g.get_vertices
+  List.map (fun ⟨label, _⟩ => label) 
+    (List.filter (fun v => n ∈ (g.successors v)) g.vertices)
+
+  -- List.filter 
+  --   (fun m => n ∈ (g.successors m)) 
+  --   g.get_vertices
 
 -- Using 'predecessors' is slower than 'successors',
 -- but we will tend to look backwards from a node rather
@@ -1544,8 +1564,8 @@ def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Fl
 
 -- This graph update does not affect the vertices of the graph.
 --------------------------------------------------------------------
-lemma graph_update_vertices (net : BFNN) (_ : Graph ℕ Float) (S : Set ℕ) :
-  (graph_update net net.graph S).get_vertices = net.graph.get_vertices := by
+lemma graph_update_vertices (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
+  (graph_update net g S).get_vertices = g.get_vertices := by
 --------------------------------------------------------------------
   simp only [graph_update, map_edges]
   simp only [Graph.get_vertices]
@@ -1558,19 +1578,49 @@ lemma graph_update_vertices (net : BFNN) (_ : Graph ℕ Float) (S : Set ℕ) :
 -- of the graph (it only affects weights!!!)
 --------------------------------------------------------------------
 lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (n : ℕ) :
-  (graph_update net net.graph S).successors n = net.graph.successors n := by
+  (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  simp only [graph_update, map_edges] -- map_edges
+  -- First, rewrite get_vertices and expand definitions
   simp only [Graph.successors]
+  rw [graph_update_vertices]
+  simp only [graph_update, map_edges]
+  
+  
 
-  -- Go in and rewrite the 'unzip' as a 'map'
-  rw [List.unzip_eq_map]
-  rw [List.unzip_eq_map]
-  simp only [Prod.fst]
+  sorry
+  -- apply List.filter_congr'
+  -- intro m
+  -- intro hm
+  -- rw [Bool.decide_iff]
+  -- rw [Bool.decide_iff]
+  -- sorry
+  -- apply Eq.to_iff
+  -- apply Bool.decide_congr
+  
+  -- rw [List.unzip_eq_map]
+  -- rw [List.unzip_eq_map]
+  -- simp only [Prod.fst]
 
-  -- Now go in and compose the maps.
-  -- conv => lhs; rw [List.map_map]
-  sorry -- Why the FUCK won't this rewrite work???
+  
+  -- simp only [graph_update, map_edges] -- map_edges
+  -- simp only [Graph.successors]
+  -- rw [graph_update_vertices]
+  -- congr
+  -- funext m
+  -- rw [List.unzip_eq_map]
+  -- rw [List.unzip_eq_map]
+  -- simp only [Prod.fst]
+
+  
+  
+  -- congr
+  -- funext m
+  
+  -- Go in and rewrite the 'unzip' as a 'map', then simplify
+  
+  
+  -- congr 1
+  -- congr
 
 
 -- This graph update preserves whether the graph is acyclic.
