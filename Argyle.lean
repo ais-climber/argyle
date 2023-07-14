@@ -134,27 +134,29 @@ namespace Graph
 def get_vertices (g : Graph ℕ Float) : List ℕ :=
   List.map (fun ⟨label, _⟩ => label) g.vertices
 
--- We filter all vertices that are in n's successor list
-def successors (g : Graph ℕ Float) (v : Vertex ℕ Float) : List ℕ :=
+-- Helper function to collect the List of pairs of n's successors
+def successor_pairs (vertices : List (Vertex ℕ Float)) (n : ℕ) : List (ℕ × Float) :=
+  match vertices with
+  | [] => []
+  | ⟨vertex, succ⟩ :: rest => 
+    if vertex = n then succ 
+    else successor_pairs rest n
+
+-- We get all vertices that are in n's successor list
+def successors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
+  List.filter 
+    (fun m => m ∈ (successor_pairs g.vertices n).unzip.1) 
+    g.get_vertices
+
+  -- List.get n g.vertices -- successors.unzip.1
   -- g.vertices[n]!.successors.unzip.1
-  v.successors.unzip.1
-
-  -- List.filter 
-  --   (fun m => m ∈ g.vertices[n]!.successors.unzip.1) 
-  --   g.get_vertices
-
-  -- List.filter 
-  --   (fun m => m ∈ g.vertices[n]!.successors.unzip.1)
-  --   g.get_vertices
-
-/-
-(List.unzip l).fst = List.map Prod.fst l
--/
 
 
 def predecessors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
-  List.map (fun ⟨label, _⟩ => label) 
-    (List.filter (fun v => n ∈ (g.successors v)) g.vertices)
+  List.filter (fun v => n ∈ (g.successors v)) g.get_vertices
+  
+  -- List.map (fun ⟨label, _⟩ => label) 
+  --   (List.filter (fun v => n ∈ (g.successors v)) g.vertices)
 
   -- List.filter 
   --   (fun m => n ∈ (g.successors m)) 
@@ -1580,48 +1582,44 @@ lemma graph_update_vertices (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
 lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  -- First, rewrite get_vertices and expand definitions
+  -- Simplify definitions
   simp only [Graph.successors]
   rw [graph_update_vertices]
   simp only [graph_update, map_edges]
   
-  
+  -- Rewrite 'unzip's as 'map's
+  rw [List.unzip_eq_map]
+  rw [List.unzip_eq_map]
+  simp only [Prod.fst]
 
-  sorry
-  -- apply List.filter_congr'
-  -- intro m
-  -- intro hm
-  -- rw [Bool.decide_iff]
-  -- rw [Bool.decide_iff]
-  -- sorry
-  -- apply Eq.to_iff
-  -- apply Bool.decide_congr
-  
-  -- rw [List.unzip_eq_map]
-  -- rw [List.unzip_eq_map]
-  -- simp only [Prod.fst]
+  -- Get to the heart of the expression
+  congr
+  funext m
+  apply Bool.decide_congr
 
-  
-  -- simp only [graph_update, map_edges] -- map_edges
-  -- simp only [Graph.successors]
-  -- rw [graph_update_vertices]
-  -- congr
-  -- funext m
-  -- rw [List.unzip_eq_map]
-  -- rw [List.unzip_eq_map]
-  -- simp only [Prod.fst]
+  -- Our goal is to now show that when we *only* consider the target
+  -- vertices, the graph_update is essentially the identity function.
+  -- By induction on the graph's list of vertices:
+  induction g.vertices
+  case nil => 
+    simp only [Graph.successor_pairs]
+    
+  case cons v rest IH => 
+    simp only [Graph.successor_pairs]
 
-  
-  
-  -- congr
-  -- funext m
-  
-  -- Go in and rewrite the 'unzip' as a 'map', then simplify
-  
-  
-  -- congr 1
-  -- congr
+    -- By cases; either v.label = n or not.  If so, we go in
+    -- and compose the maps.  Otherwise we just apply our IH.
+    by_cases (v.label = n)
+    case pos => 
+      rw [if_pos h]
+      rw [if_pos h]
+      rw [List.map_map]
+      simp
 
+    case neg =>
+      rw [if_neg h]
+      rw [if_neg h]
+      exact IH
 
 -- This graph update preserves whether the graph is acyclic.
 --------------------------------------------------------------------
