@@ -2500,30 +2500,30 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
         -- Case 1: n ∈ Prop(A)
         ---------------------
         case pos =>
-          -- Since Prop(A) ∩ Prop(B) is nonempty, there is a node x
+          -- Since Prop(A) ∩ Prop(B) is nonempty, there is a node m
           -- in the intersection.
           have h₃ : ∃ x, x ∈ propagate net A ∩ propagate net B :=
             Set.inter_nonempty_iff_exists_left.mp
               (Set.nonempty_iff_ne_empty.mpr h_nonempty)
           
-          -- By the well-ordering principle, let m be the one with 
-          -- the smallest layer. 
+          -- But in particular, that means there's a node in
+          -- Prop(A).  By the well-ordering principle,
+          -- let 'm' be the one with the smallest layer.
           have hwf : WellFounded (fun m n => layer net m ≤ layer net n) := 
             sorry
-          have hwfne : Set.Nonempty (propagate net A ∩ propagate net B) :=
+          have hwfne : Set.Nonempty (propagate net A) :=
             match h₃ with
-            | ⟨m, hm⟩ => Set.nonempty_of_mem hm
+            | ⟨m, hm⟩ => Set.nonempty_of_mem hm.1
 
-          let m := WellFounded.min hwf 
-            (propagate net A ∩ propagate net B) hwfne
+          let m := WellFounded.min hwf (propagate net A) hwfne
           
-          -- m ∈ Prop(A) ∩ Prop(B), and it is the smallest such node. 
-          have hm : m ∈ propagate net A ∩ propagate net B := WellFounded.min_mem _ _ _
-          have h₄ : ∀ x, x ∈ propagate net A ∩ propagate net B 
+          -- m ∈ Prop(A), and it is the smallest such node. 
+          have hm : m ∈ propagate net A := WellFounded.min_mem _ _ _
+          have h₄ : ∀ x, x ∈ propagate net A
             → layer net m ≤ layer net x :=
             fun x hx => le_of_not_le (WellFounded.not_lt_min hwf _ _ hx)
           
-          cases eq_or_lt_of_le (h₄ n sorry)
+          cases eq_or_lt_of_le (h₄ n h)
           
           ---------------------
           -- Case 1.1: n ∈ Prop(A)
@@ -2532,7 +2532,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           -- In this case, since the net is transitively closed
           -- (fully connected), we have an edge from m ∈ Prop(A) ∩ Prop(B)
           -- to n ∈ Prop(A).  This gives us n ∈ Reach(Prop(A), Prop(B)).
-          case inr h₅ =>
+          case inr h₅ => 
             -- We just provide the path from m⟶n.
             have h₆ : n ∈ reachable net (propagate net A) (propagate net B) := by
               exact ⟨m, ⟨hm.2, 
@@ -2546,6 +2546,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
             
             simp only [propagate, Membership.mem, Set.Mem] at h₇
             exact h₇
+            
 
           ---------------------
           -- Case 1.2: n ∈ Prop(A)
