@@ -658,47 +658,68 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
   intro h₁
   simp only [layer]
 
-  generalize hls : net.graph.vertices.reverse = ls
+  generalize hls : (List.reverse (Graph.get_vertices net.toNet.graph)) = ls
   induction ls
   case nil =>
     -- This case is impossible;
     -- m ∈ preds(n) means that there is *something* in the graph.
     -- This contradicts the fact that the graph is empty!
-    have h₂ : net.graph.vertices = [] := sorry
-
     simp [preds, Graph.predecessors, Graph.get_vertices] at h₁
-    rw [h₂] at h₁
+    simp [Graph.get_vertices] at hls
+    rw [hls] at h₁
     rw [List.map_nil] at h₁
     rw [List.filter_nil] at h₁
     exact False.elim ((List.mem_nil_iff _).mp h₁)
-
-  case cons vertex rest IH =>
-    -- generalize hmax : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max
-    -- simp only [layer_acc]
-    -- generalize hmax_m : (List.map (fun x => layer_acc net x rest) (preds net m)).maximum = max_m
-    -- let max := layers.maximum
     
-    -- TODO: Try by cases?
-    sorry
-    /-
-    match max with
-    | none =>
-        -- This case is also impossible;
-        -- m ∈ preds(n) means that there is *some* maximum in preds(n),
-        -- which contradicts the fact that the max is empty. 
-        rw [hmax]
-        conv => rhs; simp
 
-        sorry
+  case cons v rest IH =>
+    simp only [layer_acc]
+    generalize hmax_m : (List.map (fun x => layer_acc net x rest) (preds net m)).maximum = max_m
+    generalize hmax_n : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max_n
 
-    | some L =>
-        -- layer(m)  ≤  max({layer(v) | v ∈ preds(n)})  <  layer(n)
-        rw [hmax]
-        conv => rhs; simp
-        sorry
+    -- We branch out all of the possible cases
+    -- (we have 4 branches from the 'if-then-else's, 
+    -- and more for the 'match'es)
+    by_cases v = m
+    case pos => 
+      rw [if_pos h]
+      by_cases v = n
+      case pos => 
+        rw [if_pos h]
         
-        -- I'm not sure how to proceed...
-    -/  
+        match max_n with
+        | none => -- This case is also impossible;
+          -- m ∈ preds(n) means that there is *some* maximum in preds(n),
+          -- which contradicts the fact that the max is empty.
+          sorry
+
+        | some L => 
+          match max_m with
+          | none => exact Nat.succ_pos L
+          | some K => -- This is the tricky case!
+            simp
+            sorry
+
+      case neg => 
+        rw [if_neg h]
+        match max_m with
+        | none => 
+          simp
+          sorry
+        | some K => sorry
+
+    case neg =>
+      rw [if_neg h]
+      by_cases v = n
+      case pos => 
+        rw [if_pos h]
+        match max_n with
+        | none => sorry
+        | some L => sorry
+
+      case neg => 
+        rw [if_neg h]
+        exact IH sorry
 
 noncomputable
 def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
@@ -1548,7 +1569,13 @@ lemma map_edges_apply (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float
 --------------------------------------------------------------------
   -- I have no idea... this one's tough, and it's hard to see
   -- what's going on.
-  simp only [Graph.getEdgeWeight, map_edges]
+  simp only [Graph.getEdgeWeight]
+
+  match List.find? (fun x => decide (x.fst = n)) g.vertices[m]!.successors with
+  | none => sorry
+  | some ⟨_, weight⟩ => sorry
+  
+  /-
   split
   case _ op₁ target₁ weight₁ hop₁ => 
     split
@@ -1558,7 +1585,7 @@ lemma map_edges_apply (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float
     split
     case _ op₂ target₂ weight₂ hop₂ => sorry
     case _ op₂ hop₂ => sorry
-
+  -/
 
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by η * act(m) * act(n).
@@ -1709,7 +1736,7 @@ lemma hebb_once_acyclic (net : BFNN) (S : Set ℕ) :
 -- A single round of Hebbian update does not affect the vertices
 -- of the graph.
 --------------------------------------------------------------------
-theorem hebb_once_vertices (net : BFNN) (S : Set ℕ) (n : ℕ) : 
+theorem hebb_once_vertices (net : BFNN) (S : Set ℕ) : 
   (hebb net S).graph.get_vertices = net.graph.get_vertices := by
 --------------------------------------------------------------------
   simp only [hebb]
@@ -1744,7 +1771,7 @@ theorem hebb_once_layers (net : BFNN) (S : Set ℕ) :
   layer (hebb net S) n = layer net n := by
 --------------------------------------------------------------------
   simp only [layer]
-  rw [hebb_once_vertices net S n] -- vertices are the same
+  rw [hebb_once_vertices net S] -- vertices are the same
 
   -- By induction on the reverse of the graph's vertex list
   -- (We are looking at vertices backwards -- each
@@ -1996,10 +2023,10 @@ lemma hebb_acyclic (net : BFNN) (S : Set ℕ) :
 
 -- Hebbian update hebb_star does not affect the vertices of the graph.
 --------------------------------------------------------------------
-theorem hebb_vertices (net : BFNN) (S : Set ℕ) (n : ℕ) : 
+theorem hebb_vertices (net : BFNN) (S : Set ℕ) : 
   (hebb_star net S).graph.get_vertices = net.graph.get_vertices := by
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => x.graph.get_vertices) (hebb_once_vertices _ _ n)
+  exact hebb_lift _ _ (fun x => x.graph.get_vertices) (hebb_once_vertices _ _)
 
 -- Hebbian update hebb_star does not affect the predecessors
 -- of any node.
@@ -2231,8 +2258,12 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
   --------------------------------
   -- Base Step
   --------------------------------
-  -- Easy; after simplifying, show that n ∈ B → n ∈ B.
-  case hz => sorry
+  -- Easy; at layer zero, n ∈ propagate net B,
+  --       and so by extensive n ∈ propagate (hebb_star net A) B.
+  case hz => 
+    have h₂ : n ∈ propagate net B :=
+      reach_layer_zero _ _ _ _ hL h₁
+    exact hebb_extensive _ _ _ h₂
 
   --------------------------------
   -- Inductive Step
@@ -2241,12 +2272,11 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
     -- We have a path from Prop(B) to n, going through Prop(A).
     match h₁ with
     | ⟨m, hm⟩ => 
-
       -- By induction on the length of this path
       induction hm.2
 
-      case trivial path_mm => exact hebb_extensive _ _ _ hm.1
-      case from_path x y path_mx edge_xy hy IH₂ => 
+      case trivial _ => exact hebb_extensive _ _ _ hm.1
+      case from_path x y path_mx edge_xy hy _ => 
         -- Split by whether y ∈ B in order to simplify propagate_acc
         by_cases y ∈ B
         case pos => exact propagate_is_extens _ _ h
@@ -2256,29 +2286,28 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
           rw [hebb_layers]
           rw [hL]
           rw [simp_propagate_acc _ h]
+          rw [hebb_preds]
           simp
 
           -- Apply our inductive hypothesis: x ∈ Prop(B) in (hebb_star net) 
-          have hpreds : x ∈ preds net y := sorry
-          have hx_A : x ∈ propagate net A := sorry 
-          have hx_B : x ∈ propagate (hebb_star net A) B := sorry
-
+          have hpreds : x ∈ preds net y := (edge_from_preds _ _ _).mpr edge_xy
+          have hpred_dec : layer net x ≤ L := 
+            (Nat.lt_succ).mp (lt_of_lt_of_eq (preds_decreasing _ _ _ hpreds) hL)
+          have hx_reachable : x ∈ reachable net (propagate net A) (propagate net B) :=
+            ⟨m, ⟨hm.1, path_mx⟩⟩
+          have hx_propA : x ∈ propagate net A := 
+            reach_subset _ _ _ hx_reachable
+          have hx_propB : x ∈ propagate (hebb_star net A) B := 
+            IH₁ (layer net x) hpred_dec hx_reachable rfl
+          
           -- Apply hebb_activ₃, which says:
           --  x, y ∈ Prop(A)
           --  There's an edge from x ⟶ y
           --  x ∈ Prop(B) in (hebb_star net)
           --  -------------------------------
           --  y is activ in hebb_star net
-          sorry
-          -- TODO: this takes forever.  Why doesn't it just work?
-          -- exact hebb_activ₃ net A B hy ⟨hpreds, hx_A⟩ hx_B
-
-/-
-  n ∈ propagate net A
-  → m ∈ preds ∧ m ∈ propagate net A  
-  → m ∈ propagate (hebb_star net A) B
-  → activ (hebb_star net A) prev_activ n := by
--/
+          exact hebb_activ₃ net A B hy ⟨hpreds, hx_propA⟩ hx_propB
+          
 
 /-══════════════════════════════════════════════════════════════════
   Reduction for Unstable Hebbian Update
