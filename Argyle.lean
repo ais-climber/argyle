@@ -379,6 +379,7 @@ axiom zero_lt_one_float : 0.0 < 1.0
 axiom le_of_lt_float : ∀ (x y : Float), x < y → x ≤ y
 axiom not_le_float : ∀ (x y : Float), x < y → ¬ (y ≤ x)
 axiom zero_mult : ∀ (x : Float), x * 0.0 = 0.0
+axiom one_mult : ∀ (x : Float), x * 1.0 = x
 axiom zero_plus : ∀ (x : Float), x + 0.0 = x
 axiom commutative_mult_float : ∀ (x y : Float), x * y = y * x
 
@@ -566,9 +567,37 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 -- but this is left implicit.)
 #eval weighted_sum [1.0, 2.0] [3.0]
 
-lemma weighted_sum_le (w₁ w₂ : List Float) (lst : List Float) :
-  (∀ i, w₁.get! i ≤ w₂.get! i) 
-  → weighted_sum w₁ lst ≤ weighted_sum w₂ lst := by
+/-
+(List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
+        pure (Graph.getEdgeWeight (hebb_star net A).toNet.graph (List.get! (Graph.predecessors net.toNet.graph n) i) n))
+-/
+
+lemma weighted_sum_eq (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) :
+  let x₁ : List Float := do
+    let i ← List.range (List.length ls)
+    return fx₁ i
+  let x₂ : List Float := do
+    let i ← List.range (List.length ls)
+    return fx₂ i
+  let w₁ : List Float := do
+    let i ← List.range (List.length ls)
+    return fw₁ i
+  let w₂ : List Float := do
+    let i ← List.range (List.length ls)
+    return fw₂ i
+  
+  (∀ i, (fw₁ i) * (fx₁ i) = (fw₂ i) * (fx₂ i))
+  → weighted_sum w₁ x₁ = weighted_sum w₂ x₂ := by
+
+  intro x₁ x₂ w₁ w₂ h₁
+  simp only [weighted_sum]
+  congr 2
+  sorry
+
+
+lemma weighted_sum_le (w₁ w₂ x₁ x₂ : List Float) :
+  (∀ i, (w₁.get! i) * (x₁.get! i) ≤ (w₂.get! i) * (x₂.get! i)) 
+  → weighted_sum w₁ x₁ ≤ weighted_sum w₂ x₂ := by
 
   intro h₁
   simp only [weighted_sum]
@@ -1967,35 +1996,21 @@ theorem hebb_once_weights₁ (net : BFNN) :
   rw [zero_mult]
   rw [zero_plus]
 
--- If every *active* predecessor of n ∉ Prop(A), then the weights in 
--- the *once* updated net are the same as the weights in the original net.
+-- If m ∉ Prop(A), then the weight of m ⟶ n in the *once* updated
+-- net is the same as in the original net.
 --------------------------------------------------------------------
-theorem hebb_once_weights₂ (net : BFNN) : 
-  let preds := preds net n
-  (∀ x, (x ∈ preds ∧ x ∈ propagate net B) → x ∉ propagate net A)
-  → ∀ (i : ℕ),
-    ((hebb net A).toNet.graph.getEdgeWeight (preds.get! i) n =
-    net.graph.getEdgeWeight (preds.get! i) n) := by
+theorem hebb_once_weights₂ (net : BFNN) :
+  m ∉ propagate net A
+  → (hebb net A).toNet.graph.getEdgeWeight m n =
+    net.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
-  intro preds
   intro h₁
-  intro i
   simp only [hebb, graph_update]
   rw [map_edges_apply _ _ _ _]
-
-  -- Since *every active* predecessor m of n ∉ propagate net A,
-  -- in particular (preds net n).get! i isn't (we have to
-  -- show that this one is active... how?).
-  -- So again this term that we're updating by reduces to 
-  -- weight + 0 = weight.
-  generalize hm : (List.get! preds i) = m
-  have mpreds : List.get! preds i ∈ preds := get!_mem preds i
-  rw [hm] at mpreds
   
-  have mpropB : m ∈ propagate net B := sorry 
-    -- we will need to bake this in
-
-  rw [if_neg (h₁ m ⟨mpreds, mpropB⟩)]
+  -- Since m ∉ Prop(A), this term that we're updating by reduces
+  -- to weight + 0 = weight
+  rw [if_neg h₁]
   rw [zero_mult]
   rw [commutative_mult_float]
   rw [zero_mult]
@@ -2276,22 +2291,18 @@ theorem hebb_weights₁ (net : BFNN) :
   exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n) 
     (hebb_once_weights₁ _ h₁ _)
 
--- If every *active* predecessor of n ∉ Prop(A), then the weights in the 
--- updated net are the same as the weights in the original net.
--- TODO: Can we lift this from single-iteration hebb?
+-- If m ∉ Prop(A), then the weight of m ⟶ n in the updated net
+-- is the same as the weight in the original net.
+-- Lifted from hebb_once_weights₂
 --------------------------------------------------------------------
-theorem hebb_weights₂ (net : BFNN) : 
-  let preds := preds net n
-  (∀ x, (x ∈ preds ∧ x ∈ propagate net B) → x ∉ propagate net A)
-  → ∀ (i : ℕ),
-    ((hebb_star net A).toNet.graph.getEdgeWeight (preds.get! i) n =
-    net.graph.getEdgeWeight (preds.get! i) n) := by
+theorem hebb_weights₂ (net : BFNN) :
+  m ∉ propagate net A
+  → (hebb_star net A).toNet.graph.getEdgeWeight m n =
+    net.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
-  intro preds
   intro h₁
-  intro i
-  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight (preds.get! i) n) 
-    (hebb_once_weights₂ _ h₁ _)
+  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
+    (hebb_once_weights₂ _ h₁)
 
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
@@ -2330,17 +2341,6 @@ theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
     (B ∪ reachable net (propagate net A) (propagate net B))))
   → activ (hebb_star net A) prev_activ n = activ net prev_activ n
 -/
-
-/-
-lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
-  (∀ (m : ℕ), m ∈ preds net n → (m ∈ A ↔ m ∈ B))
-  → activ net (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure (if A (List.get! (Graph.predecessors net.toNet.graph n) i) 
-          then 1.0 else 0.0)) n
-  → activ net (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure (if B (List.get! (Graph.predecessors net.toNet.graph n) i) 
-          then 1.0 else 0.0)) n := by
--/
 --------------------------------------------------------------------
 theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
   (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net 
@@ -2364,32 +2364,50 @@ theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
           then 1.0 else 0.0)) n)) := by
 --------------------------------------------------------------------
   intro h₁
-  sorry
-  -- intro h₁
-  -- simp only [activ]
-  -- rw [hebb_activation net A]
-  -- rw [hebb_preds net A]
-
-  -- We need some lemma about weighted sum equality here
-  -- we have ∑ w₁ x₁ = ∑ w₂ x₂
-  -- but the x₁, x₂ are binary (0.0 or 1.0),
-  -- so the two are equal when *those activated weights*
-  -- (where x₁ = 1.0, or x₂ = 1.0) are equal.
-  -- That's what lets us eliminate the other term from our assumption.
-  /-
-  intro preds
-  intro prev_activ
-  intro h₁
-
+  apply Eq.to_iff
+  
+  -- Do simplifications to get to the weighted sum
   simp only [activ]
   rw [hebb_activation net A]
   rw [hebb_preds net A]
-  congr
-  apply funext
+  apply congr_arg (fun x => Net.activation net.toNet x = 1.0)
+
+  -- The weighted sums are equal, ∑ w₁ x₁ = ∑ w₂ x₂,
+  -- if all of their entries are equal, w₁ᵢ * x₁ᵢ = w₂ᵢ * x₂ᵢ
+  apply weighted_sum_eq
   intro i
-  apply congr_arg
-  exact (hebb_weights₂ _ h₁) i
-  -/
+  generalize hm : List.get! (Graph.predecessors net.toNet.graph n) i = m
+
+  -- We have two cases;
+  by_cases m ∈ propagate net (B ∪ 
+    reachable net (propagate net A) (propagate net B))
+  
+  -- m ∈ Prop(B ∪ Reach(Prop(A), Prop(B)))
+  -- In this case, the RHS's reduce to 1.0, and we
+  -- just need to argue that the weights are the same
+  case pos => 
+    -- First, notice that m ∉ Prop(A).
+    have h₂ : m ∈ preds net n := sorry
+    have h₃ : m ∉ propagate net A := by
+      sorry
+      -- not quite right
+      -- exact not_mem_subset _ (h₁ m h₂) 
+
+    -- Now we simplify and show that the weights are the same
+    simp only [propagate, Membership.mem, Set.Mem] at h
+    rw [if_pos h]
+    rw [one_mult]
+    rw [one_mult]
+    exact hebb_weights₂ _ h₃
+
+  -- Otherwise, the RHS's reduce to 0.0, and so the
+  -- weighted sums are trivially equal
+  case neg => 
+    simp only [propagate, Membership.mem, Set.Mem] at h
+    rw [if_neg h]
+    rw [zero_mult]
+    rw [zero_mult]
+
 
 -- -- If *some* predecessor of n is ∈ Prop(A), and n ∈ Prop(A), then
 -- -- if m is activated in (hebb_star net) then n is too
