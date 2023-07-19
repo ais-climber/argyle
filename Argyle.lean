@@ -1975,47 +1975,33 @@ theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) :
             
           exact ⟨u, ⟨hu.1, (focusedPath.from_path hu.2 h₄ hy)⟩⟩
 
-
--- If n ∉ Prop(A), then the weights in the *once* updated net are 
--- the same as the weights in the original net.
+-- If m ∉ Prop(A) or n ∉ Prop(A), then the weight of m ⟶ n in 
+-- the *once* updated net is the same as in the original net.
 --------------------------------------------------------------------
-theorem hebb_once_weights₁ (net : BFNN) : 
-  n ∉ propagate net A
-  → ∀ (i : ℕ),
-    ((hebb net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
-    net.graph.getEdgeWeight ((preds net n).get! i) n) := by
---------------------------------------------------------------------
-  intro h₁
-  intro i
-  simp only [hebb, graph_update]
-  rw [map_edges_apply _ _ _ _]
-
-  -- n ∉ propagate net A, and so the term that we're updating by
-  -- reduces to weight + 0 = weight.
-  rw [if_neg h₁]
-  rw [zero_mult]
-  rw [zero_plus]
-
--- If m ∉ Prop(A), then the weight of m ⟶ n in the *once* updated
--- net is the same as in the original net.
---------------------------------------------------------------------
-theorem hebb_once_weights₂ (net : BFNN) :
-  m ∉ propagate net A
+theorem hebb_once_weights (net : BFNN) :
+  (m ∉ propagate net A ∨ n ∉ propagate net A)
   → (hebb net A).toNet.graph.getEdgeWeight m n =
     net.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
   intro h₁
   simp only [hebb, graph_update]
   rw [map_edges_apply _ _ _ _]
-  
-  -- Since m ∉ Prop(A), this term that we're updating by reduces
-  -- to weight + 0 = weight
-  rw [if_neg h₁]
-  rw [zero_mult]
-  rw [commutative_mult_float]
-  rw [zero_mult]
-  rw [zero_plus]
 
+  -- We have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
+  -- In either case, the term that we're updating by reduces 
+  -- to weight + 0 = weight.
+  cases h₁
+  case inl h₂ => 
+    rw [if_neg h₂]
+    rw [zero_mult]
+    rw [commutative_mult_float]
+    rw [zero_mult]
+    rw [zero_plus]
+
+  case inr h₂ => 
+    rw [if_neg h₂]
+    rw [zero_mult]
+    rw [zero_plus]
 
 /-══════════════════════════════════════════════════════════════════
   "Iterated"/Fixed-Point Naive Hebbian Update
@@ -2210,9 +2196,9 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
 --------------------------------------------------------------------
   intro (B : Set ℕ)
   intro (n : ℕ)
-  intro (h₁ : n ∈ propagate net B)
+  -- intro (h₁ : n ∈ propagate net B)
   simp only [Membership.mem, Set.Mem, propagate]
-  simp only [Membership.mem, Set.Mem, propagate] at h₁
+  -- simp only [Membership.mem, Set.Mem, propagate] at h₁
   
   -- By induction on the layer of the 
   generalize hL : layer net n = L
@@ -2222,8 +2208,8 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
   -- Base Step
   --------------------------------
   case zero => 
+    intro h₁
     rw [hebb_layers]
-    rw [hL] at h₁
     rw [hL]
     simp only [propagate_acc]
     simp only [propagate_acc] at h₁
@@ -2233,6 +2219,8 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
   -- Inductive Step
   --------------------------------
   case succ k IH => 
+    intro h₁
+
     -- By cases, to later simplify propagate_acc
     by_cases n ∈ B
     case pos => 
@@ -2244,19 +2232,42 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
       -- Do simplifications and rewriting
       rw [hebb_layers]
       rw [hL]
-      rw [hL] at h₁
       rw [simp_propagate_acc _ h]
       rw [simp_propagate_acc _ h] at h₁
       rw [hebb_preds]
-
-      -- simp only [activ]
-      -- rw [hebb_activation]
       
+      -- The plan is to now apply our inductive hypothesis
+      -- and use the 'activ_agree' lemmas.
+      -- We write the two sets as S₁ and S₂ for convenience 
+      let S₁ := fun m => propagate_acc net B m (layer net m)
+      let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
+
+      -- Apply IH to the predecessors
+      have h₂ : ∀ (m : ℕ), m ∈ preds net n → (S₁ m → S₂ m) := by
+        sorry
+        -- simp only [Membership.mem] -- really just want to unfold the let
+        -- intro m hm
+        -- generalize hLm : layer net m = Lm
+        -- have h₃ : Lm ≤ L := by
+        --   rw [symm hLm]
+        --   apply Nat.lt_succ.mp
+        --   rw [symm hL]
+        --   exact preds_decreasing net m n hm
+        -- exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
+
+      -- Argument: 
+      -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
+      --   activate n *in the original net*
+      -- But the weights in the updated net are either the same or
+      --   increasing, so by hebb_activ, these same predecessors
+      --   activate n *in the updated net*.
       simp
       simp at h₁
-      -- We can *almost* apply 'hebb_activ'... what's missing???
-      sorry -- need to argue here that 'activ' is *nondecreasing*
-            -- i.e. never decreases a weight.
+      exact hebb_activ net A S₂ _
+        (activ_agree _ S₁ S₂ _ sorry h₁)
+      -- -- We can *almost* apply 'hebb_activ'... what's missing???
+      --       -- need to argue here that 'activ' is *nondecreasing*
+      --       -- i.e. never decreases a weight.
 
 
 --------------------------------------------------------------------
@@ -2275,34 +2286,19 @@ lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   The more interesting/crucial properties
 ══════════════════════════════════════════════════════════════════-/
 
--- If n ∉ Prop(A), then the weights in the updated net are the same
--- as the weights in the original net.
--- IDEA: Lift this from single-iteration hebb!
--- Then just go into the definition of hebb.
+-- If m ∉ Prop(A) or n ∉ Prop(A), then the edge m ⟶ n was not
+-- increased by Hebbian update.  So its weight in the updated
+-- net is the same as its weight in the original net.
+-- Lifted from hebb_once_weights
 --------------------------------------------------------------------
-theorem hebb_weights₁ (net : BFNN) : 
-  n ∉ propagate net A
-  → ∀ (i : ℕ),
-    ((hebb_star net A).toNet.graph.getEdgeWeight ((preds net n).get! i) n =
-    net.graph.getEdgeWeight ((preds net n).get! i) n) := by
---------------------------------------------------------------------
-  intro h₁
-  intro i
-  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight ((preds net n).get! i) n) 
-    (hebb_once_weights₁ _ h₁ _)
-
--- If m ∉ Prop(A), then the weight of m ⟶ n in the updated net
--- is the same as the weight in the original net.
--- Lifted from hebb_once_weights₂
---------------------------------------------------------------------
-theorem hebb_weights₂ (net : BFNN) :
-  m ∉ propagate net A
-  → (hebb_star net A).toNet.graph.getEdgeWeight m n =
-    net.graph.getEdgeWeight m n := by
+theorem hebb_weights (net : BFNN) : 
+  (m ∉ propagate net A ∨ n ∉ propagate net A)
+  → ((hebb_star net A).toNet.graph.getEdgeWeight m n =
+    net.graph.getEdgeWeight m n) := by
 --------------------------------------------------------------------
   intro h₁
   exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
-    (hebb_once_weights₂ _ h₁)
+    (hebb_once_weights _ h₁)
 
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
@@ -2317,7 +2313,7 @@ theorem simp_hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) 
   rw [hebb_preds net A]
   conv =>
     lhs; enter [1, 2, 1, 2, i, 1]
-    rw [hebb_weights₁ _ h₁]
+    rw [hebb_weights _ (Or.inr h₁)]
 
 
 -- If every *active* predecessor of n ∉ Prop(A), then
@@ -2337,7 +2333,7 @@ theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
 
   (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net 
     (B ∪ reachable net (propagate net A) (propagate net B))))
-  → activ (hebb_star net A) prev_activ n = activ net prev_activ n
+  → (activ (hebb_star net A) prev_activ n ↔ activ net prev_activ n)
 -/
 --------------------------------------------------------------------
 theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
@@ -2392,7 +2388,7 @@ theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
     rw [if_pos h]
     rw [one_mult]
     rw [one_mult]
-    exact hebb_weights₂ _ h₃
+    exact hebb_weights _ (Or.inl h₃)
 
   -- Otherwise, the RHS's reduce to 0.0, and so the
   -- weighted sums are trivially equal
