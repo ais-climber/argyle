@@ -571,20 +571,22 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
         pure (Graph.getEdgeWeight (hebb_star net A).toNet.graph (List.get! (Graph.predecessors net.toNet.graph n) i) n))
 -/
+/-
+(List.map (fun i => 
+      let m := (preds net n).get! i
+      if propagate_acc net B m (layer net m) then 1.0 else 0.0) 
+        (List.range (preds net n).length))
+-/
 
 lemma weighted_sum_eq (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) :
-  let x₁ : List Float := do
-    let i ← List.range (List.length ls)
-    return fx₁ i
-  let x₂ : List Float := do
-    let i ← List.range (List.length ls)
-    return fx₂ i
-  let w₁ : List Float := do
-    let i ← List.range (List.length ls)
-    return fw₁ i
-  let w₂ : List Float := do
-    let i ← List.range (List.length ls)
-    return fw₂ i
+  let x₁ : List Float := List.map (fun i => fx₁ i) 
+    (List.range ls.length)
+  let x₂ : List Float := List.map (fun i => fx₂ i) 
+    (List.range ls.length)
+  let w₁ : List Float := List.map (fun i => fw₁ i) 
+    (List.range ls.length)
+  let w₂ : List Float := List.map (fun i => fw₂ i) 
+    (List.range ls.length)
   
   (∀ i, (fw₁ i) * (fx₁ i) = (fw₂ i) * (fx₂ i))
   → weighted_sum w₁ x₁ = weighted_sum w₂ x₂ := by
@@ -791,13 +793,15 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
         rw [if_neg h]
         exact IH sorry
 
+-- NOTE: Although 'do' notation might be more readable here,
+--       I avoid it because it's hard to reason about.
 noncomputable
 def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
   let preds := preds net n
-  let weights := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return net.graph.getEdgeWeight m n
+  let weights := List.map (fun i => 
+      let m := preds.get! i
+      net.graph.getEdgeWeight m n) 
+    (List.range preds.length)
   let weight_sum := weighted_sum weights prev_activ
   let curr_activ := net.activation weight_sum
   curr_activ = 1.0
@@ -819,20 +823,22 @@ def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
 -- and change net.graph to be finite as well!
 -- 
 -- Then unit-test all this with #eval!
+-- 
+-- NOTE: Although 'do' notation might be more readable here,
+--       I avoid it because it's hard to reason about.
 @[simp]
 def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
   match L with
   | Nat.zero => n ∈ S
   | Nat.succ _ =>
     let preds := preds net n
-    let prev_activ := do
-      let i <- List.range preds.length
+    let prev_activ := List.map (fun i => 
       let m := preds.get! i
-      return if propagate_acc net S m (layer net m) then 1.0 else 0.0
+      if propagate_acc net S m (layer net m) then 1.0 else 0.0) 
+        (List.range preds.length)
     n ∈ S ∨ activ net prev_activ n
 termination_by propagate_acc net S n L => layer net n
 decreasing_by exact preds_decreasing net m n (get!_mem preds i)
-
 
 -- Set variation of propagate
 @[simp]
@@ -852,10 +858,10 @@ lemma simp_propagate_acc (net : BFNN) :
   n ∉ S
   → propagate_acc net S n (Nat.succ L) =
   let preds := preds net n
-  let prev_activ := do
-    let i <- List.range preds.length
+  let prev_activ := List.map (fun i => 
     let m := preds.get! i
-    return if propagate_acc net S m (layer net m) then 1.0 else 0.0
+    if propagate_acc net S m (layer net m) then 1.0 else 0.0) 
+      (List.range preds.length)
   activ net prev_activ n := by
 --------------------------------------------------------------------
   intro (h₁ : n ∉ S)
@@ -885,47 +891,27 @@ lemma simp_propagate_acc (net : BFNN) :
 --   - Applying 'simp' to your 'activ' hypotheses (get rid of any let's)
 --   - Use 'exact' instead of 'apply' (exit tactic mode)
 -- 
--- Here is the original unsimplified statement of the lemma:
-/-
---------------------------------------------------------------------
-lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
-  let preds := preds net n
-  let prev₁ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if m ∈ A then 1.0 else 0.0
-  let prev₂ := do
-    let i <- List.range preds.length
-    let m := preds.get! i
-    return if m ∈ B then 1.0 else 0.0
-
-  (∀ (m : ℕ), m ∈ preds → (m ∈ A ↔ m ∈ B))
-  → activ net prev₁ n
-  → activ net prev₂ n := by
---------------------------------------------------------------------
--/
 --------------------------------------------------------------------
 lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   (∀ (m : ℕ), m ∈ preds net n → (m ∈ A ↔ m ∈ B))
-  → activ net (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure
-      (if A (List.get! (Graph.predecessors net.toNet.graph n) i) 
-      then 1.0 else 0.0)) n
-  → activ net (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure
-      (if B (List.get! (Graph.predecessors net.toNet.graph n) i) 
-      then 1.0 else 0.0)) n := by
+  → activ net (List.map (fun i => 
+      let m := (preds net n).get! i
+      if A m then 1.0 else 0.0) 
+        (List.range (preds net n).length)) n
+  → activ net (List.map (fun i => 
+      let m := (preds net n).get! i
+      if B m then 1.0 else 0.0) 
+        (List.range (preds net n).length)) n := by
 --------------------------------------------------------------------
   intro h₁ h₂
   simp only [activ]
   simp only [activ] at h₂
-  convert ← h₂ using 7
+  convert ← h₂ using 6
 
   rename_i i
   let m := (preds net n).get! i
   have h₃ : m ∈ (preds net n) := get!_mem (preds net n) i
   exact h₁ m h₃
-
 
 /-══════════════════════════════════════════════════════════════════
   Properties of Propagation
@@ -1127,7 +1113,7 @@ theorem propagate_is_cumulative :
           -- Then try to prove what's left.
           simp
           simp at h₃
-          convert h₃ using 5
+          convert h₃ using 4
           rename_i i
           generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
@@ -1171,7 +1157,7 @@ theorem propagate_is_cumulative :
           -- Then try to prove what's left.
           simp
           simp at h₃
-          convert h₃ using 5
+          convert h₃ using 4
           rename_i i
           generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
@@ -1516,7 +1502,7 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
 --         -- TODO: This is the stuff that should go in the activ_agree lemma!
 --         simp
 --         simp at h₂
---         convert h₂ using 5
+--         convert h₂ using 4
 --         rename_i i
 --         generalize hm : List.get! (predecessors net.graph n).data i = m
 --         generalize hLm : layer net m = Lm
@@ -1558,7 +1544,7 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
 --         -- TODO: This is the stuff that should go in the activ_agree lemma!
 --         simp
 --         simp at h₂
---         convert h₂ using 5
+--         convert h₂ using 4
 --         rename_i i
 --         generalize hm : List.get! (predecessors net.graph n).data i = m
 --         generalize hLm : layer net m = Lm
@@ -2167,14 +2153,14 @@ and the fact that the activation function is monotone nondecreasing
 -/
 --------------------------------------------------------------------
 lemma hebb_activ (net : BFNN) (A B : Set ℕ) (n : ℕ) :
-  activ net (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure
-      (if B (List.get! (Graph.predecessors net.toNet.graph n) i) 
-      then 1.0 else 0.0)) n
-  → activ (hebb_star net A) (List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure
-      (if B (List.get! (Graph.predecessors net.toNet.graph n) i) 
-      then 1.0 else 0.0)) n := by
+  activ net (List.map (fun i => 
+      let m := (preds net n).get! i
+      if B m then 1.0 else 0.0) 
+        (List.range (preds net n).length)) n
+  → activ (hebb_star net A) (List.map (fun i => 
+      let m := (preds net n).get! i
+      if B m then 1.0 else 0.0) 
+        (List.range (preds net n).length)) n := by
 --------------------------------------------------------------------
   simp only [activ]
   rw [hebb_preds]
@@ -2312,7 +2298,7 @@ theorem simp_hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) 
   rw [hebb_activation net A]
   rw [hebb_preds net A]
   conv =>
-    lhs; enter [1, 2, 1, 2, i, 1]
+    lhs; enter [1, 2, 1, 1, i]
     rw [hebb_weights _ (Or.inr h₁)]
 
 
@@ -2320,37 +2306,20 @@ theorem simp_hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) 
 -- activ (hebb_star net A) _ n = activ net _ n.
 -- Like activ_agree, we have to simplify the statement of this
 -- lemma in order for Lean to be able to infer types efficiently.
---
--- Because this is ugly as hell, here's the statement of 
--- the lemma *before* simplification:
-/-
-theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
-  let prev_activ := do
-    let i <- List.range (preds net n).length
-    let m := (preds net n).get! i
-    return if propagate_acc net B m (layer net m) 
-      then 1.0 else 0.0
-
-  (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net 
-    (B ∪ reachable net (propagate net A) (propagate net B))))
-  → (activ (hebb_star net A) prev_activ n ↔ activ net prev_activ n)
--/
 --------------------------------------------------------------------
 theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
   (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net B))
 
-  → ((activ (hebb_star net A) (List.bind (List.range 
-    (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure (if propagate_acc net B
-              (List.get! (Graph.predecessors net.toNet.graph n) i)
-              (layer net (List.get! (Graph.predecessors net.toNet.graph n) i)) 
-          then 1.0 else 0.0)) n)
-  ↔ (activ net (List.bind (List.range 
-    (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-    pure (if propagate_acc net B
-              (List.get! (Graph.predecessors net.toNet.graph n) i)
-              (layer net (List.get! (Graph.predecessors net.toNet.graph n) i))
-          then 1.0 else 0.0)) n)) := by
+  → (activ (hebb_star net A) (List.map (fun i => 
+      if propagate_acc net B ((Graph.predecessors net.toNet.graph n).get! i) 
+        (layer net ((Graph.predecessors net.toNet.graph n).get! i)) 
+      then 1.0 else 0.0) 
+        (List.range (Graph.predecessors net.toNet.graph n).length)) n
+  ↔ activ net (List.map (fun i =>
+      if propagate_acc net B ((Graph.predecessors net.toNet.graph n).get! i) 
+        (layer net ((Graph.predecessors net.toNet.graph n).get! i)) 
+      then 1.0 else 0.0) 
+        (List.range (Graph.predecessors net.toNet.graph n).length)) n) := by
 --------------------------------------------------------------------
   intro h₁
   apply Eq.to_iff
@@ -2405,12 +2374,12 @@ theorem simp_hebb_activ₂ (net : BFNN) (A B : Set ℕ) :
 --------------------------------------------------------------------
 theorem simp_hebb_activ₃ (net : BFNN) (A B : Set ℕ) :
   let preds := preds net n
-  let prev_activ := do
-    let i <- List.range preds.length
+  let prev_activ := List.map (fun i => 
     let m := preds.get! i
-    return if propagate_acc (hebb_star net A) B m 
-      (layer (hebb_star net A) m) then 1.0 else 0.0
-  
+    if propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m) 
+    then 1.0 else 0.0) 
+      (List.range preds.length)
+
   n ∈ propagate net A
   → m ∈ preds ∧ m ∈ propagate net A  
   → m ∈ propagate (hebb_star net A) B
@@ -2593,7 +2562,8 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
 
         -- Go into h₁ and apply our inductive hypothesis
         conv at h₁ =>
-          enter [2, 2, i, 1]
+          enter [2, 1, i]
+          -- enter [2, 2, i, 1]
           rw [hm]
           rw [IH (layer net (m i)) (h₄ i) (m i) rfl]
         
@@ -2605,7 +2575,6 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
         -- of the *active* preds ∉ Prop(A), the activ's are the same.
         rw [simp_hebb_activ₂ _ _ B h₂] at h₁
         exact h₁
-
 
 --------------------------------------------------------------------
 theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) : 
@@ -2726,6 +2695,9 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
         simp at h₁
         exact hebb_activ net A S₂ _
           (activ_agree _ S₁ S₂ _ h₂ h₁)
+        -- TRY:
+        -- exact hebb_activ net A S₂ _
+        --   (activ_agree _ S₁ S₂ _ h₂ h₁)
 
     ---------------------
     -- Forward Direction
@@ -2896,7 +2868,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
 
             -- Go into h₁ and apply our inductive hypothesis
             conv at h₁ =>
-              enter [2, 2, i, 1]
+              enter [2, 1, i]
               rw [hm]
               rw [IH (layer net (m i)) (h₇ i) (m i) rfl]
             
@@ -2935,11 +2907,11 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           rw [simp_hebb_activ₁ _ _ _ h] at h₁ -- rewrite 'activ'
           rw [hebb_preds net A] at h₁ -- rewrite 'preds'
           conv at h₁ => -- rewrite 'layers'
-            enter [2, 2, i, m, 1]
+            enter [2, 1, i, m]
             rw [hebb_layers net A]
           simp
           simp at h₁
-          convert h₁ using 5
+          convert h₁ using 4
           rename_i i
           generalize hm : List.get! (net.graph.predecessors n) i = m
           generalize hLm : layer net m = Lm
