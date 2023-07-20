@@ -376,6 +376,7 @@ axiom lt_le_lt_float : ∀ (x y z : Float), x < y → y ≤ z → x < z
 axiom le_eq_le_float : ∀ (x y z : Float), x ≤ y → y = z → x ≤ z
 axiom eq_le_le_float : ∀ (x y z : Float), x = y → y ≤ z → x ≤ z
 axiom zero_lt_one_float : 0.0 < 1.0
+axiom zero_le_zero : 0.0 ≤ 0.0
 axiom le_of_lt_float : ∀ (x y : Float), x < y → x ≤ y
 axiom not_le_float : ∀ (x y : Float), x < y → ¬ (y ≤ x)
 axiom zero_mult : ∀ (x : Float), x * 0.0 = 0.0
@@ -383,9 +384,21 @@ axiom one_mult : ∀ (x : Float), x * 1.0 = x
 axiom zero_plus : ∀ (x : Float), x + 0.0 = x
 axiom commutative_mult_float : ∀ (x y : Float), x * y = y * x
 
+-- This is probably the worst offender on this list.
+-- We assume that we have an algorithm for casting a
+-- natural number as a Float.
+-- (Lean is especially bad about casting to and from Floats).
+-- TODO: When changing everything to 'Real's, I should actually
+-- give the cast to 'Real' here instead.
+
+-- Positive natural numbers
+axiom cast_float (n : ℕ) : Float
+axiom cast_float_zero : cast_float 0 = 0.0 
+
+--------------------------------------------------------------------
 theorem binary_step_is_binary (x : Float) :
-    (binary_step x = 0.0) ∨ (binary_step x = 1.0) :=
-    by
+    (binary_step x = 0.0) ∨ (binary_step x = 1.0) := by
+--------------------------------------------------------------------
       -- simp [binary_step]
 
       cases (lt_or_ge_float 0.0 x) with
@@ -409,9 +422,10 @@ theorem binary_step_is_binary (x : Float) :
 -- Proof that binary_step is nondecreasing
 -- This is also a 'hello world' to see if I can
 -- reason about a branching program.
+--------------------------------------------------------------------
 theorem binary_step_nondecr (x₁ x₂ : Float) (hyp : x₁ ≤ x₂) :
-  (binary_step x₁ ≤ binary_step x₂) := 
-  by
+  (binary_step x₁ ≤ binary_step x₂) := by
+--------------------------------------------------------------------
     -- Simplify by applying the definition of binary_step.
     simp [binary_step]
     
@@ -556,8 +570,13 @@ theorem setExample : 3 ∈ setC := by
   Forward propagation in a net
 ══════════════════════════════════════════════════════════════════-/
 
+-- I would like to write 
+--     List.sum [w * x | for w in weights, for x in lst],
+-- but list comprehensions are harder to reason about.
 def weighted_sum (weights : List Float) (lst : List Float) : Float :=
-  List.sum [w * x | for w in weights, for x in lst]
+  List.foldr (· + ·) 0.0 (List.zipWith (· * ·) weights lst)
+  -- List.sum [w * x | for w in weights, for x in lst]
+  -- 
 
 #eval weighted_sum [] []
 #eval weighted_sum [1.0] [3.0]
@@ -567,39 +586,43 @@ def weighted_sum (weights : List Float) (lst : List Float) : Float :=
 -- but this is left implicit.)
 #eval weighted_sum [1.0, 2.0] [3.0]
 
-/-
-(List.bind (List.range (List.length (Graph.predecessors net.toNet.graph n))) fun i =>
-        pure (Graph.getEdgeWeight (hebb_star net A).toNet.graph (List.get! (Graph.predecessors net.toNet.graph n) i) n))
--/
-/-
-(List.map (fun i => 
-      let m := (preds net n).get! i
-      if propagate_acc net B m (layer net m) then 1.0 else 0.0) 
-        (List.range (preds net n).length))
--/
-
+--------------------------------------------------------------------
 lemma weighted_sum_eq (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) :
-  let x₁ : List Float := List.map (fun i => fx₁ i) 
-    (List.range ls.length)
-  let x₂ : List Float := List.map (fun i => fx₂ i) 
-    (List.range ls.length)
-  let w₁ : List Float := List.map (fun i => fw₁ i) 
-    (List.range ls.length)
-  let w₂ : List Float := List.map (fun i => fw₂ i) 
-    (List.range ls.length)
+  let x₁ : List Float := List.map (fun i => fx₁ i) (List.range ls.length)
+  let x₂ : List Float := List.map (fun i => fx₂ i) (List.range ls.length)
+  let w₁ : List Float := List.map (fun i => fw₁ i) (List.range ls.length)
+  let w₂ : List Float := List.map (fun i => fw₂ i) (List.range ls.length)
   
   (∀ i, (fw₁ i) * (fx₁ i) = (fw₂ i) * (fx₂ i))
   → weighted_sum w₁ x₁ = weighted_sum w₂ x₂ := by
-
+--------------------------------------------------------------------
+  -- Simplify the weighted sum down to 
+  -- fw₁ i * fx₁ j = fw₂ i * fx₂ j
   intro x₁ x₂ w₁ w₂ h₁
   simp only [weighted_sum]
+  rw [List.zipWith_map_left]
+  rw [List.zipWith_map_left]
+  rw [List.zipWith_map_right]
+  rw [List.zipWith_map_right]
+  simp
   congr 2
-  sorry
-
-
-lemma weighted_sum_le (w₁ w₂ x₁ x₂ : List Float) :
-  (∀ i, (w₁.get! i) * (x₁.get! i) ≤ (w₂.get! i) * (x₂.get! i)) 
+  funext i
+  
+  -- Now we just need to show 
+  -- fw₁ i * fx₁ i = fw₂ i * fx₂ i,
+  -- but this was exactly our assumption.
+  exact h₁ i
+  
+--------------------------------------------------------------------
+lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) :
+  let x₁ : List Float := List.map (fun i => fx₁ i) (List.range ls.length)
+  let x₂ : List Float := List.map (fun i => fx₂ i) (List.range ls.length)
+  let w₁ : List Float := List.map (fun i => fw₁ i) (List.range ls.length)
+  let w₂ : List Float := List.map (fun i => fw₂ i) (List.range ls.length)
+  
+  (∀ i, (fw₁ i) * (fx₁ i) ≤ (fw₂ i) * (fx₂ i))
   → weighted_sum w₁ x₁ ≤ weighted_sum w₂ x₂ := by
+--------------------------------------------------------------------
 
   intro h₁
   simp only [weighted_sum]
@@ -1439,146 +1462,6 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
 
--- --------------------------------------------------------------------
--- theorem propagate_reach_inclusion (net : BFNN) : ∀ (S : Set ℕ),
---   propagate net S ⊆ reachable net S := by
--- --------------------------------------------------------------------
---   sorry
-
--- --------------------------------------------------------------------
--- lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
---   n ∈ reachedby net B
---   → (n ∈ propagate net A
---   ↔ n ∈ propagate net (A ∩ reachedby net B)) := by
--- --------------------------------------------------------------------
---   intro (A : Set ℕ) (B : Set ℕ)
---   intro (n : ℕ)
---   intro (h₁ : n ∈ reachedby net B)
---   simp only [Membership.mem, Set.Mem, propagate]
-
---   -- By induction on the layer of the net containing n
---   generalize hL : layer net n = L
---   induction L using Nat.case_strong_induction_on generalizing n
-  
---   -- Base Step
---   case hz => 
---     apply Iff.intro
---     case mp => 
---       intro h₂
---       simp only [propagate_acc]
---       simp only [propagate_acc] at h₂
---       exact ⟨h₂, h₁⟩
-
---     case mpr => 
---       intro h₂
---       simp only [propagate_acc]
---       simp only [propagate_acc] at h₂
---       exact h₂.1
-
---   -- Inductive Step
---   case hi k IH => 
---     apply Iff.intro
-
---     -- Forward Direction
---     case mp => 
---       intro h₂
-
---       -- By cases; either n ∈ A or not.
---       by_cases n ∈ A
---       case pos => 
---         -- This case is trivial (just apply Extens)
---         rw [symm hL]
---         have h₃ : n ∈ A ∩ reachedby net B := ⟨h, h₁⟩ 
---         exact @propagate_acc_is_extens net _ _ h₃
---       case neg => 
---         -- If n ∉ A, then n ∉ A ∩ reachedby net B
---         have h₃ : n ∉ A ∩ reachedby net B := 
---           fun n_in_A => absurd n_in_A.1 h
-        
---         -- Just some simplifications and rewriting definitions
---         rw [simp_propagate_acc net h] at h₂
---         rw [simp_propagate_acc net h₃]
-
---         -- TODO: This is the stuff that should go in the activ_agree lemma!
---         simp
---         simp at h₂
---         convert h₂ using 4
---         rename_i i
---         generalize hm : List.get! (predecessors net.graph n).data i = m
---         generalize hLm : layer net m = Lm
-
---         -- Apply the inductive hypothesis!
---         have h₄ : m ∈ preds net n := by
---           rw [symm hm]
---           simp [preds]
---           exact get!_mem (predecessors net.graph n).data i
---         have h₅ : Lm ≤ k := by
---           rw [symm hLm]
---           apply Nat.lt_succ.mp
---           rw [symm hL]
---           exact preds_decreasing net m n h₄
---         have h₆ : m ∈ reachedby net B :=
---           match h₁ with
---           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
---         exact (symm (IH Lm h₅ m h₆ hLm).to_eq).to_iff
-
---     -- Backwards Direction (should be similar)
---     case mpr =>
---       intro h₂
-
---       -- By cases; either n ∈ A or not.
---       by_cases n ∈ A
---       case pos => 
---         -- This case is trivial (just apply Extens)
---         rw [symm hL]
---         exact @propagate_acc_is_extens net _ _ h
---       case neg => 
---         -- If n ∉ A, then n ∉ A ∩ reachedby net B
---         have h₃ : n ∉ A ∩ reachedby net B := 
---           fun n_in_A => absurd n_in_A.1 h
-        
---         -- Just some simplifications and rewriting definitions
---         rw [simp_propagate_acc net h₃] at h₂
---         rw [simp_propagate_acc net h]
-
---         -- TODO: This is the stuff that should go in the activ_agree lemma!
---         simp
---         simp at h₂
---         convert h₂ using 4
---         rename_i i
---         generalize hm : List.get! (predecessors net.graph n).data i = m
---         generalize hLm : layer net m = Lm
-
---         -- Apply the inductive hypothesis!
---         have h₄ : m ∈ preds net n := by
---           rw [symm hm]
---           simp [preds]
---           exact get!_mem (predecessors net.graph n).data i
---         have h₅ : Lm ≤ k := by
---           rw [symm hLm]
---           apply Nat.lt_succ.mp
---           rw [symm hL]
---           exact preds_decreasing net m n h₄
---         have h₆ : m ∈ reachedby net B :=
---           match h₁ with
---           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
---         exact IH Lm h₅ m h₆ hLm
-
-
--- -- This is the actual property I want, re-written with conditionals
--- -- in mind
--- --------------------------------------------------------------------
--- theorem minimal_cause (net : BFNN) : ∀ (A B : Set ℕ),
---   B ⊆ propagate net A
---   ↔ B ⊆ propagate net (A ∩ reachedby net B) := by
--- --------------------------------------------------------------------
---   intro (A : Set ℕ) (B : Set ℕ)
---   apply Iff.intro
---   case mp => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
---     (reachedby_is_extens _ _ h₂)).mp (h₁ h₂)
---   case mpr => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
---     (reachedby_is_extens _ _ h₂)).mpr (h₁ h₂)
-
 /-══════════════════════════════════════════════════════════════════
   Update Policy: "Make neurons fire together"
   (without regard for the edges of the net)
@@ -1761,7 +1644,6 @@ lemma graph_update_acyclic (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
     case trivial => exact rfl
     case from_path x y path_ux edge_xy IH => 
       sorry
-
 
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
@@ -1989,6 +1871,16 @@ theorem hebb_once_weights (net : BFNN) :
     rw [zero_mult]
     rw [zero_plus]
 
+-- The weights of the new net are nondecreasing
+-- (One round of Hebbian update can only increase the weights)
+--------------------------------------------------------------------
+theorem hebb_once_weights_le (net : BFNN) :
+  net.graph.getEdgeWeight m n ≤ 
+  (hebb net A).toNet.graph.getEdgeWeight m n := by
+--------------------------------------------------------------------
+  sorry
+
+
 /-══════════════════════════════════════════════════════════════════
   "Iterated"/Fixed-Point Naive Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
@@ -1996,11 +1888,11 @@ theorem hebb_once_weights (net : BFNN) :
 -- Takes a graph update function 'f' (e.g. graph_update for Hebb)
 -- and iterates it 'no_times' times.
 -- netᵢ and Sᵢ are the initial inputs.
-def iterate (f : Graph ℕ Float → Set ℕ → Graph ℕ Float) 
-  (no_times : ℕ) (gᵢ : Graph ℕ Float) (Sᵢ : Set ℕ) : Graph ℕ Float :=
-  match no_times with
-  | Nat.zero => gᵢ
-  | Nat.succ k => f (iterate f k gᵢ Sᵢ) Sᵢ
+-- def iterate (f : Graph ℕ Float → Set ℕ → Graph ℕ Float) 
+--   (no_times : ℕ) (gᵢ : Graph ℕ Float) (Sᵢ : Set ℕ) : Graph ℕ Float :=
+--   match no_times with
+--   | Nat.zero => gᵢ
+--   | Nat.succ k => f (iterate f k gᵢ Sᵢ) Sᵢ
 
 -- We score neurons by the total sum of *negative* weights coming 
 -- into them.  The neuron with the lowest score is the least likely
@@ -2037,16 +1929,41 @@ def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
   -- let n_score := sorry
   -- sorry
 
--- Iterated hebbian update, up to a certain fixed point.
--- We implement this as a new net, whose graph is
--- 'graph_update' iterated 'hebb_unstable_point'
--- number of times.
+lemma unstable_point_pos (net : BFNN) (S : Set ℕ) :
+  0 < hebb_unstable_point net S := by
+  sorry
+
+
+-- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
+-- of that edge by (no_times) * η * act(m) * act(n).
+noncomputable
+def graph_update_star (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (no_times : ℕ) : Graph ℕ Float :=
+  map_edges g (fun m n weight => 
+    let activ_m := if m ∈ propagate net S then 1.0 else 0.0
+    let activ_n := if n ∈ propagate net S then 1.0 else 0.0
+    weight + ((cast_float no_times) * net.rate * activ_m * activ_n))
+
+-- Iterated Hebbian Update
+-- 
+-- First, note that if we iterate 'hebb' or 'graph_update' in the
+-- usual way, all Prop(S) will change with each iteration.  
+-- So instead, we bake the iteration into the weight update:
+-- We keep adding to the weights relative to the *original* net's
+-- Prop(S) values. 
+-- 
+-- Second, rather than iterating up to a fixed point, for unstable
+-- Hebbian learning it's enough to take a specific finite number
+-- of iterations.  In this case, that number is 'hebb_unstable_point'.
+-- For more complicated learning algorithms, we would need to build
+-- up lemmas about the fixed point of a graph.
+-- 
 -- FUTURE: Consider re-doing this using limits of graphs/categories
 noncomputable
-def hebb_star (net : BFNN) (S : Set ℕ) : BFNN := 
+def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
 { net with
-  graph := iterate (graph_update net) (hebb_unstable_point net S) net.graph S
+  graph := graph_update_star net net.graph S (hebb_unstable_point net S)
 }
+
 
 /-══════════════════════════════════════════════════════════════════
   Facts we will need about the unstable point
@@ -2067,19 +1984,28 @@ theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) :
   → (P (hebb_star net S) = P net) := by 
 --------------------------------------------------------------------
   intro h₁
-  simp only [hebb_star]
   
   -- By induction on the unstable point of the net
   -- (we don't actually need to know what the unstable point *is*
   --  for this lemma to hold.)
-  induction (hebb_unstable_point net S)
-  case zero => simp only [iterate]
-  case succ k IH =>
-    simp only [iterate]
-    simp only [hebb] at h₁
+  generalize hpt : (hebb_unstable_point net S) = pt
+  induction pt generalizing net
+  case zero => 
+    -- This case is impossible; hebb_unstable_point cannot be zero!
+    exact absurd hpt (ne_of_gt (unstable_point_pos _ _))
 
-    -- Why won't h₁ work here?
-    exact Eq.trans sorry IH 
+  case succ k IH =>
+    -- simp only [hebb] at h₁
+    simp only [hebb_star]
+    rw [hpt]
+    -- simp only [graph_update] at h₁
+    simp only [graph_update_star]
+
+    -- convert h₁ using 9
+    -- convert h₁ using 3
+    -- rename_i x₁ x₂ w
+
+    sorry
     
 
 
@@ -2136,21 +2062,40 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
   exact hebb_lift _ _ (fun x => reachable x A B) (hebb_once_reach _ _ _)
 
 
+-- If m ∉ Prop(A) or n ∉ Prop(A), then the edge m ⟶ n was not
+-- increased by Hebbian update.  So its weight in the updated
+-- net is the same as its weight in the original net.
+-- Lifted from hebb_once_weights
+--------------------------------------------------------------------
+theorem hebb_weights (net : BFNN) : 
+  (m ∉ propagate net A ∨ n ∉ propagate net A)
+  → ((hebb_star net A).toNet.graph.getEdgeWeight m n =
+    net.graph.getEdgeWeight m n) := by
+--------------------------------------------------------------------
+  intro h₁
+  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
+    (hebb_once_weights _ h₁)
+
+
+-- The weights of the new net are nondecreasing
+-- (Hebbian update can only increase the weights)
+-- Note that we *cannot* lift this property straightforwardly,
+-- since it's an inequality.
+--------------------------------------------------------------------
+theorem hebb_weights_le (net : BFNN) :
+  net.graph.getEdgeWeight m n ≤ 
+  (hebb_star net A).toNet.graph.getEdgeWeight m n := by
+--------------------------------------------------------------------
+  sorry
+
+
+/-══════════════════════════════════════════════════════════════════
+  The more interesting/crucial properties
+══════════════════════════════════════════════════════════════════-/
+
 -- A lemma for 'activ' and 'hebb':
 -- Essentially a simplified form of
 -- activ net prev_activ n  ⟶  activ (hebb_star net A) prev_activ n
--- 
--- (the weights of the new net have *not decreased*, so if n
---  is activated by its predecessors in the original net, 
---  it's activated by its predecessors in the new net.)
-/-
-This depends on a lemma that says:
-Graph.getEdgeWeight net.toNet.graph (List.get! (preds net n) i) n
-      ≤ 
-Graph.getEdgeWeight (hebb_star net A).toNet.graph (List.get! (preds net n) i) n
-
-and the fact that the activation function is monotone nondecreasing
--/
 --------------------------------------------------------------------
 lemma hebb_activ (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   activ net (List.map (fun i => 
@@ -2168,123 +2113,24 @@ lemma hebb_activ (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   apply activation_from_inequality _ _ _
   apply net.activ_nondecr _ _
   apply weighted_sum_le _ _ _ _
-  
   intro i
-  sorry
-
--- Every net N is a subnet of (hebb_star N)
--- (i.e. hebb_star includes the previous propagations)
--- (We had this property in The Logic of Hebbian Learning)
--- TODO: Can we lift this from single-iteration hebb???
---------------------------------------------------------------------
-theorem hebb_extensive (net : BFNN) (A : Set ℕ) : 
-  net ≼ (hebb_star net A) := by 
---------------------------------------------------------------------
-  intro (B : Set ℕ)
-  intro (n : ℕ)
-  -- intro (h₁ : n ∈ propagate net B)
-  simp only [Membership.mem, Set.Mem, propagate]
-  -- simp only [Membership.mem, Set.Mem, propagate] at h₁
   
-  -- By induction on the layer of the 
-  generalize hL : layer net n = L
-  induction L
-
-  --------------------------------
-  -- Base Step
-  --------------------------------
-  case zero => 
-    intro h₁
-    rw [hebb_layers]
-    rw [hL]
-    simp only [propagate_acc]
-    simp only [propagate_acc] at h₁
-    exact h₁
-
-  --------------------------------
-  -- Inductive Step
-  --------------------------------
-  case succ k IH => 
-    intro h₁
-
-    -- By cases, to later simplify propagate_acc
-    by_cases n ∈ B
-    case pos => 
-      rw [hebb_layers]
-      rw [← hebb_layers net A]
-      exact propagate_acc_is_extens _ _ h  
-    
-    case neg => 
-      -- Do simplifications and rewriting
-      rw [hebb_layers]
-      rw [hL]
-      rw [simp_propagate_acc _ h]
-      rw [simp_propagate_acc _ h] at h₁
-      rw [hebb_preds]
-      
-      -- The plan is to now apply our inductive hypothesis
-      -- and use the 'activ_agree' lemmas.
-      -- We write the two sets as S₁ and S₂ for convenience 
-      let S₁ := fun m => propagate_acc net B m (layer net m)
-      let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
-
-      -- Apply IH to the predecessors
-      have h₂ : ∀ (m : ℕ), m ∈ preds net n → (S₁ m → S₂ m) := by
-        sorry
-        -- simp only [Membership.mem] -- really just want to unfold the let
-        -- intro m hm
-        -- generalize hLm : layer net m = Lm
-        -- have h₃ : Lm ≤ L := by
-        --   rw [symm hLm]
-        --   apply Nat.lt_succ.mp
-        --   rw [symm hL]
-        --   exact preds_decreasing net m n hm
-        -- exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
-
-      -- Argument: 
-      -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
-      --   activate n *in the original net*
-      -- But the weights in the updated net are either the same or
-      --   increasing, so by hebb_activ, these same predecessors
-      --   activate n *in the updated net*.
-      simp
-      simp at h₁
-      exact hebb_activ net A S₂ _
-        (activ_agree _ S₁ S₂ _ sorry h₁)
-      -- -- We can *almost* apply 'hebb_activ'... what's missing???
-      --       -- need to argue here that 'activ' is *nondecreasing*
-      --       -- i.e. never decreases a weight.
-
-
---------------------------------------------------------------------
-lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
-  propagate_acc net B n (layer net n) → 
-  propagate_acc (hebb_star net A) B n (layer net n) := by
--------------------------------------------------------------------- 
-  intro h₁
-  have h₂ : n ∈ propagate (hebb_star net A) B := hebb_extensive _ _ _ h₁
-  simp only [Membership.mem, Set.Mem, propagate] at h₂
-  rw [hebb_layers] at h₂
-  exact h₂
-
-
-/-══════════════════════════════════════════════════════════════════
-  The more interesting/crucial properties
-══════════════════════════════════════════════════════════════════-/
-
--- If m ∉ Prop(A) or n ∉ Prop(A), then the edge m ⟶ n was not
--- increased by Hebbian update.  So its weight in the updated
--- net is the same as its weight in the original net.
--- Lifted from hebb_once_weights
---------------------------------------------------------------------
-theorem hebb_weights (net : BFNN) : 
-  (m ∉ propagate net A ∨ n ∉ propagate net A)
-  → ((hebb_star net A).toNet.graph.getEdgeWeight m n =
-    net.graph.getEdgeWeight m n) := by
---------------------------------------------------------------------
-  intro h₁
-  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
-    (hebb_once_weights _ h₁)
+  -- We split by cases; either m ∉ B, in which case both
+  -- sides reduce to 0.0;
+  -- Or m ∈ B, in which case we check that the weight
+  -- for m ⟶ n in the original net is ≤ the updated net weight. 
+  generalize hm : (List.get! (preds net n) i) = m
+  by_cases (B m)
+  case neg => 
+    rw [if_neg h]
+    rw [zero_mult]
+    rw [zero_mult]
+    exact zero_le_zero
+  case pos => 
+    rw [if_pos h]
+    rw [one_mult]
+    rw [one_mult]
+    exact hebb_weights_le _
 
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
@@ -2397,6 +2243,102 @@ theorem simp_hebb_activ₃ (net : BFNN) (A B : Set ℕ) :
   
   sorry -- I have the proof written on paper, I should consult that.
         -- Depends on things like the monotonicity of 'activation', etc.
+
+
+-- Every net N is a subnet of (hebb_star N)
+-- (i.e. hebb_star includes the previous propagations)
+-- (We had this property in The Logic of Hebbian Learning)
+-- TODO: Can we lift this from single-iteration hebb???
+--------------------------------------------------------------------
+theorem hebb_extensive (net : BFNN) (A : Set ℕ) : 
+  net ≼ (hebb_star net A) := by 
+--------------------------------------------------------------------
+  intro (B : Set ℕ)
+  intro (n : ℕ)
+  -- intro (h₁ : n ∈ propagate net B)
+  simp only [Membership.mem, Set.Mem, propagate]
+  -- simp only [Membership.mem, Set.Mem, propagate] at h₁
+  
+  -- By induction on the layer of the 
+  generalize hL : layer net n = L
+  induction L
+
+  --------------------------------
+  -- Base Step
+  --------------------------------
+  case zero => 
+    intro h₁
+    rw [hebb_layers]
+    rw [hL]
+    simp only [propagate_acc]
+    simp only [propagate_acc] at h₁
+    exact h₁
+
+  --------------------------------
+  -- Inductive Step
+  --------------------------------
+  case succ k IH => 
+    intro h₁
+
+    -- By cases, to later simplify propagate_acc
+    by_cases n ∈ B
+    case pos => 
+      rw [hebb_layers]
+      rw [← hebb_layers net A]
+      exact propagate_acc_is_extens _ _ h  
+    
+    case neg => 
+      -- Do simplifications and rewriting
+      rw [hebb_layers]
+      rw [hL]
+      rw [simp_propagate_acc _ h]
+      rw [simp_propagate_acc _ h] at h₁
+      rw [hebb_preds]
+      
+      -- The plan is to now apply our inductive hypothesis
+      -- and use the 'activ_agree' lemmas.
+      -- We write the two sets as S₁ and S₂ for convenience 
+      let S₁ := fun m => propagate_acc net B m (layer net m)
+      let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
+
+      -- Apply IH to the predecessors
+      have h₂ : ∀ (m : ℕ), m ∈ preds net n → (S₁ m → S₂ m) := by
+        sorry
+        -- simp only [Membership.mem] -- really just want to unfold the let
+        -- intro m hm
+        -- generalize hLm : layer net m = Lm
+        -- have h₃ : Lm ≤ L := by
+        --   rw [symm hLm]
+        --   apply Nat.lt_succ.mp
+        --   rw [symm hL]
+        --   exact preds_decreasing net m n hm
+        -- exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
+
+      -- Argument: 
+      -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
+      --   activate n *in the original net*
+      -- But the weights in the updated net are either the same or
+      --   increasing, so by hebb_activ, these same predecessors
+      --   activate n *in the updated net*.
+      simp
+      simp at h₁
+      exact hebb_activ net A S₂ _
+        (activ_agree _ S₁ S₂ _ sorry h₁)
+      -- -- We can *almost* apply 'hebb_activ'... what's missing???
+      --       -- need to argue here that 'activ' is *nondecreasing*
+      --       -- i.e. never decreases a weight.
+
+
+--------------------------------------------------------------------
+lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
+  propagate_acc net B n (layer net n) → 
+  propagate_acc (hebb_star net A) B n (layer net n) := by
+-------------------------------------------------------------------- 
+  intro h₁
+  have h₂ : n ∈ propagate (hebb_star net A) B := hebb_extensive _ _ _ h₁
+  simp only [Membership.mem, Set.Mem, propagate] at h₂
+  rw [hebb_layers] at h₂
+  exact h₂
 
 
 -- If there is a path within Prop(A) from B to n, then, since this
@@ -3036,3 +2978,146 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
 --   hebb (hebb_star net S) S ≡ hebb_star net S := by 
 -- --------------------------------------------------------------------
 --   sorry
+
+
+-- ANOTHER THEOREM
+-- that I didn't end up using
+-- --------------------------------------------------------------------
+-- theorem propagate_reach_inclusion (net : BFNN) : ∀ (S : Set ℕ),
+--   propagate net S ⊆ reachable net S := by
+-- --------------------------------------------------------------------
+--   sorry
+
+-- --------------------------------------------------------------------
+-- lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
+--   n ∈ reachedby net B
+--   → (n ∈ propagate net A
+--   ↔ n ∈ propagate net (A ∩ reachedby net B)) := by
+-- --------------------------------------------------------------------
+--   intro (A : Set ℕ) (B : Set ℕ)
+--   intro (n : ℕ)
+--   intro (h₁ : n ∈ reachedby net B)
+--   simp only [Membership.mem, Set.Mem, propagate]
+
+--   -- By induction on the layer of the net containing n
+--   generalize hL : layer net n = L
+--   induction L using Nat.case_strong_induction_on generalizing n
+  
+--   -- Base Step
+--   case hz => 
+--     apply Iff.intro
+--     case mp => 
+--       intro h₂
+--       simp only [propagate_acc]
+--       simp only [propagate_acc] at h₂
+--       exact ⟨h₂, h₁⟩
+
+--     case mpr => 
+--       intro h₂
+--       simp only [propagate_acc]
+--       simp only [propagate_acc] at h₂
+--       exact h₂.1
+
+--   -- Inductive Step
+--   case hi k IH => 
+--     apply Iff.intro
+
+--     -- Forward Direction
+--     case mp => 
+--       intro h₂
+
+--       -- By cases; either n ∈ A or not.
+--       by_cases n ∈ A
+--       case pos => 
+--         -- This case is trivial (just apply Extens)
+--         rw [symm hL]
+--         have h₃ : n ∈ A ∩ reachedby net B := ⟨h, h₁⟩ 
+--         exact @propagate_acc_is_extens net _ _ h₃
+--       case neg => 
+--         -- If n ∉ A, then n ∉ A ∩ reachedby net B
+--         have h₃ : n ∉ A ∩ reachedby net B := 
+--           fun n_in_A => absurd n_in_A.1 h
+        
+--         -- Just some simplifications and rewriting definitions
+--         rw [simp_propagate_acc net h] at h₂
+--         rw [simp_propagate_acc net h₃]
+
+--         -- TODO: This is the stuff that should go in the activ_agree lemma!
+--         simp
+--         simp at h₂
+--         convert h₂ using 4
+--         rename_i i
+--         generalize hm : List.get! (predecessors net.graph n).data i = m
+--         generalize hLm : layer net m = Lm
+
+--         -- Apply the inductive hypothesis!
+--         have h₄ : m ∈ preds net n := by
+--           rw [symm hm]
+--           simp [preds]
+--           exact get!_mem (predecessors net.graph n).data i
+--         have h₅ : Lm ≤ k := by
+--           rw [symm hLm]
+--           apply Nat.lt_succ.mp
+--           rw [symm hL]
+--           exact preds_decreasing net m n h₄
+--         have h₆ : m ∈ reachedby net B :=
+--           match h₁ with
+--           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
+--         exact (symm (IH Lm h₅ m h₆ hLm).to_eq).to_iff
+
+--     -- Backwards Direction (should be similar)
+--     case mpr =>
+--       intro h₂
+
+--       -- By cases; either n ∈ A or not.
+--       by_cases n ∈ A
+--       case pos => 
+--         -- This case is trivial (just apply Extens)
+--         rw [symm hL]
+--         exact @propagate_acc_is_extens net _ _ h
+--       case neg => 
+--         -- If n ∉ A, then n ∉ A ∩ reachedby net B
+--         have h₃ : n ∉ A ∩ reachedby net B := 
+--           fun n_in_A => absurd n_in_A.1 h
+        
+--         -- Just some simplifications and rewriting definitions
+--         rw [simp_propagate_acc net h₃] at h₂
+--         rw [simp_propagate_acc net h]
+
+--         -- TODO: This is the stuff that should go in the activ_agree lemma!
+--         simp
+--         simp at h₂
+--         convert h₂ using 4
+--         rename_i i
+--         generalize hm : List.get! (predecessors net.graph n).data i = m
+--         generalize hLm : layer net m = Lm
+
+--         -- Apply the inductive hypothesis!
+--         have h₄ : m ∈ preds net n := by
+--           rw [symm hm]
+--           simp [preds]
+--           exact get!_mem (predecessors net.graph n).data i
+--         have h₅ : Lm ≤ k := by
+--           rw [symm hLm]
+--           apply Nat.lt_succ.mp
+--           rw [symm hL]
+--           exact preds_decreasing net m n h₄
+--         have h₆ : m ∈ reachedby net B :=
+--           match h₁ with
+--           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
+--         exact IH Lm h₅ m h₆ hLm
+
+
+-- -- This is the actual property I want, re-written with conditionals
+-- -- in mind
+-- --------------------------------------------------------------------
+-- theorem minimal_cause (net : BFNN) : ∀ (A B : Set ℕ),
+--   B ⊆ propagate net A
+--   ↔ B ⊆ propagate net (A ∩ reachedby net B) := by
+-- --------------------------------------------------------------------
+--   intro (A : Set ℕ) (B : Set ℕ)
+--   apply Iff.intro
+--   case mp => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
+--     (reachedby_is_extens _ _ h₂)).mp (h₁ h₂)
+--   case mpr => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
+--     (reachedby_is_extens _ _ h₂)).mpr (h₁ h₂)
