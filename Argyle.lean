@@ -1409,6 +1409,10 @@ theorem reach_union (net : BFNN) : ∀ (S A B : Set ℕ),
       case inr h₂ => exact Or.inr ⟨m, ⟨h₂, hm.2⟩⟩
 
 
+/-══════════════════════════════════════════════════════════════════
+  Reach-Prop Interaction Properties
+══════════════════════════════════════════════════════════════════-/
+
 -- A simple interaction between graph reachability and propagation
 --------------------------------------------------------------------
 theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
@@ -1458,59 +1462,6 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
         exact ⟨x, ⟨hx.1, focusedPath_trans _ _ hx.2 hm.2⟩⟩
       
 
-/-══════════════════════════════════════════════════════════════════
-  Reach-Prop Interaction Properties
-══════════════════════════════════════════════════════════════════-/
-
-/-══════════════════════════════════════════════════════════════════
-  Update Policy: "Make neurons fire together"
-  (without regard for the edges of the net)
-══════════════════════════════════════════════════════════════════-/
-
-/-
-*Notes*
-The basic idea is that we take a subset A of the graph, and
-increase our preference for nodes in A as much as possible.
-We do this by: 1) completing the graph A, and 2) maximizing all
-of the edges within this completed graph.  The overall effect
-is that for all neurons m, n ∈ A, m fires exactly when n fires.
-
-But this operation results in a graph with cycles -- so [A] Prop(B)
-is not well-defined!  But we can do something equivalent:
-Take all the nodes in A, and quotient them.  This results in a
-net where all the nodes m, n ∈ A "fire as one".
-
-So we need:
-  [Def] Define 'complete_and_max' update
-  [Def] Define 'fire_together' update (the quotient structure)
-  [Thm] Prove that the two updates are equivalent.
-        (We can't use Prop for this -- maybe I can prove
-         that the 'activ' for both nets agrees?)
-  [Thm] Find a reduction for 'fire_together' and prove it.
-        (It should look like the dual of Lexicographic Upgrade)
-  [Cor] 'fire_together' is the dual of Lexicographic Upgrade
-    [Depends] 
-      Preference Models
-      Lexicographic Upgrade
-      Lexicographic Upgrade reduction
-      Model translation from pref models ⟷ nets
--/
-
--- def complete_and_max (net : BFNN) (A : Set ℕ) : BFNN :=
---   sorry
-
--- def fire_together (net : BFNN) (A : Set ℕ) : BFNN :=
--- { net with
---   graph := sorry
---   activation := sorry
---   rate := sorry
-
---   -- binary := sorry
---   binary := sorry
---   acyclic := sorry
---   activ_nondecr := sorry
---   activ_pos := sorry
--- }
 
 
 
@@ -1535,6 +1486,7 @@ lemma map_edges_apply (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float
 --------------------------------------------------------------------
   -- I have no idea... this one's tough, and it's hard to see
   -- what's going on.
+  -- TODO: Reasoning about weights is hard!  Redefine getEdgeWeight!
   simp only [Graph.getEdgeWeight]
 
   match List.find? (fun x => decide (x.fst = n)) g.vertices[m]!.successors with
@@ -1878,7 +1830,9 @@ theorem hebb_once_weights_le (net : BFNN) :
   net.graph.getEdgeWeight m n ≤ 
   (hebb net A).toNet.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
-  sorry
+  simp only [hebb, graph_update]
+  sorry -- Weights are hard to reason about,
+        -- because of the 'match'!  Maybe redefine getEdgeWeights!
 
 
 /-══════════════════════════════════════════════════════════════════
@@ -2086,15 +2040,26 @@ theorem hebb_weights_le (net : BFNN) :
   net.graph.getEdgeWeight m n ≤ 
   (hebb_star net A).toNet.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
-  sorry
+  simp only [hebb_star]
+  generalize hpt : (hebb_unstable_point net A) = pt
+  
+  -- By induction on the unstable point of the net
+  induction pt
+  case zero => 
+    -- This case is impossible; hebb_unstable_point cannot be zero!
+    exact absurd hpt (ne_of_gt (unstable_point_pos _ _))
+  case succ k IH => 
+    simp only [graph_update_star]
+    sorry -- graph weights are hard to reason about
+          -- because of the 'match'!
+          -- there's got to be an easier way!
 
 
 /-══════════════════════════════════════════════════════════════════
   The more interesting/crucial properties
 ══════════════════════════════════════════════════════════════════-/
 
--- A lemma for 'activ' and 'hebb':
--- Essentially a simplified form of
+-- The lemma for 'activ' and 'hebb', essentially
 -- activ net prev_activ n  ⟶  activ (hebb_star net A) prev_activ n
 --------------------------------------------------------------------
 lemma hebb_activ (net : BFNN) (A B : Set ℕ) (n : ℕ) :
@@ -2115,10 +2080,10 @@ lemma hebb_activ (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   apply weighted_sum_le _ _ _ _
   intro i
   
-  -- We split by cases; either m ∉ B, in which case both
-  -- sides reduce to 0.0;
-  -- Or m ∈ B, in which case we check that the weight
-  -- for m ⟶ n in the original net is ≤ the updated net weight. 
+  -- We split by cases; either m ∉ B in the original net,
+  -- and both sides reduce to 0.0;
+  -- or m ∈ B, in which case we check that the weight for
+  -- m ⟶ n in the original net is ≤ the updated net weight.  
   generalize hm : (List.get! (preds net n) i) = m
   by_cases (B m)
   case neg => 
@@ -2131,7 +2096,6 @@ lemma hebb_activ (net : BFNN) (A B : Set ℕ) (n : ℕ) :
     rw [one_mult]
     rw [one_mult]
     exact hebb_weights_le _
-
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
 --------------------------------------------------------------------
@@ -2288,46 +2252,257 @@ theorem hebb_extensive (net : BFNN) (A : Set ℕ) :
       exact propagate_acc_is_extens _ _ h  
     
     case neg => 
-      -- Do simplifications and rewriting
-      rw [hebb_layers]
-      rw [hL]
-      rw [simp_propagate_acc _ h]
-      rw [simp_propagate_acc _ h] at h₁
-      rw [hebb_preds]
+      -- From here, we split *again*, depending on whether n ∈ Prop(A).
+      by_cases n ∈ propagate net A
       
-      -- The plan is to now apply our inductive hypothesis
-      -- and use the 'activ_agree' lemmas.
-      -- We write the two sets as S₁ and S₂ for convenience 
-      let S₁ := fun m => propagate_acc net B m (layer net m)
-      let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
-
-      -- Apply IH to the predecessors
-      have h₂ : ∀ (m : ℕ), m ∈ preds net n → (S₁ m → S₂ m) := by
+      ---------------------
+      -- Case 1: n ∈ Prop(A)
+      ---------------------
+      case pos => 
         sorry
-        -- simp only [Membership.mem] -- really just want to unfold the let
-        -- intro m hm
-        -- generalize hLm : layer net m = Lm
-        -- have h₃ : Lm ≤ L := by
-        --   rw [symm hLm]
-        --   apply Nat.lt_succ.mp
-        --   rw [symm hL]
-        --   exact preds_decreasing net m n hm
-        -- exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
 
-      -- Argument: 
-      -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
-      --   activate n *in the original net*
-      -- But the weights in the updated net are either the same or
-      --   increasing, so by hebb_activ, these same predecessors
-      --   activate n *in the updated net*.
-      simp
-      simp at h₁
-      exact hebb_activ net A S₂ _
-        (activ_agree _ S₁ S₂ _ sorry h₁)
-      -- -- We can *almost* apply 'hebb_activ'... what's missing???
-      --       -- need to argue here that 'activ' is *nondecreasing*
-      --       -- i.e. never decreases a weight.
 
+      ---------------------
+      -- Case 2: n ∉ Prop(A)
+      ---------------------
+      -- In this case, the activ's are the same.  This means
+      -- that the *preceding propagations are the same*, and
+      -- this sets us up to apply our inductive hypothesis.
+      case neg => 
+        rename_i n_not_in_B
+        
+        -- Simplifications and rewriting, to prepare for IH
+        rw [hebb_layers]
+        rw [hebb_layers] at IH
+        rw [hL]
+        rw [simp_propagate_acc _ n_not_in_B] at h₁
+        rw [simp_propagate_acc _ n_not_in_B]
+        
+        sorry
+
+        -- simp
+        -- simp at h₁
+        -- sorry
+
+/-
+        ---------------------
+        -- Case 2: n ∉ Prop(A)
+        ---------------------
+        -- In this case, the activ's are the same, so we can
+        -- straightforwardly apply our inductive hypothesis.
+        case neg =>
+          -- We get ready to simplify propagate_acc
+          rename_i n_not_in_reach
+          have n_not_in_B : n ∉ B :=
+            fun n_in_B => absurd (Set.mem_union_left _ n_in_B) n_not_in_reach
+
+          -- Simplifications and rewriting, to prepare for IH
+          -- We also rewrite the 'preds', 'layers', and 'activ'
+          -- for (hebb_star net) in terms of the original 'net'.
+          rw [hebb_layers] at h₁
+          rw [hL] at h₁
+          simp only [propagate] at n_not_in_reach
+          rw [simp_propagate_acc _ n_not_in_B] at h₁
+          rw [simp_propagate_acc _ n_not_in_reach]
+          
+          rw [simp_hebb_activ₁ _ _ _ h] at h₁ -- rewrite 'activ'
+          rw [hebb_preds net A] at h₁ -- rewrite 'preds'
+          conv at h₁ => -- rewrite 'layers'
+            enter [2, 1, i, m]
+            rw [hebb_layers net A]
+          simp
+          simp at h₁
+          convert h₁ using 4
+          rename_i i
+          generalize hm : List.get! (net.graph.predecessors n) i = m
+          generalize hLm : layer net m = Lm
+          conv at IH => -- rewrite 'layers' in IH
+            enter [L, hL, m, hLm, 1]
+            rw [hebb_layers]
+            rw [hLm]
+
+          -- We are now ready to apply our inductive hypothesis!
+          have h₂ : m ∈ preds net n := by
+            rw [symm hm]
+            simp [preds]
+            exact get!_mem (net.graph.predecessors n) i
+          have h₃ : Lm ≤ L := by
+            rw [symm hLm]
+            apply Nat.lt_succ.mp
+            rw [symm hL]
+            exact preds_decreasing net m n h₂
+          exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
+
+
+          -------------------------------------------------
+
+
+
+        -- From here, we split *again*, depending on whether n ∈ Prop(A).
+        by_cases n ∈ propagate net A
+
+        ---------------------
+        -- Case 1: n ∈ Prop(A)
+        ---------------------
+        case pos => 
+          -- Since Prop(A) ∩ Prop(B) is nonempty, and
+          -- Prop(A) ∩ Prop(B) ⊆ Prop(A) ∩ Prop(B ∪ Reach(Prop(A), Prop(B))) 
+          --                   = S   (we abbreviate the set for convenience)
+          -- there is an m in the latter set.
+          generalize hS : (propagate net A) ∩ (propagate net (B ∪ reachable net (propagate net A) (propagate net B))) = S
+          have h_nonemptyS : Set.Nonempty S := by 
+            rw [← hS]
+            rw [← Set.nonempty_iff_ne_empty] at h_nonempty 
+            exact match h_nonempty with
+            | ⟨m, hm⟩ => ⟨m, ⟨hm.1, propagate_is_extens _ _ 
+              (mem_union_right _ (reach_is_extens _ _ _ hm))⟩⟩
+
+          -- By the well-ordering principle, let m be the node
+          -- in this set with the *smallest layer*
+          let m := WellFounded.min (layer_wellfounded net) S h_nonemptyS
+
+          -- This m is both in the set, and is the smallest such m.
+          have hm : m ∈ S := WellFounded.min_mem _ _ _
+          have h₃ : ∀ x, x ∈ S → layer net m ≤ layer net x := 
+            fun x hx => le_of_not_le 
+              (WellFounded.not_lt_min (layer_wellfounded net) _ _ hx) 
+          
+          -- We don't know whether n ∈ S yet,
+          -- but we do know that either:
+          --    - layer(m) < layer(n), or
+          --    - layer(m) ≥ layer(n).
+          -- So we split into these two cases.
+          cases lt_or_ge (layer net m) (layer net n)
+
+          ---------------------
+          -- Case 1.1: n ∈ Prop(A)
+          -- and layer[m] < layer[n]
+          ---------------------
+          -- Since the net is transitively closed, we have an
+          -- edge from m to n.  Since
+          --     m ∈ S = Prop(A) ∩ Prop(B ∪ Reach(Prop(A), Prop(B)))
+          -- and n ∈ Prop(A),
+          -- we get the unfortunate expression
+          --     n ∈ Reach(Prop(A), Prop(B ∪ Reach(Prop(A), Prop(B)))).
+          -- The trick from here is to show, by Reach-Prop algebra:
+          --     n ∈ Reach(Prop(A), Prop(B)),
+          -- and so
+          --     n ∈ Prop(B ∪ Reach(Prop(A), Prop(B)))
+          --
+          -- This is where the real action of the proof happens. 
+          case inl h₄ => 
+            -- We apply the fact that the net is fully connected to get an
+            -- edge m⟶n.
+            have h₅ : Graph.hasEdge net.toNet.graph m n := by
+              exact connected _ m n h₄
+
+            -- So we have n ∈ Reach(Prop(A), Prop(B ∪ Reach(Prop(A), Prop(B))))
+            -- (the unfortunately ugly expression)
+            have h₆ : n ∈ reachable net (propagate net A) 
+              (propagate net (B ∪ reachable net (propagate net A) 
+                (propagate net B))) := by
+              rw [← hS] at hm
+              exact ⟨m, ⟨hm.2, 
+                focusedPath.from_path (focusedPath.trivial hm.1) h₅ h⟩⟩
+
+            -- By algebra, this reduces to n ∈ Reach(Prop(A), Prop(B))
+            -- TODO: Can I clean up the congr_arg parts?  What extensionality
+            -- lemma do I need to use here???        
+            have h₇ : reachable net (propagate net A) B ⊆ 
+                      reachable net (propagate net A) 
+                        (reachable net (propagate net A) (propagate net B)) := by
+              intro x hx
+              rw [← reach_is_idempotent _ _ _]
+              exact reach_is_monotone _ _ _ _ (propagate_is_extens _ _) hx
+
+            have h₈ : n ∈ reachable net (propagate net A) (propagate net B) := by
+              apply (congr_arg (fun X => n ∈ X) (reach_is_idempotent _ _ _)).mpr
+              apply (congr_arg (fun X => n ∈ X) (Set.union_eq_right_iff_subset.mpr h₇)).mp
+              apply (congr_arg (fun X => n ∈ X) (reach_union _ _ _ _)).mp
+              exact reach_propagate _ _ _ h₆
+
+            -- Since                 n ∈ Reach(Prop(A), Prop(B)),
+            -- We have      n ∈ Prop(B ∪ Reach(Prop(A), Prop(B)))
+            simp only [propagate] at h₈
+            rw [← hL]
+            exact propagate_acc_is_extens net _ (Set.mem_union_right _ h₈)
+
+          ---------------------
+          -- Case 1.2: n ∈ Prop(A)
+          -- and layer[m] ≥ layer[n]
+          ---------------------
+          -- Since m ∈ S is the node with the *smallest layer*,
+          -- this means *none* of n's predecessors are ∈ S.
+          -- But S = Prop(A) ∩ Prop(B ∪ Reach(Prop(A), Prop(B))),
+          -- which means that none of n's active predecessors
+          -- (i.e. ∈ Prop(B ∪ Reach(Prop(A), Prop(B))) by IH)
+          -- are in Prop(A).
+          -- 
+          -- i.e. n's preceding edges were not updated,
+          -- and so the activ's are the same.
+          case inr h₄ => 
+            -- First, we show that any predecessor of n cannot be in S.
+            -- (if it was in S, it's layer would be smaller than m's)
+            have h₅ : ∀ x, x ∈ preds net n → x ∉ S := by
+              exact fun x hx x_in_S =>
+                have m_smaller : layer net m ≤ layer net x := (h₃ x x_in_S)
+                have m_bigger : layer net m > layer net x := 
+                  (gt_of_ge_of_gt h₄ (preds_decreasing _ _ _ hx)) 
+                absurd m_smaller (not_le_of_gt m_bigger)
+
+            -- We get ready to simplify propagate_acc
+            rename_i n_not_in_reach
+            have n_not_in_B : n ∉ B :=
+              fun n_in_B => absurd (Set.mem_union_left _ n_in_B) n_not_in_reach
+
+            -- Simplifications and rewriting, to prepare for IH
+            -- We also rewrite the 'preds', 'layers', and 'activ'
+            -- for (hebb_star net) in terms of the original 'net'.
+            rw [hebb_layers] at h₁
+            rw [hL] at h₁
+            simp only [propagate] at n_not_in_reach
+            rw [simp_propagate_acc _ n_not_in_B] at h₁
+            rw [simp_propagate_acc _ n_not_in_reach]
+            rw [← hS] at h₅
+            rw [hebb_preds net A] at h₁ -- rewrite 'preds'
+            simp
+            simp at h₁
+
+            -- Get ready to apply IH
+            -- We write down the usual lemmas for 'm', but we don't
+            -- know what the index 'i' is we're grabbing yet.  So
+            -- we write these for all i.
+            generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
+            have h₆ : ∀ i, (m i) ∈ preds net n := by
+              intro i
+              rw [symm hm]
+              simp [preds]
+              exact get!_mem (net.graph.predecessors n) i
+
+            have h₇ : ∀ i, (layer net (m i)) ≤ L := by
+              intro i
+              apply Nat.lt_succ.mp
+              rw [symm hL]
+              exact preds_decreasing net (m i) n (h₆ i)
+
+            -- Go into h₁ and apply our inductive hypothesis
+            conv at h₁ =>
+              enter [2, 1, i]
+              rw [hm]
+              rw [IH (layer net (m i)) (h₇ i) (m i) rfl]
+            
+            -- Unpack the (m i) term
+            rw [← hm] at h₁
+            rw [← hm]
+
+            -- Use simp_hebb_activ₂, which says that if all
+            -- of the *active* preds ∉ Prop(A), the activ's are the same.
+            let B₂ := (B ∪ reachable net (fun n => 
+              propagate_acc net A n (layer net n)) fun n => 
+                propagate_acc net B n (layer net n))
+            rw [simp_hebb_activ₂ _ _ B₂ h₅] at h₁
+            exact h₁
+-/
 
 --------------------------------------------------------------------
 lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
@@ -2358,13 +2533,20 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
   --------------------------------
   -- Base Step
   --------------------------------
-  -- Easy; at layer zero, n ∈ propagate net B,
-  --       and so by extensive n ∈ propagate (hebb_star net A) B.
-  case hz => 
+  -- Easy; at layer zero, show that B = B.
+  case hz =>
     have h₂ : n ∈ propagate net B :=
       reach_layer_zero _ _ _ _ hL h₁
-    exact hebb_extensive _ _ _ h₂
 
+    simp only [Membership.mem, Set.Mem, propagate]
+    simp only [Membership.mem, Set.Mem, propagate] at h₂
+    rw [hebb_layers net A]
+    rw [hL]
+    rw [hL] at h₂
+    simp only [propagate_acc]
+    simp only [propagate_acc] at h₂
+    exact h₂
+    
   --------------------------------
   -- Inductive Step
   --------------------------------
@@ -2637,9 +2819,6 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
         simp at h₁
         exact hebb_activ net A S₂ _
           (activ_agree _ S₁ S₂ _ h₂ h₁)
-        -- TRY:
-        -- exact hebb_activ net A S₂ _
-        --   (activ_agree _ S₁ S₂ _ h₂ h₁)
 
     ---------------------
     -- Forward Direction
@@ -3121,3 +3300,55 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
 --     (reachedby_is_extens _ _ h₂)).mp (h₁ h₂)
 --   case mpr => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
 --     (reachedby_is_extens _ _ h₂)).mpr (h₁ h₂)
+
+
+
+/-══════════════════════════════════════════════════════════════════
+  Update Policy: "Make neurons fire together"
+  (without regard for the edges of the net)
+══════════════════════════════════════════════════════════════════-/
+
+/-
+*Notes*
+The basic idea is that we take a subset A of the graph, and
+increase our preference for nodes in A as much as possible.
+We do this by: 1) completing the graph A, and 2) maximizing all
+of the edges within this completed graph.  The overall effect
+is that for all neurons m, n ∈ A, m fires exactly when n fires.
+
+But this operation results in a graph with cycles -- so [A] Prop(B)
+is not well-defined!  But we can do something equivalent:
+Take all the nodes in A, and quotient them.  This results in a
+net where all the nodes m, n ∈ A "fire as one".
+
+So we need:
+  [Def] Define 'complete_and_max' update
+  [Def] Define 'fire_together' update (the quotient structure)
+  [Thm] Prove that the two updates are equivalent.
+        (We can't use Prop for this -- maybe I can prove
+         that the 'activ' for both nets agrees?)
+  [Thm] Find a reduction for 'fire_together' and prove it.
+        (It should look like the dual of Lexicographic Upgrade)
+  [Cor] 'fire_together' is the dual of Lexicographic Upgrade
+    [Depends] 
+      Preference Models
+      Lexicographic Upgrade
+      Lexicographic Upgrade reduction
+      Model translation from pref models ⟷ nets
+-/
+
+-- def complete_and_max (net : BFNN) (A : Set ℕ) : BFNN :=
+--   sorry
+
+-- def fire_together (net : BFNN) (A : Set ℕ) : BFNN :=
+-- { net with
+--   graph := sorry
+--   activation := sorry
+--   rate := sorry
+
+--   -- binary := sorry
+--   binary := sorry
+--   acyclic := sorry
+--   activ_nondecr := sorry
+--   activ_pos := sorry
+-- }
