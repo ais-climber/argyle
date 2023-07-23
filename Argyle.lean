@@ -2774,7 +2774,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
   propagate net A ∩ propagate net B ≠ ∅ →
 
   propagate (hebb_star net A) B =
-  propagate net (B ∪ reachable net (propagate net A) (propagate net B)) := by 
+  propagate net (B ∪ reachable net (propagate net A) B) := by 
 --------------------------------------------------------------------
   intro h_nonempty
   apply ext
@@ -2810,7 +2810,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
       case inr h₂ => 
         have heq : layer net n = 0 := 
           Eq.trans (symm (hebb_layers net A)) (Eq.trans (hebb_layers _ _) hL)
-        exact prop_layer_zero _ _ _ heq (reach_layer_zero _ _ _ _ heq h₂)
+        exact reach_layer_zero _ _ _ _ heq h₂
 
   --------------------------------
   -- Inductive Step
@@ -2901,7 +2901,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
       
       -- By cases; either n ∈ B ∪ reachable net (propagate net A) B, 
       -- or not.
-      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
+      by_cases n ∈ B ∪ reachable net (propagate net A) B
       case pos => 
         -- In this case, just apply propagate_is_extens
         rw [← hL]
@@ -2920,14 +2920,15 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           -- Prop(A) ∩ Prop(B) ⊆ Prop(A) ∩ Prop(B ∪ Reach(Prop(A), Prop(B))) 
           --                   = S   (we abbreviate the set for convenience)
           -- there is an m in the latter set.
-          generalize hS : (propagate net A) ∩ (propagate net (B ∪ reachable net (propagate net A) (propagate net B))) = S
+          generalize hS : (propagate net A) ∩ (propagate net (B ∪ reachable net (propagate net A) B)) = S
           have h_nonemptyS : Set.Nonempty S := by 
             rw [← hS]
             rw [← Set.nonempty_iff_ne_empty] at h_nonempty 
             exact match h_nonempty with
-            | ⟨m, hm⟩ => ⟨m, ⟨hm.1, propagate_is_extens _ _ 
-              (mem_union_right _ (reach_is_extens _ _ _ hm))⟩⟩
-
+            | ⟨m, hm⟩ => ⟨m, ⟨hm.1, sorry⟩⟩
+              -- propagate_is_extens _ _ 
+              -- (mem_union_right _ (reach_is_extens _ _ _ _))⟩⟩
+            -- (mem_union_right _ (reach_is_extens _ _ _ hm))
           -- By the well-ordering principle, let m be the node
           -- in this set with the *smallest layer*
           let m := WellFounded.min (layer_wellfounded net) S h_nonemptyS
@@ -2967,33 +2968,32 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
             have h₅ : Graph.hasEdge net.toNet.graph m n := by
               exact connected _ m n h₄
 
-            -- So we have n ∈ Reach(Prop(A), Prop(B ∪ Reach(Prop(A), Prop(B))))
+            -- So we have n ∈ Reach(Prop(A), Prop(B ∪ Reach(Prop(A), B)))
             -- (the unfortunately ugly expression)
             have h₆ : n ∈ reachable net (propagate net A) 
-              (propagate net (B ∪ reachable net (propagate net A) 
-                (propagate net B))) := by
+              (propagate net (B ∪ reachable net (propagate net A) B)) := by
               rw [← hS] at hm
               exact ⟨m, ⟨hm.2, 
                 focusedPath.from_path (focusedPath.trivial hm.1) h₅ h⟩⟩
 
-            -- By algebra, this reduces to n ∈ Reach(Prop(A), Prop(B))
+            -- By algebra, this reduces to n ∈ Reach(Prop(A), B)
             -- TODO: Can I clean up the congr_arg parts?  What extensionality
             -- lemma do I need to use here???        
             have h₇ : reachable net (propagate net A) B ⊆ 
                       reachable net (propagate net A) 
-                        (reachable net (propagate net A) (propagate net B)) := by
+                        (reachable net (propagate net A) B) := by
               intro x hx
               rw [← reach_is_idempotent _ _ _]
-              exact reach_is_monotone _ _ _ _ (propagate_is_extens _ _) hx
+              exact hx
 
-            have h₈ : n ∈ reachable net (propagate net A) (propagate net B) := by
+            have h₈ : n ∈ reachable net (propagate net A) B := by
               apply (congr_arg (fun X => n ∈ X) (reach_is_idempotent _ _ _)).mpr
               apply (congr_arg (fun X => n ∈ X) (Set.union_eq_right_iff_subset.mpr h₇)).mp
               apply (congr_arg (fun X => n ∈ X) (reach_union _ _ _ _)).mp
               exact reach_propagate _ _ _ h₆
 
-            -- Since                 n ∈ Reach(Prop(A), Prop(B)),
-            -- We have      n ∈ Prop(B ∪ Reach(Prop(A), Prop(B)))
+            -- Since                 n ∈ Reach(Prop(A), B),
+            -- We have      n ∈ Prop(B ∪ Reach(Prop(A), B))
             simp only [propagate] at h₈
             rw [← hL]
             exact propagate_acc_is_extens net _ (Set.mem_union_right _ h₈)
@@ -3069,8 +3069,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
             -- Use simp_hebb_activ₂, which says that if all
             -- of the *active* preds ∉ Prop(A), the activ's are the same.
             let B₂ := (B ∪ reachable net (fun n => 
-              propagate_acc net A n (layer net n)) fun n => 
-                propagate_acc net B n (layer net n))
+              propagate_acc net A n (layer net n)) B)
             rw [simp_hebb_activ₂ _ _ B₂ h₅] at h₁
             exact h₁
             
