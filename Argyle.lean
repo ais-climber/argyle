@@ -1460,10 +1460,6 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
         -- We show n ∈ Reach(A, B)
         -- by providing a path x ⟶ m ⟶ n
         exact ⟨x, ⟨hx.1, focusedPath_trans _ _ hx.2 hm.2⟩⟩
-      
-
-
-
 
 /-══════════════════════════════════════════════════════════════════
   Naive (Unstable) Hebbian Update
@@ -1606,34 +1602,6 @@ def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
 { net with
   graph := graph_update net net.graph S
 }
-
-
-/-══════════════════════════════════════════════════════════════════
-  Properties of Unstable Hebbian Update
-══════════════════════════════════════════════════════════════════-/
-
--- A net net₁ is a subnet of net₂ (net₁ ≼ net₂) iff for all
--- sets S, every node activated in the propagation of S
--- in net₁ is activated in the propagation of S in net₂.
--- (They both have the same *propagation structure*)
-def subnet (net₁ net₂ : BFNN) : Prop :=
-  ∀ (S : Set ℕ), propagate net₁ S ⊆ propagate net₂ S
-
-infixl:65   " ≼ " => subnet
-
-
--- Two nets are equivalent if they have the same 
--- *propagation structure* (i.e. if their propagations agree 
--- for every set S)
-def net_eq (net₁ net₂ : BFNN) : Prop :=
-  net₁ ≼ net₂ ∧ net₂ ≼ net₁
-
-infixl:65   " ≡ " => net_eq
-
-
--- A super easy example, just to briefly test ≼ and ≡
-example : example_net ≡ example_net :=
-  ⟨fun _ _ h => h, fun _ _ h => h⟩  
 
 
 /-══════════════════════════════════════════════════════════════════
@@ -2030,7 +1998,7 @@ theorem hebb_weights (net : BFNN) :
   exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
     (hebb_once_weights _ h₁)
 
-
+ 
 -- The weights of the new net are nondecreasing
 -- (Hebbian update can only increase the weights)
 -- Note that we *cannot* lift this property straightforwardly,
@@ -2207,91 +2175,6 @@ theorem simp_hebb_activ₃ (net : BFNN) (A B : Set ℕ) :
   
   sorry -- I have the proof written on paper, I should consult that.
         -- Depends on things like the monotonicity of 'activation', etc.
-
-
--- TODO: I'm not even sure if this is correct!!!
--- 
--- -----------------------------------------------------
--- Every net N is a subnet of (hebb_star N)
--- (i.e. hebb_star includes the previous propagations)
--- (We had this property in The Logic of Hebbian Learning)
--- TODO: Can we lift this from single-iteration hebb???
--- --------------------------------------------------------------------
--- theorem hebb_extensive (net : BFNN) (A : Set ℕ) : 
---   net ≼ (hebb_star net A) := by 
--- --------------------------------------------------------------------
---   intro (B : Set ℕ)
---   intro (n : ℕ)
---   -- intro (h₁ : n ∈ propagate net B)
---   simp only [Membership.mem, Set.Mem, propagate]
---   -- simp only [Membership.mem, Set.Mem, propagate] at h₁
-  
---   -- By induction on the layer of the 
---   generalize hL : layer net n = L
---   induction L
-
---   --------------------------------
---   -- Base Step
---   --------------------------------
---   case zero => 
---     intro h₁
---     rw [hebb_layers]
---     rw [hL]
---     simp only [propagate_acc]
---     simp only [propagate_acc] at h₁
---     exact h₁
-
---   --------------------------------
---   -- Inductive Step
---   --------------------------------
---   case succ k IH => 
---     intro h₁
-
---     -- By cases, to later simplify propagate_acc
---     by_cases n ∈ B
---     case pos => 
---       rw [hebb_layers]
---       rw [← hebb_layers net A]
---       exact propagate_acc_is_extens _ _ h  
-    
---     case neg => 
---       -- From here, we split *again*, depending on whether n ∈ Prop(A).
---       by_cases n ∈ propagate net A
-      
---       ---------------------
---       -- Case 1: n ∈ Prop(A)
---       ---------------------
---       case pos => 
---         sorry
-
---       ---------------------
---       -- Case 2: n ∉ Prop(A)
---       ---------------------
---       -- In this case, the activ's are the same.  This means
---       -- that the *preceding propagations are the same*, and
---       -- this sets us up to apply our inductive hypothesis.
---       case neg => 
---         rename_i n_not_in_B
-        
---         -- Simplifications and rewriting, to prepare for IH
---         rw [hebb_layers]
---         rw [hebb_layers] at IH
---         rw [hL]
---         rw [simp_propagate_acc _ n_not_in_B] at h₁
---         rw [simp_propagate_acc _ n_not_in_B]
-        
---         sorry
-
--- --------------------------------------------------------------------
--- lemma hebb_acc_is_extens (net : BFNN) (A B : Set ℕ) (n : ℕ) :
---   propagate_acc net B n (layer net n) → 
---   propagate_acc (hebb_star net A) B n (layer net n) := by
--- -------------------------------------------------------------------- 
---   intro h₁
---   have h₂ : n ∈ propagate (hebb_star net A) B := hebb_extensive _ _ _ h₁
---   simp only [Membership.mem, Set.Mem, propagate] at h₂
---   rw [hebb_layers] at h₂
---   exact h₂
 
 
 -- If there is a path within Prop(A) from B to n, then, since this
@@ -2546,7 +2429,7 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
         -- of the *active* preds ∉ Prop(A), the activ's are the same.
         let S := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
         exact hebb_activ net A S n h₁
--- 
+
 --------------------------------------------------------------------
 theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) : 
   propagate net A ∩ propagate net B ≠ ∅ →
@@ -2697,17 +2580,16 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
           -- Prop(A) ∩ B ⊆ Prop(A) ∩ Prop(B ∪ Reach(Prop(A), B)) 
           --                   = S   (we abbreviate the set for convenience)
           -- there is an m in the latter set.
+          -- 
+          -- NOTE: This is the heart of the proof!  We have to use the
+          -- Reach-Prop interaction property here (that's very interesting)!
           generalize hS : (propagate net A) ∩ (propagate net (B ∪ reachable net (propagate net A) B)) = S
           have h_nonemptyS : Set.Nonempty S := by 
             rw [← hS]
             rw [← Set.nonempty_iff_ne_empty] at h_nonempty 
             exact match h_nonempty with
-            | ⟨m, hm⟩ => ⟨m, ⟨hm.1, sorry⟩⟩
-              -- This is the heart of the proof!!!
-              -- IDEA: Use a Prop_Reach interaction property!
-              --  
-              -- propagate_is_extens _ _ 
-              -- (mem_union_right _ (reach_is_extens _ _ _ hm))⟩⟩
+            | ⟨m, hm⟩ => ⟨m, ⟨hm.1, propagate_is_extens _ _ 
+              (Or.inr (reach_propagate _ _ _ (reach_is_extens _ _ _ hm)))⟩⟩
 
           -- By the well-ordering principle, let m be the node
           -- in this set with the *smallest layer*
@@ -3200,3 +3082,31 @@ So we need:
 --   activ_nondecr := sorry
 --   activ_pos := sorry
 -- }
+
+
+-- /-══════════════════════════════════════════════════════════════════
+--   Subnets
+-- ══════════════════════════════════════════════════════════════════-/
+
+-- -- A net net₁ is a subnet of net₂ (net₁ ≼ net₂) iff for all
+-- -- sets S, every node activated in the propagation of S
+-- -- in net₁ is activated in the propagation of S in net₂.
+-- -- (They both have the same *propagation structure*)
+-- def subnet (net₁ net₂ : BFNN) : Prop :=
+--   ∀ (S : Set ℕ), propagate net₁ S ⊆ propagate net₂ S
+
+-- infixl:65   " ≼ " => subnet
+
+
+-- -- Two nets are equivalent if they have the same 
+-- -- *propagation structure* (i.e. if their propagations agree 
+-- -- for every set S)
+-- def net_eq (net₁ net₂ : BFNN) : Prop :=
+--   net₁ ≼ net₂ ∧ net₂ ≼ net₁
+
+-- infixl:65   " ≡ " => net_eq
+
+
+-- -- A super easy example, just to briefly test ≼ and ≡
+-- example : example_net ≡ example_net :=
+--   ⟨fun _ _ h => h, fun _ _ h => h⟩  
