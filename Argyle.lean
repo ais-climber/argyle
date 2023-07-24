@@ -2546,7 +2546,7 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
         -- of the *active* preds ∉ Prop(A), the activ's are the same.
         let S := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
         exact hebb_activ net A S n h₁
-
+-- 
 --------------------------------------------------------------------
 theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) : 
   propagate net A ∩ propagate net B ≠ ∅ →
