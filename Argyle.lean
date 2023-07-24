@@ -1267,9 +1267,14 @@ theorem focusedPath_subset {u v : ℕ} (g : Graph ℕ Float) (A : Set ℕ) :
 --------------------------------------------------------------------
 lemma focusedPath_layer {m n : ℕ} (net : BFNN) (A : Set ℕ) :
   focusedPath net.graph A m n
-  → layer net m ≤ layer net n := by
+  → layer net m < layer net n := by
 --------------------------------------------------------------------
-  sorry
+  intro (h₁ : focusedPath net.graph A m n)
+
+  induction h₁
+  case trivial _ => sorry
+  case from_path x y _ edge_xy hy path_mx =>
+    sorry
 
 -- This is the set of all nodes reachable from B using
 -- paths where *every* node in the path is within A
@@ -1442,14 +1447,34 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
   --------------------------------
   -- Inductive Step
   --------------------------------
-  case hi L IH =>
+  case hi L IH₁ =>
     -- simp [propagate] at h₁
 
     match h₁ with
     | ⟨m, hm⟩ =>
+      
+      -- Again by induction, this time on the path from m ⟶ n
+      induction hm.2
+      case trivial hmA => 
+        -- First, apply our outer IH₁ to m
+        sorry
+      
+      case from_path x y path_mx edge_xy hy IH₂ => 
+        sorry
+
+      /-
+      induction h₁
+      case trivial _ => sorry
+      case from_path x y _ edge_xy hy path_mx =>
+        sorry
+      -/
+      /-
       -- First, apply our IH to m
       have h₂ : m ∈ A := focusedPath_subset _ _ hm.2
-      have h₃ : (layer net m) ≤ L := sorry
+      have h₃ : (layer net m) ≤ L := by
+        apply Nat.le_of_lt_succ
+        rw [← hL]
+        exact focusedPath_layer _ _ hm.2
       have h₄ : m ∈ reachable net A (propagate net B) := by
         exact ⟨m, ⟨hm.1, focusedPath.trivial h₂⟩⟩
       have h₅ : m ∈ reachable net A B := IH (layer net m) h₃ h₄ rfl
@@ -1460,7 +1485,7 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
         -- We show n ∈ Reach(A, B)
         -- by providing a path x ⟶ m ⟶ n
         exact ⟨x, ⟨hx.1, focusedPath_trans _ _ hx.2 hm.2⟩⟩
-
+      -/
 /-══════════════════════════════════════════════════════════════════
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
