@@ -1418,6 +1418,11 @@ theorem reach_union (net : BFNN) : ∀ (S A B : Set ℕ),
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
 
+-- Reach(Prop(B)) = Reach(B)
+-- Reach(A, Prop(B)) ⊆ Reach(A, B)  -- WRONG!
+-- 
+-- Prop(B) ⊆ [A]Prop(B)  -- WRONG!!!
+
 -- A simple interaction between graph reachability and propagation
 --------------------------------------------------------------------
 theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
@@ -1447,34 +1452,19 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
   --------------------------------
   -- Inductive Step
   --------------------------------
-  case hi L IH₁ =>
+  case hi L IH =>
     -- simp [propagate] at h₁
 
     match h₁ with
     | ⟨m, hm⟩ =>
       
-      -- Again by induction, this time on the path from m ⟶ n
-      induction hm.2
-      case trivial hmA => 
-        -- First, apply our outer IH₁ to m
-        sorry
-      
-      case from_path x y path_mx edge_xy hy IH₂ => 
-        sorry
-
-      /-
-      induction h₁
-      case trivial _ => sorry
-      case from_path x y _ edge_xy hy path_mx =>
-        sorry
-      -/
-      /-
       -- First, apply our IH to m
       have h₂ : m ∈ A := focusedPath_subset _ _ hm.2
-      have h₃ : (layer net m) ≤ L := by
-        apply Nat.le_of_lt_succ
-        rw [← hL]
-        exact focusedPath_layer _ _ hm.2
+      have h₃ : (layer net m) ≤ L := sorry
+        -- by
+        -- apply Nat.le_of_lt_succ
+        -- rw [← hL]
+        -- exact focusedPath_layer _ _ hm.2
       have h₄ : m ∈ reachable net A (propagate net B) := by
         exact ⟨m, ⟨hm.1, focusedPath.trivial h₂⟩⟩
       have h₅ : m ∈ reachable net A B := IH (layer net m) h₃ h₄ rfl
@@ -1485,7 +1475,7 @@ theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
         -- We show n ∈ Reach(A, B)
         -- by providing a path x ⟶ m ⟶ n
         exact ⟨x, ⟨hx.1, focusedPath_trans _ _ hx.2 hm.2⟩⟩
-      -/
+      
 /-══════════════════════════════════════════════════════════════════
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
@@ -2678,7 +2668,7 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
               apply (congr_arg (fun X => n ∈ X) (Set.union_eq_right_iff_subset.mpr h₇)).mp
               apply (congr_arg (fun X => n ∈ X) (reach_union _ _ _ _)).mp
               exact reach_propagate _ _ _ h₆
-
+            
             -- Since                 n ∈ Reach(Prop(A), B),
             -- We have      n ∈ Prop(B ∪ Reach(Prop(A), B))
             simp only [propagate] at h₈
