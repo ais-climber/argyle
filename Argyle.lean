@@ -1345,6 +1345,35 @@ theorem reach_is_extens (net : BFNN) : ∀ (A B : Set ℕ),
     focusedPath.trivial h₁.1
   exact ⟨n, ⟨h₁.2, h₂⟩⟩
 
+-- If A ∩ B is empty, then there are no nodes reachable
+-- from B within A.
+-- (This does *not* follow from [reach_is_extens]!)
+--------------------------------------------------------------------
+theorem reach_empty_of_inter_empty (net : BFNN) : ∀ (A B : Set ℕ),
+  (A ∩ B) = ∅ → reachable net A B = ∅ := by
+--------------------------------------------------------------------
+  intro A B
+  rw [← Set.not_nonempty_iff_eq_empty]
+  rw [← Set.not_nonempty_iff_eq_empty]
+  
+  -- Start a proof by contraposition, and simplify
+  contrapose
+  intro h₁
+  rw [Classical.not_not]
+  rw [Classical.not_not] at h₁
+
+  -- Since Reach(A, B) is nonempty, we have n ∈ Reach(A, B).
+  -- We argue that the m ∈ B that reaches n must be m ∈ A ∩ B.
+  match h₁ with
+  | ⟨n, hn⟩ => 
+    match hn with
+    | ⟨m, hm⟩ => 
+      -- m ∈ B is easy; we show inductively that m ∈ A as well.
+      induction hm.2
+      case trivial hmA => exact ⟨m, ⟨hmA, hm.1⟩⟩
+      case from_path x y path_mx _ _ IH => 
+        exact IH ⟨m, ⟨hm.1, path_mx⟩⟩ ⟨hm.1, path_mx⟩
+
 
 --------------------------------------------------------------------
 theorem reach_is_idempotent (net : BFNN) : ∀ (A B : Set ℕ),
@@ -2852,16 +2881,13 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
   -- then Reach(Prop(A), Prop(B)) must be empty as well!
   -- (In order for there to be a path at all, there must
   --  be a path of length 0.)
-  have h₁ : reachable net (propagate net A) (propagate net B) = ∅ := by
-    sorry
+  have h₁ : reachable net (propagate net A) (propagate net B) = ∅ :=
+    reach_empty_of_inter_empty _ _ _ h_empty
   
   -- And now we just substitute ∅
   rw [hebb_reduction net A B]
   rw [h₁]
   rw [Set.union_empty B]
-
-
-
 
 
 -- TODO: Prove that we can unravel these nets into ordinary
