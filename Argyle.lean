@@ -2220,6 +2220,167 @@ theorem simp_hebb_activ₄ (net : BFNN) (A B : Set ℕ) :
   
   sorry
 
+
+-- If all predecessors of n (and all predecessors of those, etc.)
+-- don't touch Prop(A) ∩ Prop(B), then n is activated in the
+-- updated net iff it was in the original net.
+--------------------------------------------------------------------
+lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
+  (∀ x, layer net x < layer net n → x ∉ propagate net A ∩ propagate net B) 
+  → (n ∈ propagate (hebb_star net A) B ↔ n ∈ propagate net B) := by
+--------------------------------------------------------------------
+  intro h₁
+  simp only [Membership.mem, Set.Mem, propagate]
+  
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+
+  --------------------------------
+  -- Base Step
+  --------------------------------
+  case hz =>
+    -- After simplifications, just n ∈ B → n ∈ B.
+    rw [hebb_layers]
+    rw [hL]
+    simp only [propagate_acc]
+
+  --------------------------------
+  -- Inductive Step
+  --------------------------------
+  case hi L IH => 
+    -- Both directions are similar; in both cases we just argue
+    -- inductively that since the predecessors aren't in Prop(A) ∩ Prop(B),
+    -- and their activation doesn't differ in the two nets, neither does n's.
+    apply Iff.intro
+    
+    ---------------------
+    -- Forward Direction
+    ---------------------
+    case mp => 
+      -- By cases, in order to reduce propagate_acc
+      by_cases n ∈ B
+      case pos => 
+        intro _
+        rw [← hL]
+        exact propagate_acc_is_extens _ _ h
+      case neg =>
+        intro h₂
+      
+        -- Since *every* node with layer < n is not in Prop(A) ∩ Prop(B),
+        -- in particular this holds for n's predecessors.
+        have h₃ : ∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net B) := by
+          intro x hx
+          exact h₁ _ (preds_decreasing _ _ _ hx)
+
+        rw [hebb_layers] at h₂
+        rw [hL] at h₂
+        rw [simp_propagate_acc _ h] at h₂
+        rw [simp_propagate_acc _ h]
+        rw [hebb_preds] at h₂
+        simp
+        simp at h₂
+        
+        -- Get ready to apply IH
+        -- We write down the usual lemmas for 'm', but we don't
+        -- know what the index 'i' is we're grabbing yet.  So
+        -- we write these for all i.
+        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
+        
+        
+        have h₄ : ∀ i, (m i) ∈ preds net n := by
+          intro i
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (net.graph.predecessors n) i
+
+        have h₅ : ∀ i, (layer net (m i)) ≤ L := by
+          intro i
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net (m i) n (h₄ i)
+        
+        have h₆ : ∀ (i x : ℕ), layer net x < layer net (m i) 
+          → ¬x ∈ propagate net A ∩ propagate net B := by
+          intro i x hx
+          exact h₁ _ (lt_trans hx (preds_decreasing _ _ _ (h₄ i)))
+
+        -- Go into h₂ and apply our inductive hypothesis
+        conv at h₂ =>
+          enter [2, 1, i]
+          rw [hm]
+          rw [IH (layer net (m i)) (h₅ i) (m i) (h₆ i) rfl]
+        
+        -- Unpack the (m i) term
+        rw [← hm] at h₂
+        rw [← hm]
+
+        -- Finally, apply simp_hebb_activ₂.
+        exact (simp_hebb_activ₂ net A B h₃).mp h₂
+
+    ---------------------
+    -- Backwards Direction
+    ---------------------
+    case mpr => 
+      -- By cases, in order to reduce propagate_acc
+      by_cases n ∈ B
+      case pos => 
+        intro h₂
+        rw [← hL] at h₂
+        exact propagate_acc_is_extens _ _ h
+      case neg =>
+        intro h₂
+      
+        -- Since *every* node with layer < n is not in Prop(A) ∩ Prop(B),
+        -- in particular this holds for n's predecessors.
+        have h₃ : ∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net B) := by
+          intro x hx
+          exact h₁ _ (preds_decreasing _ _ _ hx)
+
+        rw [hebb_layers]
+        rw [hL]
+        rw [simp_propagate_acc _ h]
+        rw [simp_propagate_acc _ h] at h₂
+        rw [hebb_preds]
+        simp
+        simp at h₂
+        
+        -- Get ready to apply IH
+        -- We write down the usual lemmas for 'm', but we don't
+        -- know what the index 'i' is we're grabbing yet.  So
+        -- we write these for all i.
+        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
+        
+        
+        have h₄ : ∀ i, (m i) ∈ preds net n := by
+          intro i
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (net.graph.predecessors n) i
+
+        have h₅ : ∀ i, (layer net (m i)) ≤ L := by
+          intro i
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net (m i) n (h₄ i)
+        
+        have h₆ : ∀ (i x : ℕ), layer net x < layer net (m i) 
+          → ¬x ∈ propagate net A ∩ propagate net B := by
+          intro i x hx
+          exact h₁ _ (lt_trans hx (preds_decreasing _ _ _ (h₄ i)))
+
+        -- Go into the goal and apply our inductive hypothesis
+        conv =>
+          enter [2, 1, i]
+          rw [IH (layer net (m i)) (h₅ i) (m i) (h₆ i) rfl]
+
+        -- Unpack the (m i) term
+        rw [← hm]
+
+        -- Finally, apply simp_hebb_activ₂.
+        exact (simp_hebb_activ₂ net A B h₃).mpr h₂
+
+
 -- CONJECTURE:  The updated propagation at least contains 
 --   Prop(A) ∩ Prop(B).
 --------------------------------------------------------------------
@@ -2249,7 +2410,6 @@ theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
     simp only [propagate_acc] at h₁
     exact h₁.2
 
-
   --------------------------------
   -- Inductive Step
   --------------------------------
@@ -2258,60 +2418,71 @@ theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
     by_cases n ∈ B
     case pos => exact propagate_is_extens _ _ h
     case neg =>
-
-      -- This is the crucial step of the proof where we use
-      -- 1) the fact that Prop(A) ∩ Prop(B) is nonempty
-      --    (actually, we might not need this; we can split by cases)
-      -- 2) the fact that the net is fully connected / transitively closed
-      sorry
-
-
-
-
-
-
-      -- -- From here, we case on whether there is some predecessor
-      -- -- of n ∈ Prop(A) ∩ Prop(B).
-      -- by_cases (∃ x, x ∈ (preds net n) ∧ x ∈ propagate net A ∩ propagate net B)
+      -- By the well-ordering principle, let m be the node
+      -- in Prop(A) ∩ Prop(B) with the *smallest layer*
+      generalize hS : (propagate net A ∩ propagate net B) = S
+      have hn : n ∈ S := by
+        rw [← hS]
+        exact h₁
+      have h_nonempty : Set.Nonempty S := ⟨n, hn⟩
+      let m := WellFounded.min (layer_wellfounded net) S h_nonempty
       
-      -- ---------------------
-      -- -- Case 1: ∃ m ∈ preds[n],
-      -- -- m ∈ Prop(A) ∩ Prop(B)
-      -- ---------------------
-      -- -- By IH, m ∈ propagate (hebb_star net A) B,
-      -- -- and then by simp_hebb_activ₃, n is activated by m
-      -- case pos => 
-      --   rename_i n_not_in_B
+      -- This m is both in the set, and is the smallest such m.
+      have hm : m ∈ S ∧ ∀ x, x ∈ S → layer net m ≤ layer net x := 
+        ⟨WellFounded.min_mem _ _ _,
+        fun x hx => le_of_not_le (WellFounded.not_lt_min (layer_wellfounded net) _ _ hx)⟩
+      
+      -- Either layer[m] ≤ layer[n]   or  layer[m] = layer[n]
+      cases lt_or_eq_of_le (hm.2 n hn)
+      
+      -------------------------------
+      -- Case 1: layer[m] < layer[n]
+      -------------------------------
+      -- In this case, we have an edge m⟶n, and since
+      -- m ∈ Prop(A), n ∈ Prop(A), m activated in the updated net,
+      -- we have that m activates n in the updated net.
+      case inl h₂ => 
+        -- NOTE: This is where we apply the crucial fact that
+        -- the net is fully connected / transitively closed
+        -- to get an edge m⟶n.
+        have h₃ : m ∈ preds net n := by
+          rw [edge_from_preds]
+          exact connected _ m n h₂
+        
+        -- We apply our IH to m
+        rw [← hS] at hm
+        have h₄ : layer net m ≤ L := by
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net m n h₃
+        have h₅ : m ∈ propagate (hebb_star net A) B :=
+          IH _ h₄ hm.1 rfl
 
-      --   simp only [Membership.mem, Set.Mem, propagate]
-      --   rw [hebb_layers]
-      --   rw [hL]
-      --   rw [simp_propagate_acc _ n_not_in_B]
-      --   rw [hebb_preds]
+        -- Simplify and apply simp_hebb_activ₃.
+        simp only [Membership.mem, Set.Mem, propagate]
+        rw [hebb_layers]
+        rw [hL]
+        rw [simp_propagate_acc _ h]
+        rw [hebb_preds]
+        exact simp_hebb_activ₃ net A B h₁.1 ⟨h₃, hm.1.1⟩ h₅
 
-      --   match h with
-      --   | ⟨m, hm⟩ => 
-      --     -- Apply our IH
-      --     have h₂ : (layer net m) ≤ L := by
-      --       apply Nat.lt_succ.mp
-      --       rw [symm hL]
-      --       exact preds_decreasing net m n hm.1
-      --     have h₃ : m ∈ propagate (hebb_star net A) B := by
-      --       exact IH _ h₂ hm.2 rfl
-          
-      --     exact simp_hebb_activ₃ net A B h₁.1 ⟨hm.1, hm.2.1⟩ h₃
-      
-      -- ---------------------
-      -- -- Case 1: ∀ m ∈ preds[n],
-      -- -- m ∉ Prop(A) ∩ Prop(B)
-      -- ---------------------
-      -- -- By simp_hebb_activ₂, the activs for
-      -- -- the two nets are the same.
-      -- case neg => 
-      --   sorry
-      
-      -- -- (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net S))
-      
+      -------------------------------
+      -- Case 1: layer[m] = layer[n]
+      -------------------------------
+      -- In this case, we know that all predecessor weights are
+      -- the same.  But we also have to argue (inductively) that
+      -- all predecessor *activations* are the same.  We do this
+      -- in a separate lemma [hebb_before_intersection].
+      case inr h₂ =>
+        -- All strict predecessors of m are not in Prop(A) ∩ Prop(B).
+        -- (because m is the smallest)
+        rw [← hS] at hm
+        have h₃ : ∀ x, layer net x < layer net n → x ∉ propagate net A ∩ propagate net B := by
+          intro x h₄ hx
+          rw [← h₂] at h₄
+          exact absurd h₄ (not_lt_of_le (hm.2 _ hx))
+
+        exact (hebb_before_intersection _ _ _ n h₃).mpr h₁.2
 
 
 -- If there is a path within Prop(A) from B to n, then, since this
@@ -2395,188 +2566,12 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
   Reduction for Unstable Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
-/- GOTO
-
--- These two are the big theorems.
--- They explain what hebb_star learns in terms of what the net
--- believed *before* update -- it turns out that we can completely
--- reduce the dynamic behavior to the static behavior.
---------------------------------------------------------------------
-theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) : 
-  propagate net A ∩ propagate net B = ∅ →
-
-  propagate (hebb_star net A) B = propagate net B := by 
---------------------------------------------------------------------
-  intro h_empty
-  apply ext
-  intro (n : ℕ)
-
-  -- By induction on the layer of the net containing n
-  generalize hL : layer net n = L
-  induction L using Nat.case_strong_induction_on generalizing n
-
-  --------------------------------
-  -- Base Step
-  --------------------------------
-  -- Easy; after simplifying, show that B = B.
-  case hz =>
-    simp only [Membership.mem, Set.Mem, propagate]
-    rw [hebb_layers net A]
-    rw [hL]
-    simp only [propagate_acc]
-
-  --------------------------------
-  -- Inductive Step
-  --------------------------------
-  case hi L IH => 
-    -- Both directions are similar
-    apply Iff.intro
-    case mp =>
-      intro h₁
-
-      -- Split by whether n ∈ B, in order to simplify propagate_acc
-      by_cases n ∈ B
-      case pos => exact propagate_is_extens _ _ h
-      case neg =>
-        -- Proof Idea:
-        -- Since n ∈ Prop(B) in (hebb_star net),
-        -- its active predecessors m are ∈ Prop(B) in (hebb_star net).
-        -- But by IH these m ∈ Prop(B) in the original net.
-        -- Since Prop(A) ∩ Prop(B) is empty, these m ∉ Prop(A).
-        -- By [simp_hebb_activ₂], Prop(B) is the same in both nets.
-        
-        -- First, we show that any *active* predecessor of n 
-        -- cannot be in Prop(A). (If it were, then it would
-        -- be in both Prop(B) and Prop(A) -- but the intersection
-        -- is empty!)
-        have h₂ : (∀ x, x ∈ preds net n → x ∉ propagate net A ∩ propagate net B) := by
-          intro x _ contr_assump
-          exact absurd h_empty (Set.Nonempty.ne_empty 
-            (Set.nonempty_of_mem contr_assump))
-          
-        -- Simplifications and rewriting, to prepare for IH
-        simp only [propagate, Membership.mem, Set.Mem]
-        simp only [propagate, Membership.mem, Set.Mem] at h₁
-        simp only [propagate, Membership.mem, Set.Mem] at IH
-        rw [hebb_layers] at h₁
-        rw [hL] at h₁
-        rw [hL]
-        rw [simp_propagate_acc _ h]
-        rw [simp_propagate_acc _ h] at h₁
-        rw [hebb_preds net A] at h₁
-        simp
-        simp at h₁
-        
-        -- Get ready to apply IH
-        -- We write down the usual lemmas for 'm', but we don't
-        -- know what the index 'i' is we're grabbing yet.  So
-        -- we write these for all i.
-        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
-        have h₃ : ∀ i, (m i) ∈ preds net n := by
-          intro i
-          rw [symm hm]
-          simp [preds]
-          exact get!_mem (net.graph.predecessors n) i
-
-        have h₄ : ∀ i, (layer net (m i)) ≤ L := by
-          intro i
-          apply Nat.lt_succ.mp
-          rw [symm hL]
-          exact preds_decreasing net (m i) n (h₃ i)
-
-        -- Go into h₁ and apply our inductive hypothesis
-        conv at h₁ =>
-          enter [2, 1, i]
-          -- enter [2, 2, i, 1]
-          rw [hm]
-          rw [IH (layer net (m i)) (h₄ i) (m i) rfl]
-        
-        -- Unpack the (m i) term
-        rw [← hm] at h₁
-        rw [← hm]
-
-        -- Use simp_hebb_activ₂, which says that if all
-        -- of the *active* preds ∉ Prop(A), the activ's are the same.
-        rw [simp_hebb_activ₂ _ _ B h₂] at h₁
-        exact h₁
-
-    -- Do exactly what we did for the other direction, except
-    -- we apply hebb_activ rather than simp_hebb_activ₂ at the end.
-    case mpr =>
-      intro h₁
-
-      -- Split by whether n ∈ B, in order to simplify propagate_acc
-      by_cases n ∈ B
-      case pos => exact propagate_is_extens _ _ h
-      case neg =>
-        -- Proof Idea:
-        -- Since n ∈ Prop(B) in (hebb_star net),
-        -- its active predecessors m are ∈ Prop(B) in (hebb_star net).
-        -- But by IH these m ∈ Prop(B) in the original net.
-        -- Since Prop(A) ∩ Prop(B) is empty, these m ∉ Prop(A).
-        -- By [simp_hebb_activ₂], Prop(B) is the same in both nets.
-        
-        -- First, we show that any *active* predecessor of n 
-        -- cannot be in Prop(A). (If it were, then it would
-        -- be in both Prop(B) and Prop(A) -- but the intersection
-        -- is empty!)
-        have h₂ : (∀ x, x ∈ preds net n → x ∉ propagate net A ∩ propagate net B) := by
-          intro x _ contr_assump
-          exact absurd h_empty (Set.Nonempty.ne_empty 
-            (Set.nonempty_of_mem contr_assump))
-          
-        -- Simplifications and rewriting, to prepare for IH
-        simp only [propagate, Membership.mem, Set.Mem]
-        simp only [propagate, Membership.mem, Set.Mem] at h₁
-        simp only [propagate, Membership.mem, Set.Mem] at IH
-        rw [hebb_layers]
-        rw [hL]
-        rw [hL] at h₁
-        rw [simp_propagate_acc _ h]
-        rw [simp_propagate_acc _ h] at h₁
-        rw [hebb_preds net A]
-        simp
-        simp at h₁
-        
-        -- Get ready to apply IH
-        -- We write down the usual lemmas for 'm', but we don't
-        -- know what the index 'i' is we're grabbing yet.  So
-        -- we write these for all i.
-        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
-        have h₃ : ∀ i, (m i) ∈ preds net n := by
-          intro i
-          rw [symm hm]
-          simp [preds]
-          exact get!_mem (net.graph.predecessors n) i
-
-        have h₄ : ∀ i, (layer net (m i)) ≤ L := by
-          intro i
-          apply Nat.lt_succ.mp
-          rw [symm hL]
-          exact preds_decreasing net (m i) n (h₃ i)
-
-        -- Go into h₁ and apply our inductive hypothesis
-        conv at h₁ =>
-          enter [2, 1, i]
-          -- enter [2, 2, i, 1]
-          rw [hm]
-          rw [← IH (layer net (m i)) (h₄ i) (m i) rfl]
-        
-        -- Unpack the (m i) term
-        rw [← hm] at h₁
-        rw [← hm]
-
-        -- Use simp_hebb_activ₂, which says that if all
-        -- of the *active* preds ∉ Prop(A), the activ's are the same.
-        let S := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
-        exact hebb_activ net A S n h₁
-
 --------------------------------------------------------------------
 theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) : 
   propagate net A ∩ propagate net B ≠ ∅ →
 
   propagate (hebb_star net A) B =
-  propagate net (B ∪ reachable net (propagate net A) B) := by 
+  propagate net (B ∪ reachable net (propagate net A) (propagate net B)) := by 
 --------------------------------------------------------------------
   intro h_nonempty
   apply ext
@@ -2612,12 +2607,12 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
       case inr h₂ => 
         have heq : layer net n = 0 := 
           Eq.trans (symm (hebb_layers net A)) (Eq.trans (hebb_layers _ _) hL)
-        have h₃ : n ∈ B :=
+        have h₃ : n ∈ propagate net B :=
           reach_layer_zero _ _ _ _ heq h₂
 
-        -- simp only [propagate, Membership.mem, Set.Mem] at h₃
-        -- rw [hL] at h₃
-        -- simp only [propagate_acc] at h₃
+        simp only [propagate, Membership.mem, Set.Mem] at h₃
+        rw [hL] at h₃
+        simp only [propagate_acc] at h₃
         exact h₃
 
   --------------------------------
@@ -2626,94 +2621,14 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
   case hi L IH => 
     apply Iff.intro
     
-    ---------------------
-    -- Backward Direction
-    ---------------------
-    case mpr =>
-      intro h₁
-      
-      -- By cases; either n ∈ B ∪ Reach(Prop(A), Prop(B)), or not.
-      by_cases n ∈ B ∪ reachable net (propagate net A) B
-      case pos =>
-        -- From here, we split again; either:
-        --    1. n ∈ B, and by extens n ∈ Prop(B) in (hebb_star net)
-        --    2. n ∈ Reach(Prop(A), Prop(B)).  In this case, this path
-        --       has been updated in the (hebb_star net), so of course
-        --       n ∈ Prop(B) in (hebb_star_net)
-        --       i.e. apply [hebb_updated_path]! 
-        cases h
-        case inl h₂ => exact propagate_acc_is_extens _ _ h₂
-        case inr h₂ =>
-          -- -- KEY STEP: Applying [hebb_updated_path] and [hebb_mix]
-          -- have h₃ : n ∈ propagate (hebb_star net A) (propagate net B) :=
-          --   hebb_updated_path _ _ _ h₂
-          -- have h₄ : n ∈ propagate (hebb_star net A) B :=
-          --   sorry
-          
-          have h₃ : n ∈ propagate (hebb_star net A) B :=
-            hebb_updated_path _ _ _ h₂
-          simp only [propagate, Membership.mem, Set.Mem] at h₃
-          exact h₃
-          
-      case neg =>
-        -- We get ready to simplify propagate_acc
-        have n_not_in_B : n ∉ B :=
-          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
-
-        -- Simplifications and rewriting, to prepare for IH
-        -- We also rewrite the 'preds', 'layers', and 'activ'
-        -- for (hebb_star net) in terms of the original 'net'.
-        rw [hebb_layers]
-        rw [hL]
-        simp only [propagate] at h
-        rw [simp_propagate_acc _ n_not_in_B]
-        rw [simp_propagate_acc _ h] at h₁
-        rw [hebb_preds net A] -- rewrite 'preds'
-        
-        -- The plan is to now apply our inductive hypothesis
-        -- and use the 'activ_agree' lemmas.
-        -- We write the two sets as S₁ and S₂ for convenience 
-        -- let S₁ := fun m => 
-        --   propagate_acc net (B ∪ reachable net 
-        --     (fun n => propagate_acc net A n (layer net n)) 
-        --     (fun n => propagate_acc net B n (layer net n)))
-        --     m (layer net m)
-        let S₁ := fun m => 
-          propagate_acc net (B ∪ reachable net 
-            (fun n => propagate_acc net A n (layer net n)) B) m (layer net m)
-        let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
-
-        -- Apply IH to the predecessors
-        have h₂ : ∀ (m : ℕ), m ∈ preds net n → (S₁ m ↔ S₂ m) := by
-          simp only [Membership.mem] -- really just want to unfold the let
-          intro m hm
-          generalize hLm : layer net m = Lm
-          have h₃ : Lm ≤ L := by
-            rw [symm hLm]
-            apply Nat.lt_succ.mp
-            rw [symm hL]
-            exact preds_decreasing net m n hm
-          exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
-
-        -- Argument: 
-        -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
-        --   activate n *in the original net*
-        -- But the weights in the updated net are either the same or
-        --   increasing, so by hebb_activ, these same predecessors
-        --   activate n *in the updated net*.
-        simp
-        simp at h₁
-        exact hebb_activ net A S₂ _
-          (activ_agree _ S₁ S₂ _ h₂ h₁)
 
     ---------------------
     -- Forward Direction
-    -- (similar, but differs slightly in Case 1)
+    -- (needs a complete rewrite)
     ---------------------
-    -- This direction is a bit more tricky. This
-    -- is where we rely on the net being fully
-    -- connected & transitively closed.
-    case mp => 
+    case mp => sorry
+
+      /-
       intro h₁
       
       -- By cases; either n ∈ B ∪ reachable net (propagate net A) (propagate net B), 
@@ -2958,8 +2873,102 @@ theorem hebb_reduction_nonempty (net : BFNN) (A B : Set ℕ) :
             rw [symm hL]
             exact preds_decreasing net m n h₂
           exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
+      -/
 
--/ -- GOTO          
+    ---------------------
+    -- Backward Direction
+    ---------------------
+    case mpr =>
+      intro h₁
+      
+      -- By cases; either n ∈ B ∪ Reach(Prop(A), Prop(B)), or not.
+      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
+      case pos =>
+        -- From here, we split again; either:
+        --    1. n ∈ B, and by extens n ∈ Prop(B) in (hebb_star net)
+        --    2. n ∈ Reach(Prop(A), Prop(B)).  In this case, this path
+        --       has been updated in the (hebb_star net), so of course
+        --       n ∈ Prop(B) in (hebb_star_net)
+        --       i.e. apply [hebb_updated_path]! 
+        cases h
+        case inl h₂ => exact propagate_acc_is_extens _ _ h₂
+        case inr h₂ =>
+          -- This is a crucial step; a lot of action happens in [hebb_updated_path]!
+          have h₃ : n ∈ propagate (hebb_star net A) B :=
+            hebb_updated_path _ _ _ h₂
+          simp only [propagate, Membership.mem, Set.Mem] at h₃
+          exact h₃
+          
+      case neg =>
+        -- We get ready to simplify propagate_acc
+        have n_not_in_B : n ∉ B :=
+          fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h
+
+        -- Simplifications and rewriting, to prepare for IH
+        -- We also rewrite the 'preds', 'layers', and 'activ'
+        -- for (hebb_star net) in terms of the original 'net'.
+        rw [hebb_layers]
+        rw [hL]
+        simp only [propagate] at h
+        rw [simp_propagate_acc _ n_not_in_B]
+        rw [simp_propagate_acc _ h] at h₁
+        rw [hebb_preds net A] -- rewrite 'preds'
+        
+        -- The plan is to now apply our inductive hypothesis
+        -- and use the 'activ_agree' lemmas.
+        -- We write the two sets as S₁ and S₂ for convenience 
+        -- let S₁ := fun m => 
+        --   propagate_acc net (B ∪ reachable net 
+        --     (fun n => propagate_acc net A n (layer net n)) 
+        --     (fun n => propagate_acc net B n (layer net n)))
+        --     m (layer net m)
+        let S₁ := fun m => 
+          propagate_acc net (B ∪ reachable net 
+            (fun n => propagate_acc net A n (layer net n)) 
+            (fun n => propagate_acc net B n (layer net n))) m (layer net m)
+        let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
+
+        -- Apply IH to the predecessors
+        have h₂ : ∀ (m : ℕ), m ∈ preds net n → (S₁ m ↔ S₂ m) := by
+          simp only [Membership.mem] -- really just want to unfold the let
+          intro m hm
+          generalize hLm : layer net m = Lm
+          have h₃ : Lm ≤ L := by
+            rw [symm hLm]
+            apply Nat.lt_succ.mp
+            rw [symm hL]
+            exact preds_decreasing net m n hm
+          exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
+
+        -- Argument: 
+        -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
+        --   activate n *in the original net*
+        -- But the weights in the updated net are either the same or
+        --   increasing, so by hebb_activ, these same predecessors
+        --   activate n *in the updated net*.
+        simp
+        simp at h₁
+        exact hebb_activ net A S₂ _
+          (activ_agree _ S₁ S₂ _ h₂ h₁)
+
+
+-- COROLLARY: If we plug in Prop(A) ∩ Prop(B) = ∅,
+-- then the update has no effect on the propagation!  
+--------------------------------------------------------------------
+theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) : 
+  propagate net A ∩ propagate net B = ∅ →
+
+  propagate (hebb_star net A) B = propagate net B := by 
+--------------------------------------------------------------------
+  intro h_empty
+  apply ext
+  intro (n : ℕ)
+
+  -- TODO: Just substitute Prop(A) ∩ Prop(B) = ∅
+  -- into the nonempty theorem!
+  sorry         
+
+
 
 -- TODO: Prove that we can unravel these nets into ordinary
 -- feedforward nets
