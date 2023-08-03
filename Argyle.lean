@@ -473,8 +473,8 @@ structure BFNN extends Net where
   activ_nondecr : ∀ (x₁ x₂ : Float),
     x₁ ≤ x₂ → activation x₁ ≤ activation x₂
 
-  -- There is *some* x for which the activation is 1.0
-  activ_pos : ∃ (x : Float), activation x = 1.0
+  -- There is *some* t for which the activation is 1.0
+  activ_pos : ∃ (t : Float), activation t = 1.0
 
 
 -- Because our activation function is bounded above by 1.0,
@@ -575,8 +575,6 @@ theorem setExample : 3 ∈ setC := by
 -- but list comprehensions are harder to reason about.
 def weighted_sum (weights : List Float) (lst : List Float) : Float :=
   List.foldr (· + ·) 0.0 (List.zipWith (· * ·) weights lst)
-  -- List.sum [w * x | for w in weights, for x in lst]
-  -- 
 
 #eval weighted_sum [] []
 #eval weighted_sum [1.0] [3.0]
@@ -1853,22 +1851,47 @@ theorem hebb_once_weights_le (net : BFNN) :
   "Iterated"/Fixed-Point Naive Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- Takes a graph update function 'f' (e.g. graph_update for Hebb)
--- and iterates it 'no_times' times.
--- netᵢ and Sᵢ are the initial inputs.
--- def iterate (f : Graph ℕ Float → Set ℕ → Graph ℕ Float) 
---   (no_times : ℕ) (gᵢ : Graph ℕ Float) (Sᵢ : Set ℕ) : Graph ℕ Float :=
---   match no_times with
---   | Nat.zero => gᵢ
---   | Nat.succ k => f (iterate f k gᵢ Sᵢ) Sᵢ
-
 -- We score neurons by the total sum of *negative* weights coming 
 -- into them.  The neuron with the lowest score is the least likely
 -- to activate (in the worst case where all of its negative signals
 -- activate but none of its positive ones do).  If a neuron has
 -- no negative incoming weights, we give it a score of 0.
 def neg_weight_score (net : BFNN) (n : ℕ) : Float :=
+  List.foldr (· + ·) 0.0 (List.filter (fun w => w < 0.0) 
+    (List.map (fun m => net.graph.getEdgeWeight m n) (preds net n)))
+
+
+-- NOTE: If there are no nodes to score, a value of 0.0 is fine.
+def min_neg_weight_score (net : BFNN) : Float :=
   sorry
+  -- let scores := List.map (fun n => neg_weight_score net n) net.graph.get_vertices
+  -- match scores.minimum with
+  -- | some a => sorry
+  -- | none => 0.0
+
+-- For a *given* n, the neg_weight_score is smaller than
+-- any possible weighted sum over activated predecessors of n.
+-- (i.e. no matter what the activation list 'x' is.)
+--------------------------------------------------------------------
+lemma neg_weight_score_le (net : BFNN) (n : ℕ) (x : List Float) :
+  let w : List Float := List.map (fun m => 
+    Graph.getEdgeWeight net.graph m n) (preds net n)
+  
+  (neg_weight_score net n) ≤ (weighted_sum w x) := by
+--------------------------------------------------------------------
+  intro w
+  simp only [neg_weight_score, weighted_sum]
+  
+  -- How do I argue that the sum of a list of all of the negative values
+  -- will always be less than the sum of the original list???
+  sorry
+
+
+-- The *minimum* neg_weight_score is smaller than any
+-- possible weighted sum over activated predecessors of n,
+-- *for all n*.
+-- TODO
+
 
 
 -- This is the exact number of iterations of Hebbian learning
@@ -2035,7 +2058,7 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
 -- net is the same as its weight in the original net.
 -- Lifted from hebb_once_weights
 --------------------------------------------------------------------
-theorem hebb_weights (net : BFNN) : 
+theorem hebb_weights_eq (net : BFNN) : 
   (m ∉ propagate net A ∨ n ∉ propagate net A)
   → ((hebb_star net A).toNet.graph.getEdgeWeight m n =
     net.graph.getEdgeWeight m n) := by
@@ -2064,19 +2087,17 @@ theorem hebb_weights_le (net : BFNN) :
     exact absurd hpt (ne_of_gt (unstable_point_pos _ _))
   case succ k IH => 
     simp only [graph_update_star]
-    sorry -- graph weights are hard to reason about
-          -- because of the 'match'!
-          -- there's got to be an easier way!
+    sorry -- Graph weights are hard to reason about because of 'match'!
 
 
 /-══════════════════════════════════════════════════════════════════
   The more interesting/crucial properties
 ══════════════════════════════════════════════════════════════════-/
 
--- The lemma for 'activ' and 'hebb', essentially
+-- The lemma for 'activ' and 'hebb', essentially:
 -- activ net prev_activ n  ⟶  activ (hebb_star net A) prev_activ n
 --------------------------------------------------------------------
-lemma hebb_activ (net : BFNN) (A S : Set ℕ) (n : ℕ) :
+lemma hebb_activ_nondecreasing (net : BFNN) (A S : Set ℕ) (n : ℕ) :
   activ net (List.map (fun i => 
       let m := (preds net n).get! i
       if S m then 1.0 else 0.0) 
@@ -2111,19 +2132,21 @@ lemma hebb_activ (net : BFNN) (A S : Set ℕ) (n : ℕ) :
     rw [one_mult]
     exact hebb_weights_le _
 
+
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
 --------------------------------------------------------------------
-theorem simp_hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
+theorem hebb_activ_equal₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
   n ∉ propagate net A
-  → activ (hebb_star net A) prev_activ n = activ net prev_activ n := by
+  → (activ (hebb_star net A) prev_activ n ↔ activ net prev_activ n) := by
 --------------------------------------------------------------------
   intro h₁
+  apply Eq.to_iff
   simp only [activ]
   rw [hebb_activation net A]
   rw [hebb_preds net A]
   conv =>
     lhs; enter [1, 2, 1, 1, i]
-    rw [hebb_weights _ (Or.inr h₁)]
+    rw [hebb_weights_eq _ (Or.inr h₁)]
 
 
 -- If every *active* predecessor of n ∉ Prop(A), then
@@ -2131,7 +2154,7 @@ theorem simp_hebb_activ₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) 
 -- Like activ_agree, we have to simplify the statement of this
 -- lemma in order for Lean to be able to infer types efficiently.
 --------------------------------------------------------------------
-theorem simp_hebb_activ₂ (net : BFNN) (A S : Set ℕ) :
+theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
   (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net S))
 
   → (activ (hebb_star net A) (List.map (fun i => 
@@ -2180,7 +2203,7 @@ theorem simp_hebb_activ₂ (net : BFNN) (A S : Set ℕ) :
     rw [if_pos h]
     rw [one_mult]
     rw [one_mult]
-    exact hebb_weights _ (Or.inl h₃)
+    exact hebb_weights_eq _ (Or.inl h₃)
 
   -- Otherwise, the RHS's reduce to 0.0, and so the
   -- weighted sums are trivially equal
@@ -2195,7 +2218,7 @@ theorem simp_hebb_activ₂ (net : BFNN) (A S : Set ℕ) :
 -- -- if m is activated in (hebb_star net) then n is too
 -- -- (the activation automatically goes through in (hebb_star net))
 --------------------------------------------------------------------
-theorem simp_hebb_activ₃ (net : BFNN) (A B : Set ℕ) :
+theorem hebb_activated_by (net : BFNN) (A B : Set ℕ) :
   let preds := preds net n
   let prev_activ := List.map (fun i => 
     let m := preds.get! i
@@ -2218,38 +2241,19 @@ theorem simp_hebb_activ₃ (net : BFNN) (A B : Set ℕ) :
   rw [hebb_activation net A]
   rw [hebb_preds net A]
   
-  sorry -- I have the proof written on paper, I should consult that.
+  -- NOTE: This is one of the most crucial steps of the whole proof!
+  -- We have some point 't' at which the activation = 1.0.
+  -- Since the activation function is nondecreasing, we just have
+  -- to show that the inner weighted sum ≥ t. 
+  match net.activ_pos with
+  | ⟨t, ht⟩ => 
+    apply activation_from_inequality _ _ _ _ ht
+    apply net.activ_nondecr _ _
+    
+    sorry
+
+        -- I have the proof written on paper, I should consult that.
         -- Depends on things like the monotonicity of 'activation', etc.
-
-
--- If our reduction is right, then we should also have this
--- (simp_hebb_activ₃, but for the original net.)
--- But if we *don't* have this, then our reduction is wrong!
---------------------------------------------------------------------
-theorem simp_hebb_activ₄ (net : BFNN) (A B : Set ℕ) :
-  let preds := preds net n
-  let prev_activ := List.map (fun i => 
-    let m := preds.get! i
-    if propagate_acc net (B ∪ reachable net 
-      (fun n => propagate_acc net A n (layer net n)) 
-      (fun n => propagate_acc net B n (layer net n))) m (layer net m) 
-    then 1.0 else 0.0)
-      (List.range preds.length)
-
-  n ∈ propagate net A
-  → m ∈ preds ∧ m ∈ propagate net A  
-  → m ∈ propagate net (B ∪ reachable net (propagate net A) (propagate net B))
-  → activ net prev_activ n := by
---------------------------------------------------------------------
-  intro preds
-  intro prev_activ
-  intro h₁
-  intro h₂
-  intro h₃
-
-  simp only [activ]
-  
-  sorry
 
 
 -- If all predecessors of n (and all predecessors of those, etc.)
@@ -2346,8 +2350,8 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         rw [← hm] at h₂
         rw [← hm]
 
-        -- Finally, apply simp_hebb_activ₂.
-        exact (simp_hebb_activ₂ net A B h₃).mp h₂
+        -- Finally, apply hebb_activ_equal₂.
+        exact (hebb_activ_equal₂ net A B h₃).mp h₂
 
     ---------------------
     -- Backwards Direction
@@ -2408,8 +2412,8 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         -- Unpack the (m i) term
         rw [← hm]
 
-        -- Finally, apply simp_hebb_activ₂.
-        exact (simp_hebb_activ₂ net A B h₃).mpr h₂
+        -- Finally, apply hebb_activ_equal₂.
+        exact (hebb_activ_equal₂ net A B h₃).mpr h₂
 
 
 -- The updated propagation at least contains Prop(A) ∩ Prop(B).
@@ -2494,7 +2498,7 @@ theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
         rw [hL]
         rw [simp_propagate_acc _ h]
         rw [hebb_preds]
-        exact simp_hebb_activ₃ net A B h₁.1 ⟨h₃, hm.1.1⟩ h₅
+        exact hebb_activated_by net A B h₁.1 ⟨h₃, hm.1.1⟩ h₅
 
       -------------------------------
       -- Case 1: layer[m] = layer[n]
@@ -2517,6 +2521,8 @@ theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
 
 -- If there is a path within Prop(A) from B to n, then, since this
 -- path is updated in hebb_star, n ∈ Prop(B).
+-- This is the key lemma for the backwards direction of the 
+-- reduction; it expresses an upper bound for Reach(Prop(A), Prop(B))
 --------------------------------------------------------------------
 theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
   reachable net (propagate net A) (propagate net B)
@@ -2590,7 +2596,119 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
           --  x ∈ Prop(B) in (hebb_star net)
           --  -------------------------------
           --  y is activ in hebb_star net
-          exact simp_hebb_activ₃ net A B hy ⟨hpreds, hx_propA⟩ hx_propB
+          exact hebb_activated_by net A B hy ⟨hpreds, hx_propA⟩ hx_propB
+
+
+-- Complementary to [hebb_updated_path]:
+--     Reach(Prop(A), Prop(B)) ⊆ Prop*(B)
+-- we have
+--     Prop(A) ∩ Prop*(B) ⊆ Reach(Prop(A), Prop(B)).
+-- This is the key lemma for the forward direction of the reduction;
+-- it expresses a lower bound for Reach(Prop(A), Prop(B)).
+--------------------------------------------------------------------
+theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
+  propagate net A ∩ propagate (hebb_star net A) B
+  ⊆ reachable net (propagate net A) (propagate net B) := by
+--------------------------------------------------------------------
+  intro n h₁
+
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+
+  --------------------------------
+  -- Base Step
+  --------------------------------
+  -- Easy; after simplifications, show that A ∩ B ⊆ Reach(...)
+  case hz =>
+    simp only [Inter.inter, Set.inter, setOf] at h₁
+    simp only [Membership.mem, Set.Mem, propagate] at h₁
+    rw [hebb_layers] at h₁
+    rw [hL] at h₁
+    simp only [propagate_acc] at h₁
+      
+    exact reach_is_extens _ _ _ 
+      ⟨propagate_is_extens _ _ h₁.1, propagate_is_extens _ _ h₁.2⟩
+
+  --------------------------------
+  -- Inductive Step
+  --------------------------------
+  case hi L IH => 
+    -- First, we case on n ∈ B to simplify propagate_acc.
+    by_cases n ∈ B
+    case pos => 
+      exact reach_is_extens _ _ _ 
+        ⟨h₁.1, propagate_is_extens _ _ h⟩
+      
+    case neg => 
+      -- By the well-ordering principle, let m be the node
+      -- in Prop(A) ∩ Prop*(B) with the *smallest layer*
+      generalize hS : propagate net A ∩ propagate (hebb_star net A) B = S
+      have hn : n ∈ S := by
+        rw [← hS]
+        exact h₁
+      have h_nonempty : Set.Nonempty S := ⟨n, hn⟩
+      let m := WellFounded.min (layer_wellfounded net) S h_nonempty
+      
+      -- This m is both in the set, and is the smallest such m.
+      have hm : m ∈ S ∧ ∀ x, x ∈ S → layer net m ≤ layer net x := 
+        ⟨WellFounded.min_mem _ _ _,
+        fun x hx => le_of_not_le (WellFounded.not_lt_min (layer_wellfounded net) _ _ hx)⟩
+      
+      -- Either layer[m] ≤ layer[n]   or  layer[m] = layer[n]
+      cases lt_or_eq_of_le (hm.2 n hn)
+      
+      -------------------------------
+      -- Case 1: layer[m] < layer[n]
+      -------------------------------
+      -- In this case, we have an edge m⟶n, and since
+      -- m ∈ Prop(A), n ∈ Prop(A), m ∈ Reach(Prop(A), Prop(B)),
+      -- we have that n ∈ Reach(Prop(A), Prop(B)).
+      case inl h₂ =>
+        -- NOTE: This is where we apply the crucial fact that
+        -- the net is fully connected / transitively closed
+        -- to get an edge m⟶n.
+        have h₃ : m ∈ preds net n := by
+          rw [edge_from_preds]
+          exact connected _ m n h₂
+
+        have hedge : Graph.hasEdge net.toNet.graph m n :=
+              (edge_from_preds _ _ _).mp h₃
+        
+        -- We apply our IH to m
+        rw [← hS] at hm
+        have h₄ : layer net m ≤ L := by
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net m n h₃
+        have h₅ : m ∈ reachable net (propagate net A) (propagate net B) :=
+          IH _ h₄ hm.1 rfl
+
+        -- n is reachable from the same x ∈ Prop(A) ∩ Prop(B)
+        -- that m is reachable by.
+        rw [← hS] at hn
+        match h₅ with
+        | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, focusedPath.from_path hx.2 hedge hn.1⟩⟩
+
+      -------------------------------
+      -- Case 2: layer[m] = layer[n]
+      -------------------------------
+      -- In this case, we know that all predecessor weights are
+      -- the same.  But we also have to argue (inductively) that
+      -- all predecessor *activations* are the same.  We do this
+      -- in a separate lemma [hebb_before_intersection].
+      case inr h₂ => 
+        -- All strict predecessors of m are not in Prop(A) ∩ Prop(B).
+        -- (because m is the smallest)
+        rw [← hS] at hm
+        have h₃ : ∀ x, layer net x < layer net n → x ∉ propagate net A ∩ propagate net B := by
+          intro x h₄ hx
+          rw [← h₂] at h₄
+          exact absurd h₄ (not_lt_of_le (hm.2 _ ⟨hx.1, hebb_extens _ _ _ hx⟩))
+        
+        exact reach_is_extens _ _ _ 
+          ⟨h₁.1, (hebb_before_intersection _ _ _ n h₃).mp h₁.2⟩
+
 
 /-══════════════════════════════════════════════════════════════════
   Reduction for Unstable Hebbian Update
@@ -2676,18 +2794,44 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
         -- Case 1: n ∈ Prop(A)
         -- and some m⟶n ∈ Prop(A) ∩ Prop(B ∪ ...)
         ---------------------------------------
-        -- In this case, we apply simp_hebb_activ₄:
-        -- since m ∈ Prop(B ∪ ...), and m, n ∈ Prop(A),
-        -- m activates n in Prop(B ∪ ...)
+        -- Since m ∈ Prop(B ∪ Reach(Prop(A), Prop(B))),
+        --       m ∈ Prop(B) in the updated net. (by IH)
+        -- But by [reach_of_hebb_prop], this means
+        --       m ∈ Reach(Prop(A), Prop(B))
+        -- Then, since m, n ∈ Prop(A) and m ⟶ n,
+        --       n ∈ Reach(Prop(A), Prop(B)).
         case pos =>
           match h.2 with
           | ⟨m, hm⟩ =>
-            rename_i h_reach
-            simp only [propagate] at h_reach
-            rw [simp_propagate_acc net h_reach]
-            
-            exact simp_hebb_activ₄ net A B h.1 ⟨hm.1, hm.2.1⟩ hm.2.2
+            -- Simplifications to prepare for IH
+            simp only [propagate, Membership.mem, Set.Mem] at hm
+            simp only [Inter.inter, Set.inter, setOf] at hm
+            simp only [Membership.mem, Set.Mem] at hm
 
+            have hlayer : layer net m ≤ L := by
+              apply Nat.lt_succ.mp
+              rw [symm hL]
+              exact preds_decreasing net m n hm.1
+
+            conv at hm =>
+              enter [2, 2]
+              rw [← IH (layer net m) hlayer m rfl]
+            
+            -- We can now apply [reach_of_hebb_prop]
+            have h₂ : m ∈ reachable net (propagate net A) (propagate net B) :=
+              reach_of_hebb_prop _ _ _ hm.2 
+            have hedge : Graph.hasEdge net.toNet.graph m n :=
+              (edge_from_preds _ _ _).mp hm.1
+            
+            -- n is reachable from exactly that x ∈ Prop(A) ∩ Prop(B) 
+            -- that m is reachable from.
+            have h₃ : n ∈ reachable net (propagate net A) (propagate net B) :=
+              match h₂ with
+              | ⟨x, hx⟩ => ⟨x, ⟨hx.1, focusedPath.from_path hx.2 hedge h.1⟩⟩ 
+            
+            rw [← hL]
+            exact propagate_acc_is_extens _ _ (Or.inr h₃)
+            
         ---------------------------------------
         -- Case 2: n ∉ Prop(A)
         -- or all m⟶n ∉ Prop(A) ∩ Prop(B ∪ ...)  
@@ -2723,8 +2867,8 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
           -- or all m⟶n ∉ Prop(A) ∩ Prop(B ∪ ...)  
           ---------------------------------------
           case inl h₂ => 
-            -- Apply [hebb_simp_activ₁]
-            rw [simp_hebb_activ₁ _ _ _ h₂] at h₁
+            -- Apply [hebb_activ_equal₁]
+            rw [hebb_activ_equal₁ _ _ _ h₂] at h₁
             
             -- More simplifications to get ready for IH
             simp
@@ -2781,11 +2925,11 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             rw [← hm] at h₁
             rw [← hm]
 
-            -- Apply [hebb_simp_activ₂]
+            -- Apply [hebb_activ_equal₂]
             let S := (B ∪ reachable net (fun n => 
               propagate_acc net A n (layer net n)) fun n => 
                 propagate_acc net B n (layer net n))
-            rw [simp_hebb_activ₂ _ _ S h₂] at h₁
+            rw [hebb_activ_equal₂ _ _ S h₂] at h₁
             exact h₁ 
 
     ---------------------
@@ -2857,11 +3001,11 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
         -- By activ_agree, the predecessors m ∈ Prop(B) (over hebb_star)
         --   activate n *in the original net*
         -- But the weights in the updated net are either the same or
-        --   increasing, so by hebb_activ, these same predecessors
-        --   activate n *in the updated net*.
+        --   increasing, so by [hebb_activ_nondecreasing], these same 
+        --   predecessors activate n *in the updated net*.
         simp
         simp at h₁
-        exact hebb_activ net A S₂ _
+        exact hebb_activ_nondecreasing net A S₂ _
           (activ_agree _ S₁ S₂ _ h₂ h₁)
 
 
