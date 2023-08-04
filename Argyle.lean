@@ -1202,64 +1202,9 @@ theorem reach_union (net : BFNN) : ∀ (S A B : Set ℕ),
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
 
--- Reach(Prop(B)) = Reach(B)
--- Reach(A, Prop(B)) ⊆ Reach(A, B)  -- WRONG!
--- 
--- Prop(B) ⊆ [A]Prop(B)  -- WRONG!!!
-
--- A simple interaction between graph reachability and propagation
--- WRONG!!!
--- --------------------------------------------------------------------
--- theorem reach_propagate (net : BFNN) : ∀ (A B : Set ℕ),
---   reachable net A (propagate net B) ⊆ reachable net A B := by
--- --------------------------------------------------------------------
---   intro A B n h₁
-  
---   -- By induction on the layer of the net containing n
---   generalize hL : layer net n = L
---   induction L using Nat.case_strong_induction_on generalizing n
-
---   --------------------------------
---   -- Base Step
---   --------------------------------
---   case hz => 
---     have h₂ : n ∈ propagate net B := reach_layer_zero _ _ _ _ hL h₁
---     simp only [propagate, Membership.mem, Set.Mem] at h₂
---     rw [hL] at h₂
---     simp only [propagate_acc] at h₂
-
---     -- Moreover, n ∈ A (since n ∈ Reach(A, B))
---     have h₃ : n ∈ A := reach_subset _ _ _ h₁
-
---     -- We have n ∈ B, and so n ∈ Reach(A, B). 
---     exact ⟨n, ⟨h₂, focusedPath.trivial h₃⟩⟩ 
-
---   --------------------------------
---   -- Inductive Step
---   --------------------------------
---   case hi L IH =>
---     -- simp [propagate] at h₁
-
---     match h₁ with
---     | ⟨m, hm⟩ =>
-      
---       -- First, apply our IH to m
---       have h₂ : m ∈ A := focusedPath_subset _ _ hm.2
---       have h₃ : (layer net m) ≤ L := sorry
---         -- by
---         -- apply Nat.le_of_lt_succ
---         -- rw [← hL]
---         -- exact focusedPath_layer _ _ hm.2
---       have h₄ : m ∈ reachable net A (propagate net B) := by
---         exact ⟨m, ⟨hm.1, focusedPath.trivial h₂⟩⟩
---       have h₅ : m ∈ reachable net A B := IH (layer net m) h₃ h₄ rfl
-
---       -- Now we have a path from some x⟶m.
---       match h₅ with
---       | ⟨x, hx⟩ => 
---         -- We show n ∈ Reach(A, B)
---         -- by providing a path x ⟶ m ⟶ n
---         exact ⟨x, ⟨hx.1, focusedPath_trans _ _ hx.2 hm.2⟩⟩
+-- I actually don't need to assume anything in particular here...
+-- which is odd, I suppose.  (I'd expect it to be different
+-- from Elite Upgrade somehow...)
       
 /-══════════════════════════════════════════════════════════════════
   Naive (Unstable) Hebbian Update
@@ -1824,7 +1769,7 @@ def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
 --------------------------------------------------------------------
 theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) : 
   (P (hebb net S) = P net)
-  → (P (hebb_star net S) = P net) := by 
+  → (P (hebb_star net S) = P net) := by
 --------------------------------------------------------------------
   intro h₁
   
@@ -2059,6 +2004,39 @@ theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
     rw [if_neg h]
     simp
     
+
+/-
+INTUITION:
+Prop$(S) = propagate (hebb_star net A) B
+
+m ∈ Prop$(B)
+m, n ∈ Prop(A)
+m ⟶ n
+-------------
+n ∈ Prop$(B)
+
+∑ w$(mᵢ, n) * x_mᵢ = 
+  w$(m, n) * x_m (=1) + ∑ rest
+  w$(m, n) + ∑ rest
+  ≥ w$(m, n) + (N - 1) * min_score
+  = (w(m, n) + no_times * η) + (N - 1) * min_score
+
+  (w(m, n) + no_times * η) + (N - 1) * min_score ≥ thres
+
+  no_times = round (thres - (N - 1) * min_score - w(m, n) / η)
+
+min_score : minimum possible weighted sum across *all* n ∈ Net 
+N : num nodes in Net
+
+GOAL: thres ≤ ∑ w$(mᵢ, n) * x_mᵢ
+
+Act (thres) = 1
+Act (∑ w$(mᵢ, n) * x_mᵢ) = 1
+GOAL: n activated by (active) mᵢ ∈ preds(n)
+-----------------------
+n ∈ Prop$(B)
+-/
+
 
 -- -- If *some* predecessor of n is ∈ Prop(A), and n ∈ Prop(A), then
 -- -- if m is activated in (hebb_star net) then n is too
@@ -2561,6 +2539,20 @@ theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
 /-══════════════════════════════════════════════════════════════════
   Reduction for Unstable Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
+
+/-
+Prop*(B) = propagate (hebb_star net A) B
+
+Prop(A) ∩ Prop(B) ⊆ Prop*(B)
+Reach(Prop(A), Prop(B)) ⊆ Prop*(B)
+Prop(A) ∩ Prop*(B) ⊆ Reach(Prop(A), Prop(B))
+--------------------
+Prop*(B) = Prop(B ∪ Reach(Prop(A), Prop(B)))
+-/
+/-
+⟦Tp⟧ = Propagate(⟦p⟧)
+⟦K(p, q)⟧ = Reach(⟦p⟧, ⟦q⟧)
+-/
 
 --------------------------------------------------------------------
 theorem hebb_reduction (net : BFNN) (A B : Set ℕ) : 
