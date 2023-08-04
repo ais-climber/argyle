@@ -5,10 +5,9 @@ import Std.Tactic.ShowTerm
 import Lean.Meta.Tactic.Simp.Main
 import Mathlib.Tactic.Basic
 import Mathlib.Data.List.Sigma
+import Mathlib.Data.Real.Basic
 
 import Lean.Parser.Tactic
--- import Graph.Graph
--- import Graph.TopologicalSort
 import Mathlib.Init.Set
 import Mathlib.Data.List.Defs
 import Mathlib.Init.Propext
@@ -16,54 +15,9 @@ import Mathlib.Data.Set.Basic
 import Mathlib.Logic.Basic
 import Mathlib.Logic.Function.Basic
 
--- open Graph
 open Set
 open Tactic
 open Classical
-
--- Doesn't detect inefficient code!
-set_option maxHeartbeats 0
-
--------------------------------------------------
--- Goofing about with inductive types
--------------------------------------------------
-
-inductive my_lte : ℕ → ℕ → Prop where
-  | reflexive : my_lte n n
-  | from_succ : my_lte m x → (n = x + 1) → my_lte m n
-
--- #eval my_lte 1 3
-
-
-
-
-
--------------------------------------------------
--- List comprehensions,
--- courtesy of lovettchris
--- See: 
---   https://github.com/leanprover/lean4-samples/blob/main/ListComprehension/ListComprehension.lean
--------------------------------------------------
-
-declare_syntax_cat compClause
-syntax "for " term " in " term : compClause
-syntax "if " term : compClause
-
-syntax "[" term " | " compClause,* "]" : term
-
-def List.map' (xs : List α) (f : α → β) : List β := List.map f xs
-
-macro_rules
-  | `([$t:term |]) => `([$t])
-  | `([$t:term | for $x in $xs]) => `(List.map' $xs  (λ $x => $t))
-  | `([$t:term | if $x]) => `(if $x then [$t] else [])
-  | `([$t:term | $c, $cs,*]) => `(List.join [[$t | $cs,*] | $c])
-
-def prod_comprehens (xs : List α) (ys : List β) : List (α × β) := 
-  [(x, y) | for x in xs, for y in ys]
-
-#eval [(x, y) | for x in [1, 2], for y in [3, 4]]
-
 
 -------------------------------------------------
 -- Weighted Directed Graphs
@@ -111,14 +65,15 @@ deriving Repr
 -- Notice that this graph is acyclic, since each predecessor
 -- list only refers to nodes above the current node.  This
 -- is foreshadowing.
-def graphA : Graph ℕ Float :=
+def graphA : Graph ℕ ℚ :=
   ⟨[⟨0, [⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
     ⟨1, [⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
-    ⟨2, [⟨3, 1.0⟩, ⟨3, 3.0⟩]⟩, 
+    ⟨2, [⟨3, 1⟩, ⟨3, 3.0⟩]⟩, 
     ⟨3, []⟩]⟩
 
 #check graphA
 #eval graphA
+
 
 -------------------------------------------------
 -- Graph functions
@@ -131,11 +86,11 @@ def graphA : Graph ℕ Float :=
 -- hard -- right now it just depends on 'Prop')
 namespace Graph
 
-def get_vertices (g : Graph ℕ Float) : List ℕ :=
+def get_vertices (g : Graph ℕ ℚ) : List ℕ :=
   List.map (fun ⟨label, _⟩ => label) g.vertices
 
 -- Helper function to collect the List of pairs of n's successors
-def successor_pairs (vertices : List (Vertex ℕ Float)) (n : ℕ) : List (ℕ × Float) :=
+def successor_pairs (vertices : List (Vertex ℕ ℚ)) (n : ℕ) : List (ℕ × ℚ) :=
   match vertices with
   | [] => []
   | ⟨vertex, succ⟩ :: rest => 
@@ -143,7 +98,7 @@ def successor_pairs (vertices : List (Vertex ℕ Float)) (n : ℕ) : List (ℕ �
     else successor_pairs rest n
 
 -- We get all vertices that are in n's successor list
-def successors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
+def successors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
   List.filter 
     (fun m => m ∈ (successor_pairs g.vertices n).unzip.1) 
     g.get_vertices
@@ -152,7 +107,7 @@ def successors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
   -- g.vertices[n]!.successors.unzip.1
 
 
-def predecessors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
+def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
   List.filter (fun v => n ∈ (g.successors v)) g.get_vertices
   
   -- List.map (fun ⟨label, _⟩ => label) 
@@ -165,17 +120,17 @@ def predecessors (g : Graph ℕ Float) (n : ℕ) : List ℕ :=
 -- Using 'predecessors' is slower than 'successors',
 -- but we will tend to look backwards from a node rather
 -- than forwards.
-def hasEdge (g : Graph ℕ Float) (m n : ℕ) : Bool :=
+def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
   m ∈ (g.predecessors n)
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
--- If it does not exist, we say the weight is 0.0
+-- If it does not exist, we say the weight is 0
 -- TODO: In the future, it's better to use Option here
 -- and return none if none!!!
-def getEdgeWeight (g : Graph ℕ Float) (m n : ℕ) : Float :=
+def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
   match g.vertices[m]!.successors.find? (fun ⟨label, _⟩ => label = n) with
   | some ⟨_, weight⟩ => weight
-  | none => 0.0
+  | none => 0
 
 -- Some sanity checks
 #eval get_vertices graphA
@@ -195,48 +150,15 @@ def getEdgeWeight (g : Graph ℕ Float) (m n : ℕ) : Float :=
 #eval getEdgeWeight graphA 4 2
 
 
-inductive hasPath (g : Graph ℕ Float) : ℕ → ℕ → Prop where
+
+inductive hasPath (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
       hasPath g u u
   | from_path {u v w : ℕ} : 
       hasPath g u v → hasEdge g v w → hasPath g u w
 
-/-
-TODO for later:  Make 'hasPath' computable so that we can execute
-this code:
-> #eval hasPath graphA 1 3
-
-Some old code when I was trying to do this:
-
-instance decPath : Decidable (hasPath g u v) :=
-  sorry -- this should implement BFS!!!
-  -- if h : u = v then
-  --   isTrue (Eq.subst h hasPath.trivial)
-  -- else if h : hasEdge g u v then
-  --   isTrue (hasPath.from_path (hasPath.trivial) h)
-  -- else
-  --   sorry
-
-instance decLte : Decidable (my_lte m n) :=
-  if h : m = n then
-    .isTrue (h ▸ .trivial)
-  else
-    match n with
-    | x + 1 =>
-      have := @decLte m x
-      decidable_of_iff (my_lte m x) ⟨(.from_path · rfl), fun h => by
-        cases h with
-        | trivial => cases h rfl
-        | from_path h e => exact Nat.succ.inj e ▸ h⟩
-    | 0 => .isFalse fun h => by
-      cases h with
-      | trivial => exact h rfl
-      | from_path h e => cases e
--/
-
-
 --------------------------------------------------------------------
-theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ Float) :
+theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
   hasPath g u v → hasPath g v w → hasPath g u w := by
 --------------------------------------------------------------------
   intro (h₁ : hasPath g u v)
@@ -248,242 +170,114 @@ theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ Float) :
     exact hasPath.from_path path_ux edge_xy
 
 
-def is_refl (g : Graph ℕ Float) : Prop := ∀ (u : ℕ), 
+def is_refl (g : Graph ℕ ℚ) : Prop := ∀ (u : ℕ), 
   u ∈ g.get_vertices → g.hasEdge u u
 
-def is_symm (g : Graph ℕ Float) : Prop := ∀ (u v : ℕ), 
+def is_symm (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ), 
   g.hasEdge u v → g.hasEdge v u
 
-def is_trans (g : Graph ℕ Float) : Prop := ∀ (u v w : ℕ),
+def is_trans (g : Graph ℕ ℚ) : Prop := ∀ (u v w : ℕ),
   g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
 
-def is_acyclic (g : Graph ℕ Float) : Prop := ∀ (u v : ℕ),
+def is_acyclic (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
   g.hasPath u v → g.hasPath v u → u = v
 
 end Graph
 
-/-
-TODO:  Define 'acyclic' as:  Recursively on graph.vertices,
-every vertex can only "see" the vertices ahead of it.
-
-TODO: We want to be able to check if a graph is acyclic by
-just "computing" it -- i.e. we call Topological Sort on the
-graph, and if successful we know it is acyclic.
-
-So here is some old code I was using to try to do topological
-sort.  I'll need to come back to this when I want to make
-everything in this library computable.
-namespace TopologicalSort
-
--- @[simp]
--- def topol_sort (g : Graph ℕ Float) :=
---   (topSortUnsafe g).toList.reverse
-
--- holds iff u precedes v in array
--- note that we assume lst elements are all distinct
-def list_precedes (lst : List ℕ) (u v : ℕ) : Bool :=
-  match lst with
-    | List.nil => false
-    | List.cons x xs =>
-      -- If we find 'u' first, and v is in the rest, true
-      if x = u ∧ v ∈ xs then 
-        true
-      else 
-        list_precedes xs u v
-
-def listA : List ℕ :=
-  [2, 4, 9, 8, 5]
-
--- a couple of unit tests for good measure
-#eval list_precedes listA 4 8 -- true
-#eval list_precedes listA 2 8 -- true
-#eval list_precedes listA 2 4 -- true
-#eval list_precedes listA 2 9 -- true
-#eval list_precedes listA 9 5 -- true
-
-#eval list_precedes listA 8 2 -- should be false, is true
-#eval list_precedes listA 5 9 -- should be false, is true
-
-#eval list_precedes listA 1 7 -- undefined (false)
-#eval list_precedes listA 9 9 -- false, makes sure an element
-                              -- does not precede itself.
-
--- The ordering induced by Topological Sort
--- TODO: Rewrite as an inductive data type!
-/-
-def topOrder (g : Graph ℕ β) (u v : ℕ) : Prop :=
-  match (topSort g) with
-    | some sorted => list_precedes sorted.toList u v
-    | none => sorry
--/
-
--- inductive TopologicalOrdering (g : Graph ℕ β) (u : ℕ) where
---   | constr1 : TopologicalOrdering g u
---   | constr2 (x : ℕ) : TopologicalOrdering g u
-
--- inductive graph_≺ (g : Graph ℕ β) (u v : ℕ) where
---   | constr1 : sorry
---   | constr2 : sorry
-
--- Says that Topological Sort is actually correct, i.e.
--- if there is an edge from x to y, then x ≺ y in the ordering.
--- theorem topSort_is_ordered (g : Graph ℕ β) (u v : ℕ) :
---   g.hasEdge u v → topOrder g u v := by
-
---   intro (h₁ : hasEdge g u v)
---   rw [topOrder]
---   sorry
-
-end TopologicalSort
--/
-
--------------------------------------------------
--- Example:  Our graphA is acyclic
--- (We should just be able to call 'Topological Sort'
--- on the graph and check if that is successful.)
--------------------------------------------------
--- Put in examples file! (and figure it out later, we don't need
--- it right now)
--- 
--- theorem graphA_is_acyclic : graphA.is_acyclic := by
---   intro (u : ℕ) (v : ℕ)
---         (path_uv : hasPath graphA u v)
---         (path_vu : hasPath graphA v u)
-
---   sorry
-
 -------------------------------------------------
 -- Activation functions
 -------------------------------------------------
-def binary_step (x : Float) : Float :=
-  if x > 0.0 then
-    1.0
-  else
-    0.0
-
-/-
-TODO: If I want to do this the *right* way, I should define
-a type of Real numbers that wrap around Floats.  I can *compute*
-things at the Float level, and *prove* things at the Reals level,
-but I should refuse to let the user *prove* things at the Float
-level. i.e. they cannot prove things by evaluating Floats; this
-is where Lean's Floats run into contradictions.
--/
-axiom le_refl_float : ∀ (x : Float), x ≤ x
-axiom lt_or_ge_float : ∀ (x y : Float), x < y ∨ x ≥ y
-axiom le_not_lt_float : ∀ (x y : Float), x ≤ y → ¬ (y < x)
-axiom lt_le_lt_float : ∀ (x y z : Float), x < y → y ≤ z → x < z
-axiom le_eq_le_float : ∀ (x y z : Float), x ≤ y → y = z → x ≤ z
-axiom eq_le_le_float : ∀ (x y z : Float), x = y → y ≤ z → x ≤ z
-axiom zero_lt_one_float : 0.0 < 1.0
-axiom zero_le_zero : 0.0 ≤ 0.0
-axiom le_of_lt_float : ∀ (x y : Float), x < y → x ≤ y
-axiom not_le_float : ∀ (x y : Float), x < y → ¬ (y ≤ x)
-axiom zero_mult : ∀ (x : Float), x * 0.0 = 0.0
-axiom one_mult : ∀ (x : Float), x * 1.0 = x
-axiom zero_plus : ∀ (x : Float), x + 0.0 = x
-axiom commutative_mult_float : ∀ (x y : Float), x * y = y * x
-
--- This is probably the worst offender on this list.
--- We assume that we have an algorithm for casting a
--- natural number as a Float.
--- (Lean is especially bad about casting to and from Floats).
--- TODO: When changing everything to 'Real's, I should actually
--- give the cast to 'Real' here instead.
-
--- Positive natural numbers
-axiom cast_float (n : ℕ) : Float
-axiom cast_float_zero : cast_float 0 = 0.0 
+def binary_step (x : ℚ) : ℚ :=
+  if x > 0 then 1 else 0
 
 --------------------------------------------------------------------
-theorem binary_step_is_binary (x : Float) :
-    (binary_step x = 0.0) ∨ (binary_step x = 1.0) := by
+theorem binary_step_is_binary (x : ℚ) :
+    (binary_step x = 0) ∨ (binary_step x = 1) := by
 --------------------------------------------------------------------
       -- simp [binary_step]
 
-      cases (lt_or_ge_float 0.0 x) with
+      cases (lt_or_ge 0 x) with
 
-      -- Case 1: 0.0 < x
+      -- Case 1: 0 < x
       | inl case1 =>
-          have (h : binary_step x = 1.0) :=
+          have (h : binary_step x = 1) :=
             by
               simp only [binary_step]
               rw [(if_pos case1)]
           exact Or.inr h
 
-      -- Case 2: ¬ (0.0 < x)
+      -- Case 2: ¬ (0 < x)
       | inr case2 =>
-          have (h : binary_step x = 0.0) := 
+          have (h : binary_step x = 0) := 
             by 
               simp only [binary_step]
-              rw [(if_neg (le_not_lt_float x 0.0 case2))]
+              rw [(if_neg (not_lt_of_le case2))]
           exact Or.inl h
 
 -- Proof that binary_step is nondecreasing
 -- This is also a 'hello world' to see if I can
 -- reason about a branching program.
 --------------------------------------------------------------------
-theorem binary_step_nondecr (x₁ x₂ : Float) (hyp : x₁ ≤ x₂) :
+theorem binary_step_nondecr (x₁ x₂ : ℚ) (hyp : x₁ ≤ x₂) :
   (binary_step x₁ ≤ binary_step x₂) := by
 --------------------------------------------------------------------
     -- Simplify by applying the definition of binary_step.
     simp [binary_step]
     
-    cases (lt_or_ge_float 0.0 x₁) with
+    cases (lt_or_ge 0 x₁) with
     | inl case1 =>
-      cases (lt_or_ge_float 0.0 x₂) with
+      cases (lt_or_ge 0 x₂) with
       | inl case11 => 
-          -- Both sides evaluate to 1.0,
-          -- so we just prove that 1.0 ≤ 1.0.
+          -- Both sides evaluate to 1,
+          -- so we just prove that 1 ≤ 1.
           rw [(if_pos case1)]
           rw [(if_pos case11)]
-          exact le_refl_float 1.0
       | inr case12 => 
-          -- We have 0.0 < x₁ ≤ x₂ < 0.0,
+          -- We have 0 < x₁ ≤ x₂ < 0,
           -- so this case is absurd. 
           exact absurd
-            (lt_le_lt_float 0.0 x₁ x₂ case1 hyp) -- library_search!!! 
-            (le_not_lt_float x₂ 0.0 case12)
+            (lt_of_lt_of_le case1 hyp)
+            (not_lt_of_le case12)
     | inr case2 => 
-      cases (lt_or_ge_float 0.0 x₂) with
+      cases (lt_or_ge 0 x₂) with
       | inl case21 => 
           -- We are in the second and first cases.
-          rw [(if_neg (le_not_lt_float x₁ 0.0 case2))]
+          rw [(if_neg (not_lt_of_le case2))]
           rw [(if_pos case21)]
-          exact (le_of_lt_float _ _ zero_lt_one_float)
+          exact (le_of_lt rfl)
       | inr case22 => 
-          rw [(if_neg (le_not_lt_float x₁ 0.0 case2))]
-          rw [(if_neg (le_not_lt_float x₂ 0.0 case22))]
-          exact le_refl_float 0.0 -- library_search!!!
+          rw [(if_neg (not_lt_of_le case2))]
+          rw [(if_neg (not_lt_of_le case22))]
 
 -------------------------------------------------
 -- Feedforward neural nets
 -------------------------------------------------
 structure Net where
-  graph : Graph ℕ Float
-  activation : Float → Float
-  rate : Float -- learning rate
+  graph : Graph ℕ ℚ
+  activation : ℚ → ℚ
+  rate : ℚ -- learning rate
 
 structure BFNN extends Net where 
   -- The activation function is binary
-  binary : ∀ (x : Float), 
-    (activation x = 0.0) ∨ (activation x = 1.0)
+  binary : ∀ (x : ℚ), 
+    (activation x = 0) ∨ (activation x = 1)
 
   -- The activation function is nondecreasing
-  activ_nondecr : ∀ (x₁ x₂ : Float),
+  activ_nondecr : ∀ (x₁ x₂ : ℚ),
     x₁ ≤ x₂ → activation x₁ ≤ activation x₂
 
-  -- There is *some* t for which the activation is 1.0
-  activ_pos : ∃ (t : Float), activation t = 1.0
+  -- There is *some* input for which the activation is 1
+  active_input : ℚ
+  activ_pos : activation (is_active) = 1
 
 
--- Because our activation function is bounded above by 1.0,
--- if act(x₁) = 1.0
--- then any act(x₂) greater than act(x₁) also = 1.0
+-- Because our activation function is bounded above by 1,
+-- if act(x₁) = 1
+-- then any act(x₂) greater than act(x₁) also = 1
 --------------------------------------------------------------------
-lemma activation_from_inequality (net : BFNN) (x₁ x₂ : Float) :
+lemma activation_from_inequality (net : BFNN) (x₁ x₂ : ℚ) :
   net.activation x₁ ≤ net.activation x₂
-  → net.activation x₁ = 1.0 → net.activation x₂ = 1.0 := by
+  → net.activation x₁ = 1 → net.activation x₂ = 1 := by
 --------------------------------------------------------------------
   intro h₁ h₂
   cases net.binary x₂
@@ -492,7 +286,7 @@ lemma activation_from_inequality (net : BFNN) (x₁ x₂ : Float) :
     -- This case is impossible! 1 is not ≤ 0!
     rw [h₂] at h₁
     rw [actx₂_is_zero] at h₁
-    exact absurd h₁ (not_le_float _ _ zero_lt_one_float)
+    exact absurd h₁ (by native_decide)
 
 -- Put in examples file!  (We don't need to figure it out
 -- right now!)
@@ -500,7 +294,7 @@ lemma activation_from_inequality (net : BFNN) (x₁ x₂ : Float) :
 --   {
 --     graph := graphA
 --     activation := binary_step
---     rate := 1.0
+--     rate := 1
 
 --     binary := binary_step_is_binary
 --     -- sort := (topSortUnsafe graphA).toList.reverse
@@ -516,56 +310,6 @@ lemma activation_from_inequality (net : BFNN) (x₁ x₂ : Float) :
 
 variable (net : BFNN)
 
--------------------------------------------------
--- Playing around with Sets
--------------------------------------------------
-
-def setA : Set ℕ :=
-  {n | n ≤ 10}
-
-def setB : Set ℕ :=
-  {n ∈ setA | n > 5}
-
-def setC : Set ℕ :=
-  {n | n ≤ 5}
-
-#check setA
-
--- Example proof of a subset, just to make
--- sure I can do it.
-example : setB ⊆ setA := by
-  intro (n : ℕ)
-  intro (h : n ∈ setB)
-
-  exact show n ∈ setA from h.left
-
--- Another example proof of a subset, this
--- time using the RHS of the set comprehension.
-example : setC ⊆ setA := by
-  intro (n : ℕ)
-  intro (h₁ : n ∈ setC)
-
-  have (h₂ : n ≤ 5) := h₁
-  have (h₃ : 5 ≤ 10) := (by native_decide)
-  exact show n ∈ setA from le_trans h₂ h₃
-
--- Prove that a set is contained in its powerset
-example : ∀ (S : Set α), S ∈ 𝒫 S := by
-  intro (S : Set α)
-  intro (a : α)
-  intro (h : a ∈ S)
-  exact h
-
--- TODO Next: Define graph reachability and propagate
--- Prove that the above BFNN is acyclic, just to make sure
--- we have the right tools for the job.
-
-
-theorem setExample : 3 ∈ setC := by 
-  have (h₁ : 3 ≤ 4) := by native_decide
-  constructor
-  exact h₁
-
 /-══════════════════════════════════════════════════════════════════
   Forward propagation in a net
 ══════════════════════════════════════════════════════════════════-/
@@ -573,23 +317,25 @@ theorem setExample : 3 ∈ setC := by
 -- I would like to write 
 --     List.sum [w * x | for w in weights, for x in lst],
 -- but list comprehensions are harder to reason about.
-def weighted_sum (weights : List Float) (lst : List Float) : Float :=
-  List.foldr (· + ·) 0.0 (List.zipWith (· * ·) weights lst)
+def weighted_sum (weights : List ℚ) (lst : List ℚ) : ℚ :=
+  List.foldr (· + ·) 0 (List.zipWith (· * ·) weights lst)
+
 
 #eval weighted_sum [] []
-#eval weighted_sum [1.0] [3.0]
-#eval weighted_sum [1.0, 2.0, 3.0] [5.0, 5.0, 5.0]
+#eval weighted_sum [1] [3.0]
+#eval weighted_sum [1, 2.0, 3.0] [5.0, 5.0, 5.0]
 
 -- Not well-defined behavior (we expect the weights and lst to be of equal size,
 -- but this is left implicit.)
-#eval weighted_sum [1.0, 2.0] [3.0]
+#eval weighted_sum [1, 2.0] [3.0]
+
 
 --------------------------------------------------------------------
-lemma weighted_sum_eq (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) :
-  let x₁ : List Float := List.map (fun i => fx₁ i) (List.range ls.length)
-  let x₂ : List Float := List.map (fun i => fx₂ i) (List.range ls.length)
-  let w₁ : List Float := List.map (fun i => fw₁ i) (List.range ls.length)
-  let w₂ : List Float := List.map (fun i => fw₂ i) (List.range ls.length)
+lemma weighted_sum_eq (fw₁ fw₂ fx₁ fx₂ : ℕ → ℚ) (ls : List ℕ) :
+  let x₁ : List ℚ := List.map (fun i => fx₁ i) (List.range ls.length)
+  let x₂ : List ℚ := List.map (fun i => fx₂ i) (List.range ls.length)
+  let w₁ : List ℚ := List.map (fun i => fw₁ i) (List.range ls.length)
+  let w₂ : List ℚ := List.map (fun i => fw₂ i) (List.range ls.length)
   
   (∀ i, (fw₁ i) * (fx₁ i) = (fw₂ i) * (fx₂ i))
   → weighted_sum w₁ x₁ = weighted_sum w₂ x₂ := by
@@ -604,28 +350,38 @@ lemma weighted_sum_eq (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) 
   rw [List.zipWith_map_right]
   simp
   congr 2
-  funext i
-  
+
   -- Now we just need to show 
   -- fw₁ i * fx₁ i = fw₂ i * fx₂ i,
   -- but this was exactly our assumption.
-  exact h₁ i
+  exact funext fun i => h₁ i
   
 --------------------------------------------------------------------
-lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → Float) (ls : List ℕ) :
-  let x₁ : List Float := List.map (fun i => fx₁ i) (List.range ls.length)
-  let x₂ : List Float := List.map (fun i => fx₂ i) (List.range ls.length)
-  let w₁ : List Float := List.map (fun i => fw₁ i) (List.range ls.length)
-  let w₂ : List Float := List.map (fun i => fw₂ i) (List.range ls.length)
+lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → ℚ) (ls : List ℕ) :
+  let x₁ : List ℚ := List.map (fun i => fx₁ i) (List.range ls.length)
+  let x₂ : List ℚ := List.map (fun i => fx₂ i) (List.range ls.length)
+  let w₁ : List ℚ := List.map (fun i => fw₁ i) (List.range ls.length)
+  let w₂ : List ℚ := List.map (fun i => fw₂ i) (List.range ls.length)
   
   (∀ i, (fw₁ i) * (fx₁ i) ≤ (fw₂ i) * (fx₂ i))
   → weighted_sum w₁ x₁ ≤ weighted_sum w₂ x₂ := by
 --------------------------------------------------------------------
-
-  intro h₁
+  intro x₁ x₂ w₁ w₂ h₁
   simp only [weighted_sum]
-  sorry
+  rw [List.zipWith_map_left]
+  rw [List.zipWith_map_left]
+  rw [List.zipWith_map_right]
+  rw [List.zipWith_map_right]
+  simp
+  rw [List.foldr_map]
+  rw [List.foldr_map]
   
+  -- By induction on the length of the list we're foldr-ing
+  induction List.range (List.length ls)
+  case nil => simp only [List.foldr]
+  case cons i is IH => 
+    simp only [List.foldr]
+    exact add_le_add (h₁ i) IH
 
 -- WARNING:
 -- This is actually FALSE!  For infinite sets, l[i] is not provably
@@ -652,7 +408,7 @@ theorem edge_from_preds (net : BFNN) (m n : ℕ) :
 -- the number of edges, i.e. don't apply weights.
 -- (just here in order to define layer -- but if there's
 --  a better way, I should use it!)
--- def distance (graph : Graph ℕ Float) (m n : ℕ) : ℕ :=
+-- def distance (graph : Graph ℕ ℚ) (m n : ℕ) : ℕ :=
 --   sorry
 
 /-
@@ -674,7 +430,7 @@ def my_argmax (f : α → β) (l : List α) : Option α :=
 -- TODO: I can do away with this axiom, and define 'layer'
 -- more naturally if I define acyclic graphs recursively
 -- in the first place!  Then I can do induction on 'net.graph'!
-axiom graph_ascending_order : ∀ (g : Graph ℕ Float) (m n : ℕ), 
+axiom graph_ascending_order : ∀ (g : Graph ℕ ℚ) (m n : ℕ), 
   m ∈ g.predecessors n → m < n
 
 -- Accumulator-style helper function for 'layer'
@@ -709,9 +465,9 @@ lemma layer_wellfounded (net : BFNN) :
 
 
 /-
--- Put in test file!
+-- Put in example file!
 -- 0 jumps to 2, 1 jumps to 3, short connection from 1 to 2
-def layer_test_graph : Graph ℕ Float :=
+def layer_test_graph : Graph ℕ ℚ :=
   ⟨[⟨0, [⟨2, 0.5⟩]⟩, -- ⟨4, 0.5⟩
     ⟨1, [⟨2, 0.5⟩, ⟨3, 0.5⟩]⟩, -- ⟨4, 0.5⟩
     ⟨2, []⟩, -- ⟨4, 0.5⟩
@@ -721,7 +477,7 @@ def layer_test_graph : Graph ℕ Float :=
     ⟨4, []⟩]⟩
 
 def layer_test_net : BFNN :=
-  { graph := layer_test_graph, activation := binary_step, rate := 1.0,
+  { graph := layer_test_graph, activation := binary_step, rate := 1,
     binary := binary_step_is_binary,
     activ_nondecr := binary_step_nondecr, activ_pos := sorry
   }
@@ -817,7 +573,7 @@ lemma preds_decreasing (net : BFNN) (m n : ℕ) :
 -- NOTE: Although 'do' notation might be more readable here,
 --       I avoid it because it's hard to reason about.
 noncomputable
-def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
+def activ (net : BFNN) (prev_activ : List ℚ) (n : ℕ) : Prop :=
   let preds := preds net n
   let weights := List.map (fun i => 
       let m := preds.get! i
@@ -825,7 +581,7 @@ def activ (net : BFNN) (prev_activ : List Float) (n : ℕ) : Prop :=
     (List.range preds.length)
   let weight_sum := weighted_sum weights prev_activ
   let curr_activ := net.activation weight_sum
-  curr_activ = 1.0
+  curr_activ = 1
 
 
 -- FORWARD PROPAGATION IN A NET
@@ -855,7 +611,7 @@ def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
     let preds := preds net n
     let prev_activ := List.map (fun i => 
       let m := preds.get! i
-      if propagate_acc net S m (layer net m) then 1.0 else 0.0) 
+      if propagate_acc net S m (layer net m) then 1 else 0) 
         (List.range preds.length)
     n ∈ S ∨ activ net prev_activ n
 termination_by propagate_acc net S n L => layer net n
@@ -881,7 +637,7 @@ lemma simp_propagate_acc (net : BFNN) :
   let preds := preds net n
   let prev_activ := List.map (fun i => 
     let m := preds.get! i
-    if propagate_acc net S m (layer net m) then 1.0 else 0.0) 
+    if propagate_acc net S m (layer net m) then 1 else 0) 
       (List.range preds.length)
   activ net prev_activ n := by
 --------------------------------------------------------------------
@@ -917,11 +673,11 @@ lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
   (∀ (m : ℕ), m ∈ preds net n → (m ∈ A ↔ m ∈ B))
   → activ net (List.map (fun i => 
       let m := (preds net n).get! i
-      if A m then 1.0 else 0.0) 
+      if A m then 1 else 0) 
         (List.range (preds net n).length)) n
   → activ net (List.map (fun i => 
       let m := (preds net n).get! i
-      if B m then 1.0 else 0.0) 
+      if B m then 1 else 0) 
         (List.range (preds net n).length)) n := by
 --------------------------------------------------------------------
   intro h₁ h₂
@@ -1230,7 +986,7 @@ theorem propagate_is_cumulative :
 
 -- A focused path is a path where every node is contained
 -- within the set S.
-inductive focusedPath (g : Graph ℕ Float) (S : Set ℕ) : ℕ → ℕ → Prop where
+inductive focusedPath (g : Graph ℕ ℚ) (S : Set ℕ) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
       u ∈ S → focusedPath g S u u
   | from_path {u v w : ℕ} : 
@@ -1238,7 +994,7 @@ inductive focusedPath (g : Graph ℕ Float) (S : Set ℕ) : ℕ → ℕ → Prop
 
 -- focusedPath is transitive
 --------------------------------------------------------------------
-theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ Float) (A : Set ℕ) :
+theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ ℚ) (A : Set ℕ) :
   focusedPath g A u v → focusedPath g A v w → focusedPath g A u w := by
 --------------------------------------------------------------------
   intro (h₁ : focusedPath g A u v)
@@ -1251,7 +1007,7 @@ theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ Float) (A : Set ℕ) :
 
 -- focusedPath is contained in A
 --------------------------------------------------------------------
-theorem focusedPath_subset {u v : ℕ} (g : Graph ℕ Float) (A : Set ℕ) :
+theorem focusedPath_subset {u v : ℕ} (g : Graph ℕ ℚ) (A : Set ℕ) :
   focusedPath g A u v → u ∈ A := by
 --------------------------------------------------------------------
   intro h₁
@@ -1513,7 +1269,7 @@ theorem reach_union (net : BFNN) : ∀ (S A B : Set ℕ),
 -- We update the edge weight x₁ ⟶ x₂, but we also allow information 
 -- about the *nodes* x₁ and x₂.
 -- Credit to Peter Kementzey for the original mapEdges function.
-def map_edges (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Graph ℕ Float := ⟨
+def map_edges (g : Graph ℕ ℚ) (f : ℕ → ℕ → ℚ → ℚ) : Graph ℕ ℚ := ⟨
   g.vertices.map (fun vertex => 
     { vertex with successors := vertex.successors.map (fun 
       ⟨target, weight⟩ => ⟨target, f vertex.label target weight⟩
@@ -1521,7 +1277,7 @@ def map_edges (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) : Grap
 ⟩
 
 --------------------------------------------------------------------
-lemma map_edges_apply (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float) (m n : ℕ) :
+lemma map_edges_apply (g : Graph ℕ ℚ) (f : ℕ → ℕ → ℚ → ℚ) (m n : ℕ) :
   (map_edges g f).getEdgeWeight m n = (f m n (g.getEdgeWeight m n)) := by
 --------------------------------------------------------------------
   -- I have no idea... this one's tough, and it's hard to see
@@ -1548,17 +1304,17 @@ lemma map_edges_apply (g : Graph ℕ Float) (f : ℕ → ℕ → Float → Float
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by η * act(m) * act(n).
 noncomputable
-def graph_update (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) : Graph ℕ Float :=
+def graph_update (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
   map_edges g (fun m n weight => 
-    let activ_m := if m ∈ propagate net S then 1.0 else 0.0
-    let activ_n := if n ∈ propagate net S then 1.0 else 0.0
+    let activ_m := if m ∈ propagate net S then 1 else 0
+    let activ_n := if n ∈ propagate net S then 1 else 0
     weight + (net.rate * activ_m * activ_n))
 
 
 
 -- This graph update does not affect the vertices of the graph.
 --------------------------------------------------------------------
-lemma graph_update_vertices (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
+lemma graph_update_vertices (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) :
   (graph_update net g S).get_vertices = g.get_vertices := by
 --------------------------------------------------------------------
   simp only [graph_update, map_edges]
@@ -1571,17 +1327,19 @@ lemma graph_update_vertices (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
 -- This graph update does not affect the *successor/edge* structure
 -- of the graph (it only affects weights!!!)
 --------------------------------------------------------------------
-lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (n : ℕ) :
+lemma graph_update_successors (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
   -- Simplify definitions
   simp only [Graph.successors]
   rw [graph_update_vertices]
-  simp only [graph_update, map_edges]
+  simp [graph_update, map_edges] 
+  -- NOTE: FULL simp because there's a hidden dependent argument
+  --   here we need to knock out.
   
   -- Rewrite 'unzip's as 'map's
-  rw [List.unzip_eq_map]
-  rw [List.unzip_eq_map]
+  rw [List.unzip_eq_map _]
+  rw [List.unzip_eq_map _]
   simp only [Prod.fst]
 
   -- Get to the heart of the expression
@@ -1615,7 +1373,7 @@ lemma graph_update_successors (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (
 
 -- This graph update preserves whether the graph is acyclic.
 --------------------------------------------------------------------
-lemma graph_update_acyclic (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) :
+lemma graph_update_acyclic (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) :
   (graph_update net g S).is_acyclic ↔ g.is_acyclic := by
 --------------------------------------------------------------------
   simp only [Graph.is_acyclic]
@@ -1810,7 +1568,7 @@ theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) :
 -- If m ∉ Prop(A) or n ∉ Prop(A), then the weight of m ⟶ n in 
 -- the *once* updated net is the same as in the original net.
 --------------------------------------------------------------------
-theorem hebb_once_weights (net : BFNN) :
+theorem hebb_once_weights_eq (net : BFNN) :
   (m ∉ propagate net A ∨ n ∉ propagate net A)
   → (hebb net A).toNet.graph.getEdgeWeight m n =
     net.graph.getEdgeWeight m n := by
@@ -1825,15 +1583,10 @@ theorem hebb_once_weights (net : BFNN) :
   cases h₁
   case inl h₂ => 
     rw [if_neg h₂]
-    rw [zero_mult]
-    rw [commutative_mult_float]
-    rw [zero_mult]
-    rw [zero_plus]
-
+    simp
   case inr h₂ => 
     rw [if_neg h₂]
-    rw [zero_mult]
-    rw [zero_plus]
+    simp
 
 -- The weights of the new net are nondecreasing
 -- (One round of Hebbian update can only increase the weights)
@@ -1843,9 +1596,28 @@ theorem hebb_once_weights_le (net : BFNN) :
   (hebb net A).toNet.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
   simp only [hebb, graph_update]
+
+  -- how do I just get the 'weight + blah' from the net??
+
   sorry -- Weights are hard to reason about,
         -- because of the 'match'!  Maybe redefine getEdgeWeights!
 
+/-
+intro h₁
+simp only [hebb, graph_update]
+rw [map_edges_apply _ _ _ _]
+
+-- We have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
+-- In either case, the term that we're updating by reduces 
+-- to weight + 0 = weight.
+cases h₁
+case inl h₂ => 
+  rw [if_neg h₂]
+  simp
+case inr h₂ => 
+  rw [if_neg h₂]
+  simp
+-/
 
 /-══════════════════════════════════════════════════════════════════
   "Iterated"/Fixed-Point Naive Hebbian Update
@@ -1856,42 +1628,103 @@ theorem hebb_once_weights_le (net : BFNN) :
 -- to activate (in the worst case where all of its negative signals
 -- activate but none of its positive ones do).  If a neuron has
 -- no negative incoming weights, we give it a score of 0.
-def neg_weight_score (net : BFNN) (n : ℕ) : Float :=
-  List.foldr (· + ·) 0.0 (List.filter (fun w => w < 0.0) 
-    (List.map (fun m => net.graph.getEdgeWeight m n) (preds net n)))
+def neg_weight_score (net : BFNN) (n : ℕ) : ℚ :=
+  List.foldr (· + ·) 0 (List.map (fun m => 
+    if net.graph.getEdgeWeight m n < 0 then 
+      net.graph.getEdgeWeight m n
+    else 0) 
+    (preds net n))
 
 
--- NOTE: If there are no nodes to score, a value of 0.0 is fine.
-def min_neg_weight_score (net : BFNN) : Float :=
-  sorry
-  -- let scores := List.map (fun n => neg_weight_score net n) net.graph.get_vertices
-  -- match scores.minimum with
-  -- | some a => sorry
-  -- | none => 0.0
+-- NOTE: If there are no nodes to score, a value of 0 is fine.
+def min_score (net : BFNN) : WithTop ℚ :=
+  let scores := List.map (fun n => neg_weight_score net n) net.graph.get_vertices
+  scores.minimum
+
 
 -- For a *given* n, the neg_weight_score is smaller than
 -- any possible weighted sum over activated predecessors of n.
 -- (i.e. no matter what the activation list 'x' is.)
 --------------------------------------------------------------------
-lemma neg_weight_score_le (net : BFNN) (n : ℕ) (x : List Float) :
-  let w : List Float := List.map (fun m => 
+lemma neg_weight_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
+  let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
+  let w : List ℚ := List.map (fun m => 
     Graph.getEdgeWeight net.graph m n) (preds net n)
   
   (neg_weight_score net n) ≤ (weighted_sum w x) := by
 --------------------------------------------------------------------
-  intro w
+  intro x w
   simp only [neg_weight_score, weighted_sum]
   
-  -- How do I argue that the sum of a list of all of the negative values
-  -- will always be less than the sum of the original list???
+  -- First, we simplify the foldr and zipWith
+  rw [List.foldr_map]
+  rw [List.zipWith_map]
+  rw [List.zipWith_same]
+
+  -- By induction on the predecessor list
+  induction preds net n
+  case nil => simp only [List.filter, List.foldr]
+  case cons m ms IH => 
+    simp only [List.foldr]
+
+    -- We break up the if-statement.
+    by_cases (net.graph.getEdgeWeight m n < 0)
+    
+    -- In this case, we need to show that
+    --     weight ≤ weight * (fx₁ m),
+    -- which is true because (fx₁ m) can only be 0 or 1,
+    -- and weight < 0.
+    case pos =>
+      rw [if_pos h]
+
+      by_cases (fx₁ m)
+      case pos => 
+        rw [if_pos h]
+        apply add_le_add _ IH
+        simp
+      case neg => 
+        rename_i neg_weight
+        rw [if_neg h]
+        apply add_le_add _ IH
+        rw [Rat.mul_zero]
+        exact le_of_lt neg_weight
+      
+    -- In this case, we need to show that
+    --     0 ≤ weight * (fx₁ m),
+    -- which is true because (fx₁ m) can only be 0 or 1,
+    -- and weight ≥ 0! 
+    case neg => 
+      rw [if_neg h]
+
+      by_cases (fx₁ m)
+      case pos =>
+        rename_i pos_weight
+        rw [if_pos h]
+        rw [Rat.mul_one]
+        apply add_le_add _ IH
+        exact le_of_not_lt pos_weight
+      case neg =>
+        rw [if_neg h]
+        rw [Rat.mul_zero]
+        exact add_le_add rfl IH
+
+-- The *minimum* score is smaller than any possible weighted sum
+-- (over activated predecessors of n) *for all n*.
+--------------------------------------------------------------------
+lemma min_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
+  let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
+  let w : List ℚ := List.map (fun m => 
+    Graph.getEdgeWeight net.graph m n) (preds net n)
+  
+  min_score net ≤ (weighted_sum w x) := by
+--------------------------------------------------------------------
+  intro x w
+  simp only [min_score]
+  apply le_of_not_lt
+  apply List.not_lt_minimum_of_mem'
+  
   sorry
-
-
--- The *minimum* neg_weight_score is smaller than any
--- possible weighted sum over activated predecessors of n,
--- *for all n*.
--- TODO
-
+  -- apply le_trans _ (neg_weight_score_le net n fx₁)
 
 
 -- This is the exact number of iterations of Hebbian learning
@@ -1907,32 +1740,51 @@ lemma neg_weight_score_le (net : BFNN) (n : ℕ) (x : List Float) :
 -- case) guarantee that n_min gets activated.
 -- 
 -- If n_score is n_min's score, and X is that point at which
--- our activation function is guranteed to be 1.0, and η is the
+-- our activation function is guranteed to be 1, and η is the
 -- learning rate, then we return
 -- 
 -- (X - n_score) / η   *(I think!)*
-def hebb_unstable_point (net : BFNN) (S : Set ℕ) : ℕ :=
-  sorry
-  -- let x := choose net.activ_pos
-  -- have h₁ : net.activation x = 1.0 := sorry
+-- UPDATE: we can iterate a different number of times
+-- FOR EACH m, n!  So we should take the *max* of all these!
+def no_times (net : BFNN) (S : Set ℕ) : ℕ :=
+  -- mcs is the "max composite score"
+  let (comp_scores : List ℚ) := sorry
+    -- net.active_input - sorry
+  let (mcs : WithBot ℚ) := List.maximum comp_scores
 
-  -- let n_min := @List.minimum (Vertex ℕ Float) sorry sorry net.graph.vertices.toList
+  -- Ensure that the number of iterations is a *positive*
+  -- natural number.
+  if mcs > 0 then 
+    sorry
+    -- abs (round mcs)
+  else 1
+
+  -- HOW TO ROUND?  HOW TO DIVIDE?
+  -- net.active_input
+  
+  -- match net.activ_pos with
+  -- | ⟨t, ht⟩ => sorry 
+  
+  -- let x := choose net.activ_pos
+  -- have h₁ : net.activation x = 1 := sorry
+
+  -- let n_min := @List.minimum (Vertex ℕ ℚ) sorry sorry net.graph.vertices.toList
   -- let n_score := sorry
   -- sorry
 
-lemma unstable_point_pos (net : BFNN) (S : Set ℕ) :
-  0 < hebb_unstable_point net S := by
+lemma no_times_pos (net : BFNN) (S : Set ℕ) :
+  0 < no_times net S := by
   sorry
 
 
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by (no_times) * η * act(m) * act(n).
 noncomputable
-def graph_update_star (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (no_times : ℕ) : Graph ℕ Float :=
+def graph_update_star (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
   map_edges g (fun m n weight => 
-    let activ_m := if m ∈ propagate net S then 1.0 else 0.0
-    let activ_n := if n ∈ propagate net S then 1.0 else 0.0
-    weight + ((cast_float no_times) * net.rate * activ_m * activ_n))
+    let activ_m := if m ∈ propagate net S then 1 else 0
+    let activ_n := if n ∈ propagate net S then 1 else 0
+    weight + (↑(no_times net S) * net.rate * activ_m * activ_n))
 
 -- Iterated Hebbian Update
 -- 
@@ -1952,7 +1804,7 @@ def graph_update_star (net : BFNN) (g : Graph ℕ Float) (S : Set ℕ) (no_times
 noncomputable
 def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
 { net with
-  graph := graph_update_star net net.graph S (hebb_unstable_point net S)
+  graph := graph_update_star net net.graph S
 }
 
 
@@ -1979,24 +1831,25 @@ theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) :
   -- By induction on the unstable point of the net
   -- (we don't actually need to know what the unstable point *is*
   --  for this lemma to hold.)
-  generalize hpt : (hebb_unstable_point net S) = pt
+  generalize hpt : (no_times net S) = pt
   induction pt generalizing net
   case zero => 
     -- This case is impossible; hebb_unstable_point cannot be zero!
-    exact absurd hpt (ne_of_gt (unstable_point_pos _ _))
+    exact absurd hpt (ne_of_gt (no_times_pos _ _))
 
   case succ k IH =>
     -- simp only [hebb] at h₁
     simp only [hebb_star]
-    rw [hpt]
+    sorry
+    -- rw [hpt]
     -- simp only [graph_update] at h₁
-    simp only [graph_update_star]
+    -- simp only [graph_update_star]
 
     -- convert h₁ using 9
     -- convert h₁ using 3
     -- rename_i x₁ x₂ w
 
-    sorry
+    -- sorry
     
 
 
@@ -2065,7 +1918,7 @@ theorem hebb_weights_eq (net : BFNN) :
 --------------------------------------------------------------------
   intro h₁
   exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
-    (hebb_once_weights _ h₁)
+    (hebb_once_weights_eq _ h₁)
 
  
 -- The weights of the new net are nondecreasing
@@ -2078,13 +1931,13 @@ theorem hebb_weights_le (net : BFNN) :
   (hebb_star net A).toNet.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
   simp only [hebb_star]
-  generalize hpt : (hebb_unstable_point net A) = pt
+  generalize hpt : (no_times net A) = pt
   
   -- By induction on the unstable point of the net
   induction pt
   case zero => 
     -- This case is impossible; hebb_unstable_point cannot be zero!
-    exact absurd hpt (ne_of_gt (unstable_point_pos _ _))
+    exact absurd hpt (ne_of_gt (no_times_pos _ _))
   case succ k IH => 
     simp only [graph_update_star]
     sorry -- Graph weights are hard to reason about because of 'match'!
@@ -2100,11 +1953,11 @@ theorem hebb_weights_le (net : BFNN) :
 lemma hebb_activ_nondecreasing (net : BFNN) (A S : Set ℕ) (n : ℕ) :
   activ net (List.map (fun i => 
       let m := (preds net n).get! i
-      if S m then 1.0 else 0.0) 
+      if S m then 1 else 0) 
         (List.range (preds net n).length)) n
   → activ (hebb_star net A) (List.map (fun i => 
       let m := (preds net n).get! i
-      if S m then 1.0 else 0.0) 
+      if S m then 1 else 0) 
         (List.range (preds net n).length)) n := by
 --------------------------------------------------------------------
   simp only [activ]
@@ -2116,26 +1969,22 @@ lemma hebb_activ_nondecreasing (net : BFNN) (A S : Set ℕ) (n : ℕ) :
   intro i
   
   -- We split by cases; either m ∉ B in the original net,
-  -- and both sides reduce to 0.0;
+  -- and both sides reduce to 0;
   -- or m ∈ B, in which case we check that the weight for
   -- m ⟶ n in the original net is ≤ the updated net weight.  
   generalize hm : (List.get! (preds net n) i) = m
   by_cases (S m)
   case neg => 
     rw [if_neg h]
-    rw [zero_mult]
-    rw [zero_mult]
-    exact zero_le_zero
+    simp
   case pos => 
     rw [if_pos h]
-    rw [one_mult]
-    rw [one_mult]
-    exact hebb_weights_le _
+    simp [hebb_weights_le _]
 
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
 --------------------------------------------------------------------
-theorem hebb_activ_equal₁ (net : BFNN) (A : Set ℕ) (prev_activ : List Float) :
+theorem hebb_activ_equal₁ (net : BFNN) (A : Set ℕ) (prev_activ : List ℚ) :
   n ∉ propagate net A
   → (activ (hebb_star net A) prev_activ n ↔ activ net prev_activ n) := by
 --------------------------------------------------------------------
@@ -2160,12 +2009,12 @@ theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
   → (activ (hebb_star net A) (List.map (fun i => 
       if propagate_acc net S ((Graph.predecessors net.toNet.graph n).get! i) 
         (layer net ((Graph.predecessors net.toNet.graph n).get! i)) 
-      then 1.0 else 0.0) 
+      then 1 else 0) 
         (List.range (Graph.predecessors net.toNet.graph n).length)) n
   ↔ activ net (List.map (fun i =>
       if propagate_acc net S ((Graph.predecessors net.toNet.graph n).get! i) 
         (layer net ((Graph.predecessors net.toNet.graph n).get! i)) 
-      then 1.0 else 0.0) 
+      then 1 else 0) 
         (List.range (Graph.predecessors net.toNet.graph n).length)) n) := by
 --------------------------------------------------------------------
   intro h₁
@@ -2175,7 +2024,7 @@ theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
   simp only [activ]
   rw [hebb_activation net A]
   rw [hebb_preds net A]
-  apply congr_arg (fun x => Net.activation net.toNet x = 1.0)
+  apply congr_arg (fun x => Net.activation net.toNet x = 1)
 
   -- The weighted sums are equal, ∑ w₁ x₁ = ∑ w₂ x₂,
   -- if all of their entries are equal, w₁ᵢ * x₁ᵢ = w₂ᵢ * x₂ᵢ
@@ -2186,7 +2035,7 @@ theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
   -- We have two cases;
   by_cases m ∈ propagate net S
 
-  -- In this case, the RHS's reduce to 1.0, and we
+  -- In this case, the RHS's reduce to 1, and we
   -- just need to argue that the weights are the same
   case pos => 
     -- First, notice that m ∉ Prop(A).
@@ -2201,18 +2050,15 @@ theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
     -- Now we simplify and show that the weights are the same
     simp only [propagate, Membership.mem, Set.Mem] at h
     rw [if_pos h]
-    rw [one_mult]
-    rw [one_mult]
-    exact hebb_weights_eq _ (Or.inl h₃)
-
-  -- Otherwise, the RHS's reduce to 0.0, and so the
+    simp [hebb_weights_eq _ (Or.inl h₃)]
+    
+  -- Otherwise, the RHS's reduce to 0, and so the
   -- weighted sums are trivially equal
   case neg => 
     simp only [propagate, Membership.mem, Set.Mem] at h
     rw [if_neg h]
-    rw [zero_mult]
-    rw [zero_mult]
-
+    simp
+    
 
 -- -- If *some* predecessor of n is ∈ Prop(A), and n ∈ Prop(A), then
 -- -- if m is activated in (hebb_star net) then n is too
@@ -2223,7 +2069,7 @@ theorem hebb_activated_by (net : BFNN) (A B : Set ℕ) :
   let prev_activ := List.map (fun i => 
     let m := preds.get! i
     if propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m) 
-    then 1.0 else 0.0) 
+    then 1 else 0) 
       (List.range preds.length)
 
   n ∈ propagate net A
@@ -2242,15 +2088,18 @@ theorem hebb_activated_by (net : BFNN) (A B : Set ℕ) :
   rw [hebb_preds net A]
   
   -- NOTE: This is one of the most crucial steps of the whole proof!
-  -- We have some point 't' at which the activation = 1.0.
+  -- We have some point 't' at which the activation = 1.
   -- Since the activation function is nondecreasing, we just have
   -- to show that the inner weighted sum ≥ t. 
-  match net.activ_pos with
-  | ⟨t, ht⟩ => 
-    apply activation_from_inequality _ _ _ _ ht
-    apply net.activ_nondecr _ _
-    
-    sorry
+  
+  -- 'net.active_input' is t; 'net.activ_pos' says that t is active.
+
+  -- match net.activ_pos with
+  -- | ⟨t, ht⟩ => 
+  apply activation_from_inequality _ (net.active_input) _ _ (net.activ_pos)
+  apply net.activ_nondecr _ _
+  
+  sorry
 
         -- I have the proof written on paper, I should consult that.
         -- Depends on things like the monotonicity of 'activation', etc.
@@ -2301,7 +2150,7 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         exact propagate_acc_is_extens _ _ h
       case neg =>
         intro h₂
-      
+
         -- Since *every* node with layer < n is not in Prop(A) ∩ Prop(B),
         -- in particular this holds for n's predecessors.
         have h₃ : ∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net B) := by
@@ -2316,12 +2165,12 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         simp
         simp at h₂
         
+        
         -- Get ready to apply IH
         -- We write down the usual lemmas for 'm', but we don't
         -- know what the index 'i' is we're grabbing yet.  So
         -- we write these for all i.
-        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
-        
+        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m at h₂
         
         have h₄ : ∀ i, (m i) ∈ preds net n := by
           intro i
@@ -2343,7 +2192,6 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         -- Go into h₂ and apply our inductive hypothesis
         conv at h₂ =>
           enter [2, 1, i]
-          rw [hm]
           rw [IH (layer net (m i)) (h₅ i) (m i) (h₆ i) rfl]
         
         -- Unpack the (m i) term
@@ -2902,7 +2750,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             -- We write down the usual lemmas for 'm', but we don't
             -- know what the index 'i' is we're grabbing yet.  So
             -- we write these for all i.
-            generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
+            generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m at h₁
             have h₄ : ∀ i, (m i) ∈ preds net n := by
               intro i
               rw [symm hm]
@@ -2918,7 +2766,6 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             -- Go into h₁ and apply our inductive hypothesis
             conv at h₁ =>
               enter [2, 1, i]
-              rw [hm]
               rw [IH (layer net (m i)) (h₅ i) (m i) rfl]
             
             -- Unpack the (m i) term
@@ -3360,3 +3207,155 @@ So we need:
 -- -- A super easy example, just to briefly test ≼ and ≡
 -- example : example_net ≡ example_net :=
 --   ⟨fun _ _ h => h, fun _ _ h => h⟩  
+
+
+/-
+-------------------------------------------------
+-- List comprehensions,
+-- courtesy of lovettchris
+-- See: 
+--   https://github.com/leanprover/lean4-samples/blob/main/ListComprehension/ListComprehension.lean
+-------------------------------------------------
+
+declare_syntax_cat compClause
+syntax "for " term " in " term : compClause
+syntax "if " term : compClause
+
+syntax "[" term " | " compClause,* "]" : term
+
+def List.map' (xs : List α) (f : α → β) : List β := List.map f xs
+
+macro_rules
+  | `([$t:term |]) => `([$t])
+  | `([$t:term | for $x in $xs]) => `(List.map' $xs  (λ $x => $t))
+  | `([$t:term | if $x]) => `(if $x then [$t] else [])
+  | `([$t:term | $c, $cs,*]) => `(List.join [[$t | $cs,*] | $c])
+
+def prod_comprehens (xs : List α) (ys : List β) : List (α × β) := 
+  [(x, y) | for x in xs, for y in ys]
+
+#eval [(x, y) | for x in [1, 2], for y in [3, 4]]
+-/
+
+/-
+TODO for later:  Make 'hasPath' computable so that we can execute
+this code:
+> #eval hasPath graphA 1 3
+
+Some old code when I was trying to do this:
+
+instance decPath : Decidable (hasPath g u v) :=
+  sorry -- this should implement BFS!!!
+  -- if h : u = v then
+  --   isTrue (Eq.subst h hasPath.trivial)
+  -- else if h : hasEdge g u v then
+  --   isTrue (hasPath.from_path (hasPath.trivial) h)
+  -- else
+  --   sorry
+
+instance decLte : Decidable (my_lte m n) :=
+  if h : m = n then
+    .isTrue (h ▸ .trivial)
+  else
+    match n with
+    | x + 1 =>
+      have := @decLte m x
+      decidable_of_iff (my_lte m x) ⟨(.from_path · rfl), fun h => by
+        cases h with
+        | trivial => cases h rfl
+        | from_path h e => exact Nat.succ.inj e ▸ h⟩
+    | 0 => .isFalse fun h => by
+      cases h with
+      | trivial => exact h rfl
+      | from_path h e => cases e
+-/
+
+/-
+TODO:  Define 'acyclic' as:  Recursively on graph.vertices,
+every vertex can only "see" the vertices ahead of it.
+
+TODO: We want to be able to check if a graph is acyclic by
+just "computing" it -- i.e. we call Topological Sort on the
+graph, and if successful we know it is acyclic.
+
+So here is some old code I was using to try to do topological
+sort.  I'll need to come back to this when I want to make
+everything in this library computable.
+namespace TopologicalSort
+
+-- @[simp]
+-- def topol_sort (g : Graph ℕ ℚ) :=
+--   (topSortUnsafe g).toList.reverse
+
+-- holds iff u precedes v in array
+-- note that we assume lst elements are all distinct
+def list_precedes (lst : List ℕ) (u v : ℕ) : Bool :=
+  match lst with
+    | List.nil => false
+    | List.cons x xs =>
+      -- If we find 'u' first, and v is in the rest, true
+      if x = u ∧ v ∈ xs then 
+        true
+      else 
+        list_precedes xs u v
+
+def listA : List ℕ :=
+  [2, 4, 9, 8, 5]
+
+-- a couple of unit tests for good measure
+#eval list_precedes listA 4 8 -- true
+#eval list_precedes listA 2 8 -- true
+#eval list_precedes listA 2 4 -- true
+#eval list_precedes listA 2 9 -- true
+#eval list_precedes listA 9 5 -- true
+
+#eval list_precedes listA 8 2 -- should be false, is true
+#eval list_precedes listA 5 9 -- should be false, is true
+
+#eval list_precedes listA 1 7 -- undefined (false)
+#eval list_precedes listA 9 9 -- false, makes sure an element
+                              -- does not precede itself.
+
+-- The ordering induced by Topological Sort
+-- TODO: Rewrite as an inductive data type!
+/-
+def topOrder (g : Graph ℕ β) (u v : ℕ) : Prop :=
+  match (topSort g) with
+    | some sorted => list_precedes sorted.toList u v
+    | none => sorry
+-/
+
+-- inductive TopologicalOrdering (g : Graph ℕ β) (u : ℕ) where
+--   | constr1 : TopologicalOrdering g u
+--   | constr2 (x : ℕ) : TopologicalOrdering g u
+
+-- inductive graph_≺ (g : Graph ℕ β) (u v : ℕ) where
+--   | constr1 : sorry
+--   | constr2 : sorry
+
+-- Says that Topological Sort is actually correct, i.e.
+-- if there is an edge from x to y, then x ≺ y in the ordering.
+-- theorem topSort_is_ordered (g : Graph ℕ β) (u v : ℕ) :
+--   g.hasEdge u v → topOrder g u v := by
+
+--   intro (h₁ : hasEdge g u v)
+--   rw [topOrder]
+--   sorry
+
+end TopologicalSort
+-/
+
+-------------------------------------------------
+-- Example:  Our graphA is acyclic
+-- (We should just be able to call 'Topological Sort'
+-- on the graph and check if that is successful.)
+-------------------------------------------------
+-- Put in examples file! (and figure it out later, we don't need
+-- it right now)
+-- 
+-- theorem graphA_is_acyclic : graphA.is_acyclic := by
+--   intro (u : ℕ) (v : ℕ)
+--         (path_uv : hasPath graphA u v)
+--         (path_vu : hasPath graphA v u)
+
+--   sorry
