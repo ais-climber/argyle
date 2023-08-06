@@ -411,27 +411,6 @@ theorem edge_from_preds (net : BFNN) (m n : ℕ) :
 -- def distance (graph : Graph ℕ ℚ) (m n : ℕ) : ℕ :=
 --   sorry
 
-/-
-def my_argmax (f : α → β) (l : List α) : Option α :=
-  l.foldl (argAux fun b c => f c < f b) none
--/
-
--- The layer of n.
--- We get all predecessors of n, and take the predecessor m
--- with the *maximum* layer.  Then layer(n) = layer(m) + 1.
--- If n has no predecessors, then layer(n) = 0.
--- 
--- TODO: Prove terminating if I can!  (What exactly is decreasing
---       here...)
--- def layer (net : BFNN) (n : ℕ) : ℕ :=
---   sorry
--- partial
-
--- TODO: I can do away with this axiom, and define 'layer'
--- more naturally if I define acyclic graphs recursively
--- in the first place!  Then I can do induction on 'net.graph'!
-axiom graph_ascending_order : ∀ (g : Graph ℕ ℚ) (m n : ℕ), 
-  m ∈ g.predecessors n → m < n
 
 -- Accumulator-style helper function for 'layer'
 -- Defined recursively on the *reverse* of the vertex list
@@ -451,6 +430,7 @@ def layer_acc (net : BFNN) (n : ℕ) (ls : List ℕ) : ℕ :=
 
     else layer_acc net n rest
 
+-- The layer of n in the net
 def layer (net : BFNN) (n : ℕ) : ℕ :=
   layer_acc net n (net.graph.get_vertices.reverse)
 
@@ -489,10 +469,14 @@ def layer_test_net : BFNN :=
 #eval layer layer_test_net 4
 -/
 
--- AXIOM: We assume the net is fully connected!
--- This is essentially the statement we need, which might
--- follow from being fully connected.
--- TODO: Put this in the definition of BFNN!!!
+-- AXIOM: We assume the net is fully connected! 
+-- (i.e. *transitively closed* in the paper, because
+--  'fully connected' is often used in machine learning)
+-- 
+-- TODO: Write the equivalent 'transitively closed'
+--   version, put it in the definition of BFNN,
+--   and then prove this from that.
+--   What I have here is the final statement I actually need.
 axiom connected : ∀ (net : BFNN) (m n : ℕ), 
   layer net m < layer net n → net.graph.hasEdge m n
 
