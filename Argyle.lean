@@ -1738,12 +1738,6 @@ def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
 
 
 /-══════════════════════════════════════════════════════════════════
-  Facts we will need about the unstable point
-══════════════════════════════════════════════════════════════════-/
-
-
-
-/-══════════════════════════════════════════════════════════════════
   Properties of "Iterated" Naive Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
@@ -1999,15 +1993,18 @@ m ⟶ n
 -------------
 n ∈ Prop$(B)
 
-∑ w$(mᵢ, n) * x_mᵢ = 
-  w$(m, n) * x_m (=1) + ∑ rest
-  w$(m, n) + ∑ rest
-  ≥ w$(m, n) + (N - 1) * min_score
+∑ w*(mᵢ, n) * x_mᵢ = 
+  w*(m, n) * x_m (=1) + ∑ rest
+  w*(m, n) + ∑ rest
+  ≥ w*(m, n) + (N - 1) * min_score
   = (w(m, n) + no_times * η) + (N - 1) * min_score
-
-  (w(m, n) + no_times * η) + (N - 1) * min_score ≥ thres
-
-  no_times = round (thres - (N - 1) * min_score - w(m, n) / η)
+  [since w(m, n) ≥ min_score, always] 
+  ≥  (min_score + no_times * η) + min_score * (N - 1)
+  
+  min_score + (no_times * η) + min_score * (N - 1) ≥ thres
+  SOLVE FOR NO_TIMES:
+  no_times = round ((thres - (N - 1) * min_score - min_score)  / η)
+           = round ((thres - N * min_score) / η)  <<<-------------
 
 min_score : minimum possible weighted sum across *all* n ∈ Net 
 N : num nodes in Net
