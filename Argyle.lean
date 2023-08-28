@@ -805,8 +805,8 @@ theorem propagate_is_idempotent :
             exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
 
           -- Apply the activ_agree lemma
-          simp
-          simp at h₁
+          simp only [preds]
+          simp only [preds] at h₁
           exact activ_agree _ S₁ S₂ _ h₂ h₁
 
 
@@ -945,6 +945,266 @@ theorem propagate_is_cumulative :
 --    neural network has certain properties
 -- 2) #eval helps me debug errors
 
+/-══════════════════════════════════════════════════════════════════
+  Ordinary Graph Reachability
+══════════════════════════════════════════════════════════════════-/
+
+inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
+  | trivial {u : ℕ} :
+      Path g u u
+  | from_path {u v w : ℕ} : 
+      Path g u v → g.hasEdge v w → Path g u w
+
+-- Paths are transitive
+--------------------------------------------------------------------
+theorem Path_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
+  Path g u v → Path g v w → Path g u w := by
+--------------------------------------------------------------------
+  intro h₁ h₂
+
+  induction h₂
+  case trivial => exact h₁
+  case from_path x y _ edge_xy path_ux => 
+    exact Path.from_path path_ux edge_xy
+
+--------------------------------------------------------------------
+theorem Path_of_preds {m n : ℕ} (net : BFNN) :
+  m ∈ preds net n → Path net.graph m n := by
+--------------------------------------------------------------------
+  intro h₁
+  exact Path.from_path (Path.trivial) ((edge_from_preds _ _ _).mp h₁)
+
+-- Any nontrivial path can be shortcutted with an edge
+-- (this is because the graph is connected.)
+-- TODO: Fix this proof tomorrow,
+--   and continue replacing reachable with reachable₂!
+--------------------------------------------------------------------
+theorem Path_edge {u v : ℕ} (net : BFNN) :
+  Path net.graph u v → u ≠ v → net.graph.hasEdge u v := by
+--------------------------------------------------------------------
+  intro h₁
+  
+  induction h₁
+  case trivial => 
+    -- This case is impossible (we assumed *nontrivial*)
+    exact fun h₂ => absurd rfl h₂
+  case from_path x y path_ux edge_xy edge_ux =>
+    intro h₂
+
+    have h₃ : u ≠ x := 
+      fun heq => sorry
+
+    have h₄ : layer net u < layer net x := 
+      preds_decreasing _ _ _ ((edge_from_preds _ _ _).mpr (edge_ux h₃))
+    have h₅ : layer net x < layer net y := 
+      preds_decreasing _ _ _ ((edge_from_preds _ _ _).mpr edge_xy)
+    
+    exact connected _ _ _ (lt_trans h₄ h₅)
+
+-- Set of nodes reachable from S
+def reachable₂ (net : BFNN) (S : Set ℕ) : Set ℕ :=
+  fun (n : ℕ) =>
+    ∃ (m : ℕ), m ∈ S ∧ Path net.graph m n
+
+--------------------------------------------------------------------
+lemma reach₂_layer_zero (net : BFNN) : ∀ (B : Set ℕ) (n : ℕ),
+  layer net n = 0
+  → n ∈ reachable₂ net B
+  → n ∈ B := by
+--------------------------------------------------------------------
+  intro B n h₁ h₂
+
+  match h₂ with
+  | ⟨m, hm⟩ => 
+    -- By induction on the length of the path from B to n.
+    --   path length = 0 => m ∈ B means n ∈ B
+    --   path length ≥ 0 => this case should be impossible,
+    --                      because at layer 0 n has *no predecessors*!
+    induction hm.2
+    case trivial => exact hm.1
+    case from_path x y _ edge_xy _ => 
+      -- Contradiction; y's layer is 0, but there is an edge from x to y!
+      have h₃ : layer net x < layer net y :=
+        preds_decreasing net x y ((edge_from_preds _ _ _).mpr edge_xy)
+      
+      exact absurd h₁ (Nat.not_eq_zero_of_lt h₃)
+
+--------------------------------------------------------------------
+theorem reach₂_is_extens (net : BFNN) : ∀ (B : Set ℕ),
+  B ⊆ reachable₂ net B := by
+--------------------------------------------------------------------
+  intro B n h₁
+  exact ⟨n, ⟨h₁, Path.trivial⟩⟩
+
+-- If A ∩ B is empty, then there are no nodes reachable
+-- from B within A.
+-- (This does *not* follow from [reach_is_extens]!)
+-- --------------------------------------------------------------------
+-- theorem reach_empty_of_inter_empty (net : BFNN) : ∀ (A B : Set ℕ),
+--   (A ∩ B) = ∅ → reachable net A B = ∅ := by
+-- --------------------------------------------------------------------
+--   intro A B
+--   rw [← Set.not_nonempty_iff_eq_empty]
+--   rw [← Set.not_nonempty_iff_eq_empty]
+  
+--   -- Start a proof by contraposition, and simplify
+--   contrapose
+--   intro h₁
+--   rw [Classical.not_not]
+--   rw [Classical.not_not] at h₁
+
+--   -- Since Reach(A, B) is nonempty, we have n ∈ Reach(A, B).
+--   -- We argue that the m ∈ B that reaches n must be m ∈ A ∩ B.
+--   match h₁ with
+--   | ⟨n, hn⟩ => 
+--     match hn with
+--     | ⟨m, hm⟩ => 
+--       -- m ∈ B is easy; we show inductively that m ∈ A as well.
+--       induction hm.2
+--       case trivial hmA => exact ⟨m, ⟨hmA, hm.1⟩⟩
+--       case from_path x y path_mx _ _ IH => 
+--         exact IH ⟨m, ⟨hm.1, path_mx⟩⟩ ⟨hm.1, path_mx⟩
+
+
+--------------------------------------------------------------------
+theorem reach₂_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
+  reachable₂ net B = reachable₂ net (reachable₂ net B) := by
+--------------------------------------------------------------------
+  intro B
+  apply ext
+  intro n
+  apply Iff.intro
+
+  -- Forward direction
+  -- (easy; just apply reach₂_is_extens)
+  case mp => 
+    intro h₁
+    exact reach₂_is_extens _ _ h₁
+
+  -- Backwards direction
+  case mpr => 
+    intro h₁
+    match h₁ with
+    | ⟨m, hm⟩ =>
+      match hm.1 with
+      | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, Path_trans _ hx.2 hm.2⟩⟩
+
+--------------------------------------------------------------------
+theorem reach₂_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
+  A ⊆ B → reachable₂ net A ⊆ reachable₂ net B := by
+--------------------------------------------------------------------
+  intro A B h₁ n h₂
+
+  exact match h₂ with
+  | ⟨m, hm⟩ => ⟨m, ⟨(h₁ hm.1), hm.2⟩⟩
+
+-- Reach is closed under union
+-- (This is really a consequence of monotonicity)
+--------------------------------------------------------------------
+theorem reach₂_union (net : BFNN) : ∀ (A B : Set ℕ),
+  reachable₂ net (A ∪ B) = (reachable₂ net A) ∪ (reachable₂ net B) := by
+--------------------------------------------------------------------
+  intro A B
+  apply ext
+  intro n
+  apply Iff.intro
+
+  -- Backwards direction
+  -- (easy; just monotonicity)
+  case mpr =>
+    intro h₁
+    cases h₁
+    case inl h₂ => exact reach₂_is_monotone _ _ _ (subset_union_left _ _) h₂
+    case inr h₂ => exact reach₂_is_monotone _ _ _ (subset_union_right _ _) h₂
+
+  -- Forward direction
+  case mp =>
+    intro h₁
+
+    -- We have a path from m ∈ A ∪ B to n.
+    -- In either case, the path from m ⟶ n gives us n ∈ Reach(_).
+    match h₁ with
+    | ⟨m, hm⟩ =>
+      cases hm.1
+      case inl h₂ => exact Or.inl ⟨m, ⟨h₂, hm.2⟩⟩
+      case inr h₂ => exact Or.inr ⟨m, ⟨h₂, hm.2⟩⟩
+
+/-══════════════════════════════════════════════════════════════════
+  Inverse Graph Reachability 'Reached by'
+══════════════════════════════════════════════════════════════════-/
+
+-- Set of nodes reachable from S
+def reachedby (net : BFNN) (S : Set ℕ) : Set ℕ :=
+  fun (m : ℕ) =>
+    ∃ (n : ℕ), n ∈ S ∧ Path net.graph m n
+
+--------------------------------------------------------------------
+theorem reachedby_is_extens (net : BFNN) : ∀ (B : Set ℕ),
+  B ⊆ reachedby net B := by
+--------------------------------------------------------------------
+  intro B m h₁
+  exact ⟨m, ⟨h₁, Path.trivial⟩⟩
+
+--------------------------------------------------------------------
+theorem reachedby_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
+  reachedby net B = reachedby net (reachedby net B) := by
+--------------------------------------------------------------------
+  intro B
+  apply ext
+  intro m
+  apply Iff.intro
+
+  -- Forward direction
+  -- (easy; just apply reach₂_is_extens)
+  case mp => 
+    intro h₁
+    exact reachedby_is_extens _ _ h₁
+    
+  -- Backwards direction
+  case mpr => 
+    intro h₁
+    match h₁ with
+    | ⟨n, hn⟩ =>
+      match hn.1 with
+      | ⟨y, hy⟩ => exact ⟨y, ⟨hy.1, Path_trans _ hn.2 hy.2⟩⟩
+
+--------------------------------------------------------------------
+theorem reachedby_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
+  A ⊆ B → reachedby net A ⊆ reachedby net B := by
+--------------------------------------------------------------------
+  intro A B h₁ m h₂
+
+  exact match h₂ with
+  | ⟨n, hn⟩ => ⟨n, ⟨(h₁ hn.1), hn.2⟩⟩
+
+--------------------------------------------------------------------
+theorem reachedby_union (net : BFNN) : ∀ (A B : Set ℕ),
+  reachedby net (A ∪ B) = (reachedby net A) ∪ (reachedby net B) := by
+--------------------------------------------------------------------
+  intro A B
+  apply ext
+  intro m
+  apply Iff.intro
+
+  -- Backwards direction
+  -- (easy; just monotonicity)
+  case mpr =>
+    intro h₁
+    cases h₁
+    case inl h₂ => exact reachedby_is_monotone _ _ _ (subset_union_left _ _) h₂
+    case inr h₂ => exact reachedby_is_monotone _ _ _ (subset_union_right _ _) h₂
+
+  -- Forward direction
+  case mp =>
+    intro h₁
+
+    -- We have a path from m ∈ A ∪ B to n.
+    -- In either case, the path from m ⟶ n gives us n ∈ Reach(_).
+    match h₁ with
+    | ⟨n, hn⟩ =>
+      cases hn.1
+      case inl h₂ => exact Or.inl ⟨n, ⟨h₂, hn.2⟩⟩
+      case inr h₂ => exact Or.inr ⟨n, ⟨h₂, hn.2⟩⟩
 
 /-══════════════════════════════════════════════════════════════════
   Conditional Graph Reachability
@@ -999,21 +1259,6 @@ theorem focusedPath_subset {u v : ℕ} (g : Graph ℕ ℚ) (A : Set ℕ) :
   induction h₁
   case trivial hA => exact hA
   case from_path _ _ _ _ _ hA => exact hA
-
--- If there's a path from m to n,
--- then m's layer in the net cannot be bigger than n's layer.
--- WARNING: I think this is incorrect!!!
--- --------------------------------------------------------------------
--- lemma focusedPath_layer {m n : ℕ} (net : BFNN) (A : Set ℕ) :
---   focusedPath net.graph A m n
---   → layer net m < layer net n := by
--- --------------------------------------------------------------------
---   intro (h₁ : focusedPath net.graph A m n)
-
---   induction h₁
---   case trivial _ => sorry
---   case from_path x y _ edge_xy hy path_mx =>
---     sorry
 
 -- This is the set of all nodes reachable from B using
 -- paths where *every* node in the path is within A
@@ -1186,9 +1431,145 @@ theorem reach_union (net : BFNN) : ∀ (S A B : Set ℕ),
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
 
--- I actually don't need to assume anything in particular here...
--- which is odd, I suppose.  (I'd expect it to be different
--- from Elite Upgrade somehow...)
+--------------------------------------------------------------------
+lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
+  n ∈ reachedby net B
+  → (n ∈ propagate net A
+  ↔ n ∈ propagate net (A ∩ reachedby net B)) := by
+--------------------------------------------------------------------
+  intro (A : Set ℕ) (B : Set ℕ)
+  intro (n : ℕ)
+  intro (h₁ : n ∈ reachedby net B)
+  simp only [Membership.mem, Set.Mem, propagate]
+
+  -- By induction on the layer of the net containing n
+  generalize hL : layer net n = L
+  induction L using Nat.case_strong_induction_on generalizing n
+  
+  -- Base Step
+  case hz => 
+    apply Iff.intro
+    case mp => 
+      intro h₂
+      simp only [propagate_acc]
+      simp only [propagate_acc] at h₂
+      exact ⟨h₂, h₁⟩
+
+    case mpr => 
+      intro h₂
+      simp only [propagate_acc]
+      simp only [propagate_acc] at h₂
+      exact h₂.1
+
+  -- Inductive Step
+  case hi k IH => 
+    apply Iff.intro
+
+    -- Forward Direction
+    case mp => 
+      intro h₂
+
+      -- By cases; either n ∈ A or not.
+      by_cases n ∈ A
+      case pos => 
+        -- This case is trivial (just apply Extens)
+        rw [symm hL]
+        have h₃ : n ∈ A ∩ reachedby net B := ⟨h, h₁⟩ 
+        exact @propagate_acc_is_extens net _ _ h₃
+      case neg => 
+        -- If n ∉ A, then n ∉ A ∩ reachedby net B
+        have h₃ : n ∉ A ∩ reachedby net B := 
+          fun n_in_A => absurd n_in_A.1 h
+        
+        -- Just some simplifications and rewriting definitions
+        rw [simp_propagate_acc net h] at h₂
+        rw [simp_propagate_acc net h₃]
+
+        -- TODO: This is the stuff that should go in the activ_agree lemma!
+        simp
+        simp at h₂
+        convert h₂ using 4
+        rename_i i
+        generalize hm : List.get! (preds net n) i = m
+        generalize hLm : layer net m = Lm
+
+        -- Apply the inductive hypothesis!
+        have h₄ : m ∈ preds net n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (preds net n) i
+        have h₅ : Lm ≤ k := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net m n h₄
+        have h₆ : m ∈ reachedby net B :=
+          match h₁ with
+          | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩ -- (preds_path _ h₄)
+        exact (symm (IH Lm h₅ m h₆ hLm).to_eq).to_iff
+
+    -- Backwards Direction (should be similar)
+    case mpr =>
+      intro h₂
+
+      -- By cases; either n ∈ A or not.
+      by_cases n ∈ A
+      case pos => 
+        -- This case is trivial (just apply Extens)
+        rw [symm hL]
+        exact @propagate_acc_is_extens net _ _ h
+      case neg => 
+        -- If n ∉ A, then n ∉ A ∩ reachedby net B
+        have h₃ : n ∉ A ∩ reachedby net B := 
+          fun n_in_A => absurd n_in_A.1 h
+        
+        -- Just some simplifications and rewriting definitions
+        rw [simp_propagate_acc net h₃] at h₂
+        rw [simp_propagate_acc net h]
+
+        -- TODO: This is the stuff that should go in the activ_agree lemma!
+        simp
+        simp at h₂
+        convert h₂ using 4
+        rename_i i
+        generalize hm : List.get! (preds net n) i = m
+        generalize hLm : layer net m = Lm
+
+        -- Apply the inductive hypothesis!
+        have h₄ : m ∈ preds net n := by
+          rw [symm hm]
+          simp [preds]
+          exact get!_mem (preds net n) i
+        have h₅ : Lm ≤ k := by
+          rw [symm hLm]
+          apply Nat.lt_succ.mp
+          rw [symm hL]
+          exact preds_decreasing net m n h₄
+        have h₆ : m ∈ reachedby net B :=
+          match h₁ with
+          | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩
+        exact IH Lm h₅ m h₆ hLm
+
+
+-- This is the actual property I want.
+-- If A => B is the conditional Best(A) -> B, this corresponds
+-- to the following axiom:
+-- 
+--    A => B    iff    A ∨ K↓(B) => B
+-- 
+-- (how should we interpret K↓???)
+--------------------------------------------------------------------
+theorem minimal_cause (net : BFNN) : ∀ (A B : Set ℕ),
+  B ⊆ propagate net A
+  ↔ B ⊆ propagate net (A ∩ reachedby net B) := by
+--------------------------------------------------------------------
+  intro (A : Set ℕ) (B : Set ℕ)
+  apply Iff.intro
+  case mp => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
+    (reachedby_is_extens _ _ h₂)).mp (h₁ h₂)
+  case mpr => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
+    (reachedby_is_extens _ _ h₂)).mpr (h₁ h₂)
+
       
 /-══════════════════════════════════════════════════════════════════
   Naive (Unstable) Hebbian Update
@@ -1610,7 +1991,7 @@ lemma neg_weight_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
       case pos => 
         rw [if_pos h]
         apply add_le_add _ IH
-        simp
+        simp only [mul_one, le_refl]
       case neg => 
         rename_i neg_weight
         rw [if_neg h]
@@ -1899,10 +2280,10 @@ lemma hebb_activ_nondecreasing (net : BFNN) (A S : Set ℕ) (n : ℕ) :
   by_cases (S m)
   case neg => 
     rw [if_neg h]
-    simp
+    simp only [mul_zero, le_refl]
   case pos => 
     rw [if_pos h]
-    simp [hebb_weights_le _]
+    simp only [mul_one, hebb_weights_le _]
 
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
@@ -2702,7 +3083,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             -- We are now ready to apply our inductive hypothesis!
             have h₂ : m ∈ preds net n := by
               rw [symm hm]
-              simp [preds]
+              simp only [preds]
               exact get!_mem (net.graph.predecessors n) i
             have h₃ : Lm ≤ L := by
               rw [symm hLm]
@@ -2727,7 +3108,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             have h₄ : ∀ i, (m i) ∈ preds net n := by
               intro i
               rw [symm hm]
-              simp [preds]
+              simp only [preds]
               exact get!_mem (net.graph.predecessors n) i
 
             have h₅ : ∀ i, (layer net (m i)) ≤ L := by
@@ -2823,8 +3204,8 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
         -- But the weights in the updated net are either the same or
         --   increasing, so by [hebb_activ_nondecreasing], these same 
         --   predecessors activate n *in the updated net*.
-        simp
-        simp at h₁
+        simp only [preds]
+        simp only [preds] at h₁
         exact hebb_activ_nondecreasing net A S₂ _
           (activ_agree _ S₁ S₂ _ h₂ h₁)
 
@@ -2966,141 +3347,6 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
 --   propagate net S ⊆ reachable net S := by
 -- --------------------------------------------------------------------
 --   sorry
-
--- --------------------------------------------------------------------
--- lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
---   n ∈ reachedby net B
---   → (n ∈ propagate net A
---   ↔ n ∈ propagate net (A ∩ reachedby net B)) := by
--- --------------------------------------------------------------------
---   intro (A : Set ℕ) (B : Set ℕ)
---   intro (n : ℕ)
---   intro (h₁ : n ∈ reachedby net B)
---   simp only [Membership.mem, Set.Mem, propagate]
-
---   -- By induction on the layer of the net containing n
---   generalize hL : layer net n = L
---   induction L using Nat.case_strong_induction_on generalizing n
-  
---   -- Base Step
---   case hz => 
---     apply Iff.intro
---     case mp => 
---       intro h₂
---       simp only [propagate_acc]
---       simp only [propagate_acc] at h₂
---       exact ⟨h₂, h₁⟩
-
---     case mpr => 
---       intro h₂
---       simp only [propagate_acc]
---       simp only [propagate_acc] at h₂
---       exact h₂.1
-
---   -- Inductive Step
---   case hi k IH => 
---     apply Iff.intro
-
---     -- Forward Direction
---     case mp => 
---       intro h₂
-
---       -- By cases; either n ∈ A or not.
---       by_cases n ∈ A
---       case pos => 
---         -- This case is trivial (just apply Extens)
---         rw [symm hL]
---         have h₃ : n ∈ A ∩ reachedby net B := ⟨h, h₁⟩ 
---         exact @propagate_acc_is_extens net _ _ h₃
---       case neg => 
---         -- If n ∉ A, then n ∉ A ∩ reachedby net B
---         have h₃ : n ∉ A ∩ reachedby net B := 
---           fun n_in_A => absurd n_in_A.1 h
-        
---         -- Just some simplifications and rewriting definitions
---         rw [simp_propagate_acc net h] at h₂
---         rw [simp_propagate_acc net h₃]
-
---         -- TODO: This is the stuff that should go in the activ_agree lemma!
---         simp
---         simp at h₂
---         convert h₂ using 4
---         rename_i i
---         generalize hm : List.get! (predecessors net.graph n).data i = m
---         generalize hLm : layer net m = Lm
-
---         -- Apply the inductive hypothesis!
---         have h₄ : m ∈ preds net n := by
---           rw [symm hm]
---           simp [preds]
---           exact get!_mem (predecessors net.graph n).data i
---         have h₅ : Lm ≤ k := by
---           rw [symm hLm]
---           apply Nat.lt_succ.mp
---           rw [symm hL]
---           exact preds_decreasing net m n h₄
---         have h₆ : m ∈ reachedby net B :=
---           match h₁ with
---           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
---         exact (symm (IH Lm h₅ m h₆ hLm).to_eq).to_iff
-
---     -- Backwards Direction (should be similar)
---     case mpr =>
---       intro h₂
-
---       -- By cases; either n ∈ A or not.
---       by_cases n ∈ A
---       case pos => 
---         -- This case is trivial (just apply Extens)
---         rw [symm hL]
---         exact @propagate_acc_is_extens net _ _ h
---       case neg => 
---         -- If n ∉ A, then n ∉ A ∩ reachedby net B
---         have h₃ : n ∉ A ∩ reachedby net B := 
---           fun n_in_A => absurd n_in_A.1 h
-        
---         -- Just some simplifications and rewriting definitions
---         rw [simp_propagate_acc net h₃] at h₂
---         rw [simp_propagate_acc net h]
-
---         -- TODO: This is the stuff that should go in the activ_agree lemma!
---         simp
---         simp at h₂
---         convert h₂ using 4
---         rename_i i
---         generalize hm : List.get! (predecessors net.graph n).data i = m
---         generalize hLm : layer net m = Lm
-
---         -- Apply the inductive hypothesis!
---         have h₄ : m ∈ preds net n := by
---           rw [symm hm]
---           simp [preds]
---           exact get!_mem (predecessors net.graph n).data i
---         have h₅ : Lm ≤ k := by
---           rw [symm hLm]
---           apply Nat.lt_succ.mp
---           rw [symm hL]
---           exact preds_decreasing net m n h₄
---         have h₆ : m ∈ reachedby net B :=
---           match h₁ with
---           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, hasPath_trans _ (preds_path _ h₄) hx.2⟩⟩
---         exact IH Lm h₅ m h₆ hLm
-
-
--- -- This is the actual property I want, re-written with conditionals
--- -- in mind
--- --------------------------------------------------------------------
--- theorem minimal_cause (net : BFNN) : ∀ (A B : Set ℕ),
---   B ⊆ propagate net A
---   ↔ B ⊆ propagate net (A ∩ reachedby net B) := by
--- --------------------------------------------------------------------
---   intro (A : Set ℕ) (B : Set ℕ)
---   apply Iff.intro
---   case mp => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
---     (reachedby_is_extens _ _ h₂)).mp (h₁ h₂)
---   case mpr => exact fun h₁ n h₂ => (minimal_cause_helper net _ _ _ 
---     (reachedby_is_extens _ _ h₂)).mpr (h₁ h₂)
-
 
 
 /-══════════════════════════════════════════════════════════════════
