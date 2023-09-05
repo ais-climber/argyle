@@ -179,8 +179,17 @@ def is_symm (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
 def is_trans (g : Graph ℕ ℚ) : Prop := ∀ (u v w : ℕ),
   g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
 
+-- Note that we don't allow reflexive edges at all.
 def is_acyclic (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
-  g.hasPath u v → g.hasPath v u → u = v
+  g.hasPath u v → ¬ g.hasPath v u
+
+-- Fully connected:
+-- Either u ⟶ v, v ⟶ u, or u and v have the same
+-- predecessors and successors.
+def is_connected (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
+  (g.hasEdge u v) ∨ (g.hasEdge v u) 
+  ∨ (g.successors u = g.successors v
+      ∧ g.predecessors u = g.predecessors v)
 
 end Graph
 
@@ -250,32 +259,39 @@ theorem binary_step_nondecr (x₁ x₂ : ℚ) (hyp : x₁ ≤ x₂) :
           rw [(if_neg (not_lt_of_le case22))]
 
 -------------------------------------------------
--- Feedforward neural nets
+-- Our class of neural networks
+-- We consider nets where:
+--   - The activation function is binary
+--   - The activation function is nondecreasing
+--   - The activation function has a threshold
+--   - The graph is acyclic
+--   - The graph is fully connected
 -------------------------------------------------
 structure Net where
   graph : Graph ℕ ℚ
   activation : ℚ → ℚ
-  rate : ℚ -- learning rate
+  rate : ℚ  -- learning rate
 
-structure BFNN extends Net where 
   -- The activation function is binary
-  binary : ∀ (x : ℚ), 
-    (activation x = 0) ∨ (activation x = 1)
+  binary : ∀ (x : ℚ), (activation x = 0) ∨ (activation x = 1)
 
   -- The activation function is nondecreasing
-  activ_nondecr : ∀ (x₁ x₂ : ℚ),
-    x₁ ≤ x₂ → activation x₁ ≤ activation x₂
+  activ_nondecr : ∀ (x₁ x₂ : ℚ), x₁ ≤ x₂ → activation x₁ ≤ activation x₂
+  
+  -- The activation function has a threshold
+  threshold : ℚ
+  activ_thres : activation (is_active) = 1
 
-  -- There is *some* input for which the activation is 1
-  active_input : ℚ
-  activ_pos : activation (is_active) = 1
+  -- The graph is acyclic and fully connected
+  acyclic : graph.is_acyclic
+  connected : graph.is_connected
 
 
 -- Because our activation function is bounded above by 1,
 -- if act(x₁) = 1
 -- then any act(x₂) greater than act(x₁) also = 1
 --------------------------------------------------------------------
-lemma activation_from_inequality (net : BFNN) (x₁ x₂ : ℚ) :
+lemma activation_from_inequality (net : Net) (x₁ x₂ : ℚ) :
   net.activation x₁ ≤ net.activation x₂
   → net.activation x₁ = 1 → net.activation x₂ = 1 := by
 --------------------------------------------------------------------
@@ -290,7 +306,7 @@ lemma activation_from_inequality (net : BFNN) (x₁ x₂ : ℚ) :
 
 -- Put in examples file!  (We don't need to figure it out
 -- right now!)
--- def myBFNN : BFNN :=
+-- def myNet : Net :=
 --   {
 --     graph := graphA
 --     activation := binary_step
@@ -303,12 +319,12 @@ lemma activation_from_inequality (net : BFNN) (x₁ x₂ : ℚ) :
 --     activ_pos := sorry
 --   }
 
--- inductive Layer (net : BFNN) : List ℕ → Prop where
+-- inductive Layer (net : Net) : List ℕ → Prop where
 --   | initial_layer : Layer net N₀
 --   | next_layer : ∀ (n : ℕ), (n ∈ N → 
 --     ∃ (m : ℕ), m ∈ Nᵢ ∧ Layer net Nᵢ) → Layer net N
 
-variable (net : BFNN)
+variable (net : Net)
 
 /-══════════════════════════════════════════════════════════════════
   Forward propagation in a net
@@ -393,11 +409,11 @@ axiom get!_mem {α : Type} [Inhabited α] :
   ∀ (l : List α) i, (l.get! i) ∈ l
 
 @[simp]
-def preds (net : BFNN) (n : ℕ): List ℕ :=
+def preds (net : Net) (n : ℕ): List ℕ :=
   net.graph.predecessors n
 
 --------------------------------------------------------------------
-theorem edge_from_preds (net : BFNN) (m n : ℕ) :
+theorem edge_from_preds (net : Net) (m n : ℕ) :
   m ∈ preds net n ↔ net.graph.hasEdge m n := by
 --------------------------------------------------------------------
   simp only [preds, Graph.hasEdge]
@@ -416,28 +432,44 @@ theorem edge_from_preds (net : BFNN) (m n : ℕ) :
 -- Defined recursively on the *reverse* of the vertex list
 -- (this means we are looking at vertices backwards -- each
 --  vertex can only "see" the vertices preceding it.)
-def layer_acc (net : BFNN) (n : ℕ) (ls : List ℕ) : ℕ :=
-  match ls with
+-- def layer_acc (net : Net) (n : ℕ) (ls : List ℕ) : ℕ :=
+--   match ls with
+--   | [] => 0
+--   | v :: rest =>
+--     if v = n then
+--       let layers := List.map (fun x => layer_acc net x rest) (preds net n)
+--       let max := layers.maximum
+
+--       match max with
+--       | some L => L + 1
+--       | none => 0
+
+--     else layer_acc net n rest
+  
+
+-- The layer of n in the net, defined recursively
+-- on the list of predecessors
+def layer_acc (net : Net) (n : ℕ) (preds_list : List ℕ) : ℕ :=
+  match preds_list with
   | [] => 0
-  | v :: rest =>
-    if v = n then
-      let layers := List.map (fun x => layer_acc net x rest) (preds net n)
-      let max := layers.maximum
+  | m :: ms => 
+    -- TODO: Get the maximum of:
+    --   - (layer m)
+    --   - (layer mᵢ) for all other predecessors mᵢ of n
+    --     (we can do recursion because we've eliminated mᵢ 
+    --      from consideration) 
+    -- and then add 1 to this count
+    sorry
 
-      match max with
-      | some L => L + 1
-      | none => 0
-
-    else layer_acc net n rest
-
--- The layer of n in the net
-def layer (net : BFNN) (n : ℕ) : ℕ :=
-  layer_acc net n (net.graph.get_vertices.reverse)
+def layer (net : Net) (n : ℕ) : ℕ :=
+  layer_acc net n (net.graph.predecessors n)
+  
+  
 
 -- The layer relation layer[m] ≤ layer[n] is well-founded
 -- (i.e. it has a least element)
 --------------------------------------------------------------------
-lemma layer_wellfounded (net : BFNN) : 
+lemma layer_wellfounded (net : Net) : 
   WellFounded (fun x y => layer net x ≤ layer net y) := by
 --------------------------------------------------------------------
   exact WellFounded.wellFounded_iff_has_min.mpr 
@@ -456,7 +488,7 @@ def layer_test_graph : Graph ℕ ℚ :=
     -- Add a new edge, and toggle which previous edge jumps to it.
     ⟨4, []⟩]⟩
 
-def layer_test_net : BFNN :=
+def layer_test_net : Net :=
   { graph := layer_test_graph, activation := binary_step, rate := 1,
     binary := binary_step_is_binary,
     activ_nondecr := binary_step_nondecr, activ_pos := sorry
@@ -469,95 +501,120 @@ def layer_test_net : BFNN :=
 #eval layer layer_test_net 4
 -/
 
--- AXIOM: We assume the net is fully connected! 
--- (i.e. *transitively closed* in the paper, because
---  'fully connected' is often used in machine learning)
--- 
--- TODO: Write the equivalent 'transitively closed'
---   version, put it in the definition of BFNN,
---   and then prove this from that.
---   What I have here is the final statement I actually need.
-axiom connected : ∀ (net : BFNN) (m n : ℕ), 
-  layer net m < layer net n → net.graph.hasEdge m n
-
 -- If m is a predecessor of n, then it must be in a previous layer.
 -- Proof idea:
 -- layer(m)  ≤  max({layer(v) | v ∈ preds(n)})  <  layer(n)
 --------------------------------------------------------------------
-lemma preds_decreasing (net : BFNN) (m n : ℕ) :
+lemma layer_preds (net : Net) (m n : ℕ) :
   m ∈ preds net n 
   → layer net m < layer net n := by
 --------------------------------------------------------------------
-  intro h₁
-  simp only [layer]
+  sorry
+  -- intro h₁
+  -- simp only [layer]
 
-  generalize hls : (List.reverse (Graph.get_vertices net.toNet.graph)) = ls
-  induction ls
-  case nil =>
-    -- This case is impossible;
-    -- m ∈ preds(n) means that there is *something* in the graph.
-    -- This contradicts the fact that the graph is empty!
-    simp [preds, Graph.predecessors, Graph.get_vertices] at h₁
-    simp [Graph.get_vertices] at hls
-    rw [hls] at h₁
-    rw [List.map_nil] at h₁
-    rw [List.filter_nil] at h₁
-    exact False.elim ((List.mem_nil_iff _).mp h₁)
+  -- generalize hls : (List.reverse (Graph.get_vertices net.graph)) = ls
+  -- induction ls
+  -- case nil =>
+  --   -- This case is impossible;
+  --   -- m ∈ preds(n) means that there is *something* in the graph.
+  --   -- This contradicts the fact that the graph is empty!
+  --   simp [preds, Graph.predecessors, Graph.get_vertices] at h₁
+  --   simp [Graph.get_vertices] at hls
+  --   rw [hls] at h₁
+  --   rw [List.map_nil] at h₁
+  --   rw [List.filter_nil] at h₁
+  --   exact False.elim ((List.mem_nil_iff _).mp h₁)
     
 
-  case cons v rest IH =>
-    simp only [layer_acc]
-    generalize hmax_m : (List.map (fun x => layer_acc net x rest) (preds net m)).maximum = max_m
-    generalize hmax_n : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max_n
+  -- case cons v rest IH =>
+  --   simp only [layer_acc]
+  --   generalize hmax_m : (List.map (fun x => layer_acc net x rest) (preds net m)).maximum = max_m
+  --   generalize hmax_n : (List.map (fun x => layer_acc net x rest) (preds net n)).maximum = max_n
 
-    -- We branch out all of the possible cases
-    -- (we have 4 branches from the 'if-then-else's, 
-    -- and more for the 'match'es)
-    by_cases v = m
-    case pos => 
-      rw [if_pos h]
-      by_cases v = n
-      case pos => 
-        rw [if_pos h]
+  --   -- We branch out all of the possible cases
+  --   -- (we have 4 branches from the 'if-then-else's, 
+  --   -- and more for the 'match'es)
+  --   by_cases v = m
+  --   case pos => 
+  --     rw [if_pos h]
+  --     by_cases v = n
+  --     case pos => 
+  --       rw [if_pos h]
         
-        match max_n with
-        | none => -- This case is also impossible;
-          -- m ∈ preds(n) means that there is *some* maximum in preds(n),
-          -- which contradicts the fact that the max is empty.
-          sorry
+  --       match max_n with
+  --       | none => -- This case is also impossible;
+  --         -- m ∈ preds(n) means that there is *some* maximum in preds(n),
+  --         -- which contradicts the fact that the max is empty.
+  --         sorry
 
-        | some L => 
-          match max_m with
-          | none => exact Nat.succ_pos L
-          | some K => -- This is the tricky case!
-            simp
-            sorry
+  --       | some L => 
+  --         match max_m with
+  --         | none => exact Nat.succ_pos L
+  --         | some K => -- This is the tricky case!
+  --           simp
+  --           sorry
 
-      case neg => 
-        rw [if_neg h]
-        match max_m with
-        | none => 
-          simp
-          sorry
-        | some K => sorry
+  --     case neg => 
+  --       rw [if_neg h]
+  --       match max_m with
+  --       | none => 
+  --         simp
+  --         sorry
+  --       | some K => sorry
 
-    case neg =>
-      rw [if_neg h]
-      by_cases v = n
-      case pos => 
-        rw [if_pos h]
-        match max_n with
-        | none => sorry
-        | some L => sorry
+  --   case neg =>
+  --     rw [if_neg h]
+  --     by_cases v = n
+  --     case pos => 
+  --       rw [if_pos h]
+  --       match max_n with
+  --       | none => sorry
+  --       | some L => sorry
 
-      case neg => 
-        rw [if_neg h]
-        exact IH sorry
+  --     case neg => 
+  --       rw [if_neg h]
+  --       exact IH sorry
+
+--------------------------------------------------------------------
+lemma layer_connected : ∀ (net : Net) (m n : ℕ), 
+  layer net m < layer net n → net.graph.hasEdge m n := by
+--------------------------------------------------------------------
+  intro net m n h₁
+  apply Classical.by_contradiction
+  intro hcontr
+
+  -- Since the net is connected, we have three cases:
+  -- Either m ⟶ n, n ⟶ m, or m and n share the same successors
+  -- and predecessors
+  cases net.connected m n
+  case inl h₂ => 
+    -- Case 1: m ⟶ n.  But we assumed ¬ m ⟶ n.
+    exact absurd h₂ hcontr
+  case inr h₂ =>
+    cases h₂
+    case inl h₃ => 
+      -- Case 2: n ⟶ m
+      -- But then layer(n) < layer(m)
+      apply not_lt_of_gt h₁ (layer_preds _ _ _ _)
+      rw [edge_from_preds]
+      exact h₃
+
+    case inr h₃ =>
+      -- Case 3: n and m have the same successors and predecessors.
+      -- But then layer(m) = layer(n.) 
+      have h₄ : layer net m = layer net n := by
+        simp only [layer]
+        rw [h₃.2]
+        sorry
+      
+      apply ne_of_lt h₁ h₄
+
 
 -- NOTE: Although 'do' notation might be more readable here,
 --       I avoid it because it's hard to reason about.
 noncomputable
-def activ (net : BFNN) (prev_activ : List ℚ) (n : ℕ) : Prop :=
+def activ (net : Net) (prev_activ : List ℚ) (n : ℕ) : Prop :=
   let preds := preds net n
   let weights := List.map (fun i => 
       let m := preds.get! i
@@ -588,7 +645,7 @@ def activ (net : BFNN) (prev_activ : List ℚ) (n : ℕ) : Prop :=
 -- NOTE: Although 'do' notation might be more readable here,
 --       I avoid it because it's hard to reason about.
 @[simp]
-def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
+def propagate_acc (net : Net) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
   match L with
   | Nat.zero => n ∈ S
   | Nat.succ _ =>
@@ -599,11 +656,11 @@ def propagate_acc (net : BFNN) (S : Set ℕ) (n : ℕ) (L : ℕ) : Prop :=
         (List.range preds.length)
     n ∈ S ∨ activ net prev_activ n
 termination_by propagate_acc net S n L => layer net n
-decreasing_by exact preds_decreasing net m n (get!_mem preds i)
+decreasing_by exact layer_preds net m n (get!_mem preds i)
 
 -- Set variation of propagate
 @[simp]
-def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
+def propagate (net : Net) (S : Set ℕ) : Set ℕ :=
   fun n => propagate_acc net S n (layer net n)
 
 -------------------------------------------------
@@ -615,7 +672,7 @@ def propagate (net : BFNN) (S : Set ℕ) : Set ℕ :=
 -------------------------------------------------
 
 --------------------------------------------------------------------
-lemma simp_propagate_acc (net : BFNN) :
+lemma simp_propagate_acc (net : Net) :
   n ∉ S
   → propagate_acc net S n (Nat.succ L) =
   let preds := preds net n
@@ -653,7 +710,7 @@ lemma simp_propagate_acc (net : BFNN) :
 --   - Use 'exact' instead of 'apply' (exit tactic mode)
 -- 
 --------------------------------------------------------------------
-lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
+lemma activ_agree (net : Net) (A B : Set ℕ) (n : ℕ) :
   (∀ (m : ℕ), m ∈ preds net n → (m ∈ A ↔ m ∈ B))
   → activ net (List.map (fun i => 
       let m := (preds net n).get! i
@@ -679,7 +736,7 @@ lemma activ_agree (net : BFNN) (A B : Set ℕ) (n : ℕ) :
 ══════════════════════════════════════════════════════════════════-/
 
 --------------------------------------------------------------------
-lemma prop_layer_zero (net : BFNN) : ∀ (S : Set ℕ) (n : ℕ),
+lemma prop_layer_zero (net : Net) : ∀ (S : Set ℕ) (n : ℕ),
   layer net n = 0
   → n ∈ propagate net S
   → n ∈ S := by
@@ -801,7 +858,7 @@ theorem propagate_is_idempotent :
               rw [symm hLm]
               apply Nat.lt_succ.mp
               rw [symm hL]
-              exact preds_decreasing net m n hm
+              exact layer_preds net m n hm
             exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
 
           -- Apply the activ_agree lemma
@@ -888,7 +945,7 @@ theorem propagate_is_cumulative :
             rw [symm hLm]
             apply Nat.lt_succ.mp
             rw [symm hL]
-            exact preds_decreasing net m n h₃
+            exact layer_preds net m n h₃
           exact (symm (IH Lm h₄ m hLm).to_eq).to_iff
 
     -- Backwards Direction (should be very similar)
@@ -932,12 +989,12 @@ theorem propagate_is_cumulative :
             rw [symm hLm]
             apply Nat.lt_succ.mp
             rw [symm hL]
-            exact preds_decreasing net m n h₃
+            exact layer_preds net m n h₃
           exact IH Lm h₄ m hLm
 
 
--- #check propagate myBFNN {n : ℕ | n ≤ 4}
--- #eval propagate myBFNN {n : ℕ | n ≤ 4}
+-- #check propagate myNet {n : ℕ | n ≤ 4}
+-- #eval propagate myNet {n : ℕ | n ≤ 4}
 -- need to make sets finite in order to evaluate???
 -- 
 -- It's important for everything to be evaluatable, since:
@@ -946,7 +1003,7 @@ theorem propagate_is_cumulative :
 -- 2) #eval helps me debug errors
 
 /-══════════════════════════════════════════════════════════════════
-  Ordinary Graph Reachability
+  Graph Reachability
 ══════════════════════════════════════════════════════════════════-/
 
 inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
@@ -968,7 +1025,7 @@ theorem Path_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
     exact Path.from_path path_ux edge_xy
 
 --------------------------------------------------------------------
-theorem Path_of_preds {m n : ℕ} (net : BFNN) :
+theorem Path_of_preds {m n : ℕ} (net : Net) :
   m ∈ preds net n → Path net.graph m n := by
 --------------------------------------------------------------------
   intro h₁
@@ -977,9 +1034,9 @@ theorem Path_of_preds {m n : ℕ} (net : BFNN) :
 -- Any nontrivial path can be shortcutted with an edge
 -- (this is because the graph is connected.)
 -- TODO: Fix this proof tomorrow,
---   and continue replacing reachable with reachable₂!
+--   and continue replacing reachable with reachable!
 --------------------------------------------------------------------
-theorem Path_edge {u v : ℕ} (net : BFNN) :
+theorem Path_edge {u v : ℕ} (net : Net) :
   Path net.graph u v → u ≠ v → net.graph.hasEdge u v := by
 --------------------------------------------------------------------
   intro h₁
@@ -988,28 +1045,31 @@ theorem Path_edge {u v : ℕ} (net : BFNN) :
   case trivial => 
     -- This case is impossible (we assumed *nontrivial*)
     exact fun h₂ => absurd rfl h₂
-  case from_path x y path_ux edge_xy edge_ux =>
-    intro h₂
+  case from_path x y _ edge_xy IH =>
+    intro _
 
-    have h₃ : u ≠ x := 
-      fun heq => sorry
-
-    have h₄ : layer net u < layer net x := 
-      preds_decreasing _ _ _ ((edge_from_preds _ _ _).mpr (edge_ux h₃))
-    have h₅ : layer net x < layer net y := 
-      preds_decreasing _ _ _ ((edge_from_preds _ _ _).mpr edge_xy)
-    
-    exact connected _ _ _ (lt_trans h₄ h₅)
+    -- Either u = x or u ≠ x.
+    by_cases u = x
+    case pos =>
+      rw [h]
+      exact edge_xy
+    case neg =>
+      have h₄ : layer net u < layer net x := 
+        layer_preds _ _ _ ((edge_from_preds _ _ _).mpr (IH h))
+      have h₅ : layer net x < layer net y := 
+        layer_preds _ _ _ ((edge_from_preds _ _ _).mpr edge_xy)
+      
+      exact layer_connected _ _ _ (lt_trans h₄ h₅)
 
 -- Set of nodes reachable from S
-def reachable₂ (net : BFNN) (S : Set ℕ) : Set ℕ :=
+def reachable (net : Net) (S : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
     ∃ (m : ℕ), m ∈ S ∧ Path net.graph m n
 
 --------------------------------------------------------------------
-lemma reach₂_layer_zero (net : BFNN) : ∀ (B : Set ℕ) (n : ℕ),
+lemma reach_layer_zero (net : Net) : ∀ (B : Set ℕ) (n : ℕ),
   layer net n = 0
-  → n ∈ reachable₂ net B
+  → n ∈ reachable net B
   → n ∈ B := by
 --------------------------------------------------------------------
   intro B n h₁ h₂
@@ -1025,50 +1085,45 @@ lemma reach₂_layer_zero (net : BFNN) : ∀ (B : Set ℕ) (n : ℕ),
     case from_path x y _ edge_xy _ => 
       -- Contradiction; y's layer is 0, but there is an edge from x to y!
       have h₃ : layer net x < layer net y :=
-        preds_decreasing net x y ((edge_from_preds _ _ _).mpr edge_xy)
+        layer_preds net x y ((edge_from_preds _ _ _).mpr edge_xy)
       
       exact absurd h₁ (Nat.not_eq_zero_of_lt h₃)
-
---------------------------------------------------------------------
-theorem reach₂_is_extens (net : BFNN) : ∀ (B : Set ℕ),
-  B ⊆ reachable₂ net B := by
---------------------------------------------------------------------
-  intro B n h₁
-  exact ⟨n, ⟨h₁, Path.trivial⟩⟩
 
 -- If A ∩ B is empty, then there are no nodes reachable
 -- from B within A.
 -- (This does *not* follow from [reach_is_extens]!)
--- --------------------------------------------------------------------
--- theorem reach_empty_of_inter_empty (net : BFNN) : ∀ (A B : Set ℕ),
---   (A ∩ B) = ∅ → reachable net A B = ∅ := by
--- --------------------------------------------------------------------
---   intro A B
---   rw [← Set.not_nonempty_iff_eq_empty]
---   rw [← Set.not_nonempty_iff_eq_empty]
+--------------------------------------------------------------------
+theorem reach_empty_of_inter_empty (net : Net) : ∀ (A B : Set ℕ),
+  (A ∩ B) = ∅ → A ∩ reachable net (A ∩ B) = ∅ := by
+--------------------------------------------------------------------
+  intro A B
+  rw [← Set.not_nonempty_iff_eq_empty]
+  rw [← Set.not_nonempty_iff_eq_empty]
   
---   -- Start a proof by contraposition, and simplify
---   contrapose
---   intro h₁
---   rw [Classical.not_not]
---   rw [Classical.not_not] at h₁
+  -- Start a proof by contraposition, and simplify
+  contrapose
+  intro h₁
+  rw [Classical.not_not]
+  rw [Classical.not_not] at h₁
 
---   -- Since Reach(A, B) is nonempty, we have n ∈ Reach(A, B).
---   -- We argue that the m ∈ B that reaches n must be m ∈ A ∩ B.
---   match h₁ with
---   | ⟨n, hn⟩ => 
---     match hn with
---     | ⟨m, hm⟩ => 
---       -- m ∈ B is easy; we show inductively that m ∈ A as well.
---       induction hm.2
---       case trivial hmA => exact ⟨m, ⟨hmA, hm.1⟩⟩
---       case from_path x y path_mx _ _ IH => 
---         exact IH ⟨m, ⟨hm.1, path_mx⟩⟩ ⟨hm.1, path_mx⟩
+  -- Since A ∩ Reach(B) is nonempty, we have n ∈ A ∩ Reach(B).
+  -- We argue that the m ∈ B that reaches n must be m ∈ A ∩ B.
+  match h₁ with
+  | ⟨n, hn⟩ => 
+    match hn.2 with
+    | ⟨m, hm⟩ => exact ⟨m, hm.1⟩
+
+--------------------------------------------------------------------
+theorem reach_is_extens (net : Net) : ∀ (B : Set ℕ),
+  B ⊆ reachable net B := by
+--------------------------------------------------------------------
+  intro B n h₁
+  exact ⟨n, ⟨h₁, Path.trivial⟩⟩
 
 
 --------------------------------------------------------------------
-theorem reach₂_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
-  reachable₂ net B = reachable₂ net (reachable₂ net B) := by
+theorem reach_is_idempotent (net : Net) : ∀ (B : Set ℕ),
+  reachable net B = reachable net (reachable net B) := by
 --------------------------------------------------------------------
   intro B
   apply ext
@@ -1076,10 +1131,10 @@ theorem reach₂_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
   apply Iff.intro
 
   -- Forward direction
-  -- (easy; just apply reach₂_is_extens)
+  -- (easy; just apply reach_is_extens)
   case mp => 
     intro h₁
-    exact reach₂_is_extens _ _ h₁
+    exact reach_is_extens _ _ h₁
 
   -- Backwards direction
   case mpr => 
@@ -1090,8 +1145,8 @@ theorem reach₂_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
       | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, Path_trans _ hx.2 hm.2⟩⟩
 
 --------------------------------------------------------------------
-theorem reach₂_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
-  A ⊆ B → reachable₂ net A ⊆ reachable₂ net B := by
+theorem reach_is_monotone (net : Net) : ∀ (A B : Set ℕ),
+  A ⊆ B → reachable net A ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro A B h₁ n h₂
 
@@ -1101,8 +1156,8 @@ theorem reach₂_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
 -- Reach is closed under union
 -- (This is really a consequence of monotonicity)
 --------------------------------------------------------------------
-theorem reach₂_union (net : BFNN) : ∀ (A B : Set ℕ),
-  reachable₂ net (A ∪ B) = (reachable₂ net A) ∪ (reachable₂ net B) := by
+theorem reach_union (net : Net) : ∀ (A B : Set ℕ),
+  reachable net (A ∪ B) = (reachable net A) ∪ (reachable net B) := by
 --------------------------------------------------------------------
   intro A B
   apply ext
@@ -1114,8 +1169,8 @@ theorem reach₂_union (net : BFNN) : ∀ (A B : Set ℕ),
   case mpr =>
     intro h₁
     cases h₁
-    case inl h₂ => exact reach₂_is_monotone _ _ _ (subset_union_left _ _) h₂
-    case inr h₂ => exact reach₂_is_monotone _ _ _ (subset_union_right _ _) h₂
+    case inl h₂ => exact reach_is_monotone _ _ _ (subset_union_left _ _) h₂
+    case inr h₂ => exact reach_is_monotone _ _ _ (subset_union_right _ _) h₂
 
   -- Forward direction
   case mp =>
@@ -1134,19 +1189,19 @@ theorem reach₂_union (net : BFNN) : ∀ (A B : Set ℕ),
 ══════════════════════════════════════════════════════════════════-/
 
 -- Set of nodes reachable from S
-def reachedby (net : BFNN) (S : Set ℕ) : Set ℕ :=
+def reachedby (net : Net) (S : Set ℕ) : Set ℕ :=
   fun (m : ℕ) =>
     ∃ (n : ℕ), n ∈ S ∧ Path net.graph m n
 
 --------------------------------------------------------------------
-theorem reachedby_is_extens (net : BFNN) : ∀ (B : Set ℕ),
+theorem reachedby_is_extens (net : Net) : ∀ (B : Set ℕ),
   B ⊆ reachedby net B := by
 --------------------------------------------------------------------
   intro B m h₁
   exact ⟨m, ⟨h₁, Path.trivial⟩⟩
 
 --------------------------------------------------------------------
-theorem reachedby_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
+theorem reachedby_is_idempotent (net : Net) : ∀ (B : Set ℕ),
   reachedby net B = reachedby net (reachedby net B) := by
 --------------------------------------------------------------------
   intro B
@@ -1155,7 +1210,7 @@ theorem reachedby_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
   apply Iff.intro
 
   -- Forward direction
-  -- (easy; just apply reach₂_is_extens)
+  -- (easy; just apply reach_is_extens)
   case mp => 
     intro h₁
     exact reachedby_is_extens _ _ h₁
@@ -1169,7 +1224,7 @@ theorem reachedby_is_idempotent (net : BFNN) : ∀ (B : Set ℕ),
       | ⟨y, hy⟩ => exact ⟨y, ⟨hy.1, Path_trans _ hn.2 hy.2⟩⟩
 
 --------------------------------------------------------------------
-theorem reachedby_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
+theorem reachedby_is_monotone (net : Net) : ∀ (A B : Set ℕ),
   A ⊆ B → reachedby net A ⊆ reachedby net B := by
 --------------------------------------------------------------------
   intro A B h₁ m h₂
@@ -1178,7 +1233,7 @@ theorem reachedby_is_monotone (net : BFNN) : ∀ (A B : Set ℕ),
   | ⟨n, hn⟩ => ⟨n, ⟨(h₁ hn.1), hn.2⟩⟩
 
 --------------------------------------------------------------------
-theorem reachedby_union (net : BFNN) : ∀ (A B : Set ℕ),
+theorem reachedby_union (net : Net) : ∀ (A B : Set ℕ),
   reachedby net (A ∪ B) = (reachedby net A) ∪ (reachedby net B) := by
 --------------------------------------------------------------------
   intro A B
@@ -1206,233 +1261,13 @@ theorem reachedby_union (net : BFNN) : ∀ (A B : Set ℕ),
       case inl h₂ => exact Or.inl ⟨n, ⟨h₂, hn.2⟩⟩
       case inr h₂ => exact Or.inr ⟨n, ⟨h₂, hn.2⟩⟩
 
-/-══════════════════════════════════════════════════════════════════
-  Conditional Graph Reachability
-══════════════════════════════════════════════════════════════════-/
--- reachable(A, B) is the set of all nodes reachable from B
--- using a path where all nodes are inside A (i.e. there is a 
--- focusedPath from B to n).
--- 
--- This is *precisely* what Van Benthem refers to as "conditional
--- common knowledge" (although here we don't need the word "common"
--- because we don't have group dynamics.)  
--- Quote:
--- CG(A, B) "is true in all worlds reachable via some finite path
--- of accessibilities running entirely through worlds satisfying A"
--- [Van Benthem, Belief Revision and Dynamic Logic, page 6]
--- In this paper, he also talks about "pre-encoding" future
--- information in order to get a reduction, which is exactly
--- what we're doing here!
--- 
--- I don't know what the complete axioms are for this conditional
--- knowledge.  But this isn't the main focus here.  I'll just
--- prove a few sound things to give an idea about what it's like.
-
--- A focused path is a path where every node is contained
--- within the set S.
-inductive focusedPath (g : Graph ℕ ℚ) (S : Set ℕ) : ℕ → ℕ → Prop where
-  | trivial {u : ℕ} :
-      u ∈ S → focusedPath g S u u
-  | from_path {u v w : ℕ} : 
-      focusedPath g S u v → g.hasEdge v w → w ∈ S → focusedPath g S u w
-
--- focusedPath is transitive
---------------------------------------------------------------------
-theorem focusedPath_trans {u v w : ℕ} (g : Graph ℕ ℚ) (A : Set ℕ) :
-  focusedPath g A u v → focusedPath g A v w → focusedPath g A u w := by
---------------------------------------------------------------------
-  intro (h₁ : focusedPath g A u v)
-  intro (h₂ : focusedPath g A v w)
-
-  induction h₂
-  case trivial _ => exact h₁
-  case from_path x y _ edge_xy hy path_ux => 
-    exact focusedPath.from_path path_ux edge_xy hy
-
--- focusedPath is contained in A
---------------------------------------------------------------------
-theorem focusedPath_subset {u v : ℕ} (g : Graph ℕ ℚ) (A : Set ℕ) :
-  focusedPath g A u v → u ∈ A := by
---------------------------------------------------------------------
-  intro h₁
-
-  induction h₁
-  case trivial hA => exact hA
-  case from_path _ _ _ _ _ hA => exact hA
-
--- This is the set of all nodes reachable from B using
--- paths where *every* node in the path is within A
--- (including the initial and final nodes)
-def reachable (net : BFNN) (A B : Set ℕ) : Set ℕ :=
-  fun (n : ℕ) =>
-    ∃ (m : ℕ), m ∈ B ∧ focusedPath net.graph A m n
-
--- Argument: If there is a path from B to n, but n is in
--- layer 0 -- there are *no* incoming nodes -- then the path
--- must be of length 0.  So n must be that n ∈ B with
--- a path to n, i.e. n ∈ B.
---------------------------------------------------------------------
-lemma reach_layer_zero (net : BFNN) : ∀ (A B : Set ℕ) (n : ℕ),
-  layer net n = 0
-  → n ∈ reachable net A B
-  → n ∈ B := by
---------------------------------------------------------------------
-  intro (A : Set ℕ)
-        (B : Set ℕ)
-        (n : ℕ) (hL : layer net n = 0)
-        (h₁ : n ∈ reachable net A B)
-  
-  match h₁ with
-  | ⟨m, h₂⟩ => 
-    -- By induction on the length of the path from B to n.
-    --   path length = 0 => m ∈ B means n ∈ B
-    --   path length ≥ 0 => this case should be impossible,
-    --                      because at layer 0 n has *no predecessors*! 
-    induction h₂.2
-    case trivial _ => exact h₂.1
-    case from_path x y _ edge_xy _ _ =>
-      -- Contradiction; y's layer is 0, but there is an edge from x to y!
-      -- (layer net x < layer net y, but that means layer net x < 0) 
-      have h₃ : layer net x < layer net y :=
-        preds_decreasing net x y ((edge_from_preds _ _ _).mpr edge_xy)
-      
-      exact absurd hL (Nat.not_eq_zero_of_lt h₃)
-
---------------------------------------------------------------------
-theorem reach_subset (net : BFNN) : ∀ (A B : Set ℕ),
-  reachable net A B ⊆ A := by
---------------------------------------------------------------------
-  intro (A : Set ℕ)
-        (B : Set ℕ)
-        (n : ℕ) (h₁ : n ∈ reachable net A B)
-  
-  simp only [Membership.mem, Set.Mem] at h₁
-  match h₁ with
-  | ⟨m, hm⟩ => 
-    induction hm.2
-    case trivial hbase => exact hbase
-    case from_path _ y _ _ hy _ => exact hy 
-
-
--- This is like propag_is_extens, except we also have to ensure
--- that n ∈ A.
---------------------------------------------------------------------
-theorem reach_is_extens (net : BFNN) : ∀ (A B : Set ℕ),
-  (A ∩ B) ⊆ reachable net A B := by
---------------------------------------------------------------------
-  intro (A : Set ℕ)
-        (B : Set ℕ)
-        (n : ℕ) (h₁ : n ∈ A ∩ B)
-
-  have (h₂ : focusedPath net.graph A n n) := 
-    focusedPath.trivial h₁.1
-  exact ⟨n, ⟨h₁.2, h₂⟩⟩
-
--- If A ∩ B is empty, then there are no nodes reachable
--- from B within A.
--- (This does *not* follow from [reach_is_extens]!)
---------------------------------------------------------------------
-theorem reach_empty_of_inter_empty (net : BFNN) : ∀ (A B : Set ℕ),
-  (A ∩ B) = ∅ → reachable net A B = ∅ := by
---------------------------------------------------------------------
-  intro A B
-  rw [← Set.not_nonempty_iff_eq_empty]
-  rw [← Set.not_nonempty_iff_eq_empty]
-  
-  -- Start a proof by contraposition, and simplify
-  contrapose
-  intro h₁
-  rw [Classical.not_not]
-  rw [Classical.not_not] at h₁
-
-  -- Since Reach(A, B) is nonempty, we have n ∈ Reach(A, B).
-  -- We argue that the m ∈ B that reaches n must be m ∈ A ∩ B.
-  match h₁ with
-  | ⟨n, hn⟩ => 
-    match hn with
-    | ⟨m, hm⟩ => 
-      -- m ∈ B is easy; we show inductively that m ∈ A as well.
-      induction hm.2
-      case trivial hmA => exact ⟨m, ⟨hmA, hm.1⟩⟩
-      case from_path x y path_mx _ _ IH => 
-        exact IH ⟨m, ⟨hm.1, path_mx⟩⟩ ⟨hm.1, path_mx⟩
-
-
---------------------------------------------------------------------
-theorem reach_is_idempotent (net : BFNN) : ∀ (A B : Set ℕ),
-  reachable net A B = reachable net A (reachable net A B) := by
---------------------------------------------------------------------
-  intro (A : Set ℕ)
-        (B : Set ℕ)
-  
-  exact Set.ext (fun (n : ℕ) =>
-    -- ⊆ direction; easy, just apply reach_subset and reach_is_extens
-    ⟨(fun (h₁ : n ∈ reachable net A B) => 
-      have h₂ : n ∈ A := reach_subset _ _ _ h₁
-      reach_is_extens _ _ _ ⟨h₂, h₁⟩),
-
-    -- ⊇ direction
-    (fun (h₁ : n ∈ reachable net A (reachable net A B)) =>
-      match h₁ with
-      | ⟨x, h₂⟩ => 
-        match h₂.1 with
-        | ⟨m, h₃⟩ =>
-          ⟨m, ⟨h₃.1, focusedPath_trans _ A h₃.2 h₂.2⟩⟩)⟩)
-
-
---------------------------------------------------------------------
-theorem reach_is_monotone (net : BFNN) : ∀ (S A B : Set ℕ),
-  A ⊆ B → reachable net S A ⊆ reachable net S B := by
---------------------------------------------------------------------
-  intro (S : Set ℕ)
-        (A : Set ℕ)
-        (B : Set ℕ)
-        (h₁ : A ⊆ B)
-        (n : ℕ) (h₂ : n ∈ reachable net S A)
-  
-  exact match h₂ with
-    | ⟨m, hm⟩ => ⟨m, ⟨h₁ hm.1, hm.2⟩⟩
-
-
--- Reach is closed under union
--- (This is really a consequence of monotonicity)
---------------------------------------------------------------------
-theorem reach_union (net : BFNN) : ∀ (S A B : Set ℕ),
-  reachable net S (A ∪ B) = (reachable net S A) ∪ (reachable net S B) := by
---------------------------------------------------------------------
-  intro S A B
-  apply ext
-  intro n
-  apply Iff.intro
-  
-  -- Backwards direction
-  -- (easy; A, B ⊆ A ∪ B, so we just apply monotonicity)
-  case mpr => 
-    intro h₁
-    cases h₁
-    case inl h₂ => exact reach_is_monotone _ _ _ _ (subset_union_left _ _) h₂
-    case inr h₂ => exact reach_is_monotone _ _ _ _ (subset_union_right _ _) h₂
-
-  -- Forward direction
-  case mp => 
-    intro h₁
-
-    -- We have a path from m ∈ A ∪ B to n;
-    -- from here we go by cases; either m ∈ A or m ∈ B.
-    -- In either case, the path from m ⟶ n gives us n ∈ Reach(_).
-    match h₁ with
-    | ⟨m, hm⟩ => 
-      cases hm.1
-      case inl h₂ => exact Or.inl ⟨m, ⟨h₂, hm.2⟩⟩
-      case inr h₂ => exact Or.inr ⟨m, ⟨h₂, hm.2⟩⟩
-
 
 /-══════════════════════════════════════════════════════════════════
   Reach-Prop Interaction Properties
 ══════════════════════════════════════════════════════════════════-/
 
 --------------------------------------------------------------------
-lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
+lemma minimal_cause_helper (net : Net) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
   n ∈ reachedby net B
   → (n ∈ propagate net A
   ↔ n ∈ propagate net (A ∩ reachedby net B)) := by
@@ -1502,7 +1337,7 @@ lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
           rw [symm hLm]
           apply Nat.lt_succ.mp
           rw [symm hL]
-          exact preds_decreasing net m n h₄
+          exact layer_preds net m n h₄
         have h₆ : m ∈ reachedby net B :=
           match h₁ with
           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩ -- (preds_path _ h₄)
@@ -1544,7 +1379,7 @@ lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
           rw [symm hLm]
           apply Nat.lt_succ.mp
           rw [symm hL]
-          exact preds_decreasing net m n h₄
+          exact layer_preds net m n h₄
         have h₆ : m ∈ reachedby net B :=
           match h₁ with
           | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩
@@ -1559,7 +1394,7 @@ lemma minimal_cause_helper (net : BFNN) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
 -- 
 -- (how should we interpret K↓???)
 --------------------------------------------------------------------
-theorem minimal_cause (net : BFNN) : ∀ (A B : Set ℕ),
+theorem minimal_cause (net : Net) : ∀ (A B : Set ℕ),
   B ⊆ propagate net A
   ↔ B ⊆ propagate net (A ∩ reachedby net B) := by
 --------------------------------------------------------------------
@@ -1614,7 +1449,7 @@ lemma map_edges_apply (g : Graph ℕ ℚ) (f : ℕ → ℕ → ℚ → ℚ) (m n
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by η * act(m) * act(n).
 noncomputable
-def graph_update (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
+def graph_update (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
   map_edges g (fun m n weight => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
@@ -1624,7 +1459,7 @@ def graph_update (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ 
 
 -- This graph update does not affect the vertices of the graph.
 --------------------------------------------------------------------
-lemma graph_update_vertices (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) :
+lemma graph_update_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
   (graph_update net g S).get_vertices = g.get_vertices := by
 --------------------------------------------------------------------
   simp only [graph_update, map_edges]
@@ -1637,7 +1472,7 @@ lemma graph_update_vertices (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) :
 -- This graph update does not affect the *successor/edge* structure
 -- of the graph (it only affects weights!!!)
 --------------------------------------------------------------------
-lemma graph_update_successors (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
+lemma graph_update_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
   -- Simplify definitions
@@ -1683,36 +1518,45 @@ lemma graph_update_successors (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) (n 
 
 -- This graph update preserves whether the graph is acyclic.
 --------------------------------------------------------------------
-lemma graph_update_acyclic (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) :
-  (graph_update net g S).is_acyclic ↔ g.is_acyclic := by
+lemma graph_update_acyclic (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
+  g.is_acyclic → (graph_update net g S).is_acyclic := by
 --------------------------------------------------------------------
   simp only [Graph.is_acyclic]
-  apply Iff.intro
+  intro g_acyclic
+  intro u v
+  intro path_uv
   
-  case mp => sorry
-  case mpr =>
-    intro g_acyclic
-    intro u v
-    intro path_uv
-    intro path_vu
+  -- We have a path in the updated graph from u to v
+  -- and another path from v to u.
+  -- We now need to show that u = v.
+  -- By induction on the length of this first path.
+  induction path_uv
+  case trivial => 
+    simp only [graph_update]
+    sorry
 
-    -- We have a path in the updated graph from u to v
-    -- and another path from v to u.
-    -- We now need to show that u = v.
-    -- By induction on the length of this first path.
-    induction path_uv
-    case trivial => exact rfl
-    case from_path x y path_ux edge_xy IH => 
-      sorry
+  case from_path x y path_ux edge_xy IH => sorry
+
+
+-- This graph update preserves whether the graph is connected.
+--------------------------------------------------------------------
+lemma graph_update_connected (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
+  g.is_connected → (graph_update net g S).is_connected := by
+--------------------------------------------------------------------
+  sorry
 
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
 -- of all the edges x₁ ⟶ x₂ involved in that propagation
 -- by η * x₁ * x₂.
 noncomputable
-def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
+def hebb (net : Net) (S : Set ℕ) : Net :=
 { net with
   graph := graph_update net net.graph S
+
+  -- We need to check that this new net is still acyclic and connected.
+  acyclic := graph_update_acyclic _ _ _ net.acyclic
+  connected := graph_update_connected _ _ _ net.connected
 }
 
 
@@ -1720,20 +1564,10 @@ def hebb (net : BFNN) (S : Set ℕ) : BFNN :=
   Properties of Single-Iteration Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- First, we check that a single round of hebb preserves whether
--- the graph is acyclic. (This is a rehash of graph_update_acyclic,
--- but it helps to write it out so we can lift it later to hebb_star.)
---------------------------------------------------------------------
-lemma hebb_once_acyclic (net : BFNN) (S : Set ℕ) : 
-  (hebb net S).graph.is_acyclic = net.graph.is_acyclic := by
---------------------------------------------------------------------
-  simp only [hebb]
-  rw [graph_update_acyclic]
-
 -- A single round of Hebbian update does not affect the vertices
 -- of the graph.
 --------------------------------------------------------------------
-theorem hebb_once_vertices (net : BFNN) (S : Set ℕ) : 
+theorem hebb_once_vertices (net : Net) (S : Set ℕ) : 
   (hebb net S).graph.get_vertices = net.graph.get_vertices := by
 --------------------------------------------------------------------
   simp only [hebb]
@@ -1744,7 +1578,7 @@ theorem hebb_once_vertices (net : BFNN) (S : Set ℕ) :
 -- does not affect the vertices of the graph, or the successor
 -- structure of the graph.
 --------------------------------------------------------------------
-theorem hebb_once_preds (net : BFNN) (S : Set ℕ) (n : ℕ) : 
+theorem hebb_once_preds (net : Net) (S : Set ℕ) (n : ℕ) : 
   preds (hebb net S) n = preds net n := by
 --------------------------------------------------------------------
   simp only [preds, hebb]
@@ -1764,16 +1598,18 @@ theorem hebb_once_preds (net : BFNN) (S : Set ℕ) (n : ℕ) :
 -- A single round of Hebbian update hebb does not affect which 
 -- neurons are on which layer of the net.
 --------------------------------------------------------------------
-theorem hebb_once_layers (net : BFNN) (S : Set ℕ) : 
+theorem hebb_once_layers (net : Net) (S : Set ℕ) : 
   layer (hebb net S) n = layer net n := by
 --------------------------------------------------------------------
+  sorry
+  /-
   simp only [layer]
   rw [hebb_once_vertices net S] -- vertices are the same
 
   -- By induction on the reverse of the graph's vertex list
   -- (We are looking at vertices backwards -- each
   --  vertex can only "see" the vertices preceding it.)
-  induction List.reverse (Graph.get_vertices net.toNet.graph) generalizing n
+  induction List.reverse (Graph.get_vertices net.graph) generalizing n
   case nil => 
     simp only [layer_acc]
   case cons v rest IH => 
@@ -1796,11 +1632,12 @@ theorem hebb_once_layers (net : BFNN) (S : Set ℕ) :
       rw [if_neg h]
       rw [if_neg h]
       exact IH
+  -/
 
 -- A single round of Hebbian update hebb does not affect the 
 -- activation function.
 --------------------------------------------------------------------
-theorem hebb_once_activation (net : BFNN) (S : Set ℕ) : 
+theorem hebb_once_activation (net : Net) (S : Set ℕ) : 
   (hebb net S).activation = net.activation := by 
 --------------------------------------------------------------------
   exact rfl
@@ -1808,33 +1645,31 @@ theorem hebb_once_activation (net : BFNN) (S : Set ℕ) :
 -- A single round of Hebbian update hebb does not affect graph 
 -- reachability (It only affects the edge weights)
 --------------------------------------------------------------------
-theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) : 
-  reachable (hebb net A) A B = reachable net A B := by 
+theorem hebb_once_reach (net : Net) (B : Set ℕ) : 
+  reachable (hebb net A) B = reachable net B := by 
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
-  -- simp only [reachable]
   
   apply Iff.intro
   case mp => 
     intro h₁
 
-    -- There is some m with focused path from m to n in the *updated* net
+    -- There is some m with path from m to n in the *updated* net
     match h₁ with
     | ⟨m, hm⟩ =>
       induction hm.2
-      case trivial hma => exact reach_is_extens _ _ _ ⟨hma, hm.1⟩
-      case from_path x y path_mx edge_xy hy IH =>
-        -- First, apply our IH to get x ∈ Reach(A, B)
-        have h₂ : x ∈ reachable (hebb net A) A B := ⟨m, ⟨hm.1, path_mx⟩⟩
-        have h₃ : x ∈ reachable net A B := IH h₂ ⟨hm.1, path_mx⟩
+      case trivial hma => exact reach_is_extens _ _ hm.1
+      case from_path x y path_mx edge_xy IH =>
+        -- First, apply our IH to get x ∈ Reach(B)
+        have h₂ : x ∈ reachable (hebb net A) B := ⟨m, ⟨hm.1, path_mx⟩⟩
+        have h₃ : x ∈ reachable net B := IH h₂ ⟨hm.1, path_mx⟩
 
-        -- So there is some u ∈ B with focused path from u to x
-        -- (in the *original* net)
-        -- We extend this path with the edge from x to y.
+        -- So there is some u ∈ B with path from u to x (in the 
+        -- *original* net).  We extend this path with the edge 
+        -- from x to y.
         match h₃ with
         | ⟨u, hu⟩ =>
-
           -- We have an edge from x to y in the *updated* net,
           -- but we have to bring it down to the *original* net.
           have h₄ : Graph.hasEdge net.graph x y = true := by
@@ -1842,45 +1677,44 @@ theorem hebb_once_reach (net : BFNN) (A B : Set ℕ) :
             rw [← edge_from_preds] at edge_xy
             convert edge_xy using 1
             exact symm (hebb_once_preds _ _ _)
-
-          exact ⟨u, ⟨hu.1, (focusedPath.from_path hu.2 h₄ hy)⟩⟩
+          
+          exact ⟨u, ⟨hu.1, (Path.from_path hu.2 h₄)⟩⟩
 
   -- This direction is very similar.
   case mpr => 
     intro h₁
 
-    -- There is some m with focused path from m to n in the *original* net
+    -- There is some m with path from m to n in the *original* net
     match h₁ with
     | ⟨m, hm⟩ =>
       induction hm.2
-      case trivial hma => exact reach_is_extens _ _ _ ⟨hma, hm.1⟩
-      case from_path x y path_mx edge_xy hy IH =>
-        -- First, apply our IH to get x ∈ Reach(A, B)
-        have h₂ : x ∈ reachable net A B := ⟨m, ⟨hm.1, path_mx⟩⟩
-        have h₃ : x ∈ reachable (hebb net A) A B := IH h₂ ⟨hm.1, path_mx⟩
-        
-        -- So there is some u ∈ B with focused path from u to x
-        -- (in the *updated* net)
-        -- We extend this path with the edge from x to y.
+      case trivial hma => exact reach_is_extens _ _ hm.1
+      case from_path x y path_mx edge_xy IH =>
+        -- First, apply our IH to get x ∈ Reach(B)
+        have h₂ : x ∈ reachable net B := ⟨m, ⟨hm.1, path_mx⟩⟩
+        have h₃ : x ∈ reachable (hebb net A) B := IH h₂ ⟨hm.1, path_mx⟩
+
+        -- So there is some u ∈ B with path from u to x (in the 
+        -- *original* net).  We extend this path with the edge 
+        -- from x to y.
         match h₃ with
         | ⟨u, hu⟩ =>
-
-          -- We have an edge from x to y in the *original* net,
-          -- but we have to bring it down to the *updated* net.
+          -- We have an edge from x to y in the *updated* net,
+          -- but we have to bring it down to the *original* net.
           have h₄ : Graph.hasEdge (hebb net A).graph x y = true := by
             rw [← edge_from_preds]
             rw [← edge_from_preds] at edge_xy
             convert edge_xy using 1
             exact hebb_once_preds _ _ _
-            
-          exact ⟨u, ⟨hu.1, (focusedPath.from_path hu.2 h₄ hy)⟩⟩
+          
+          exact ⟨u, ⟨hu.1, (Path.from_path hu.2 h₄)⟩⟩
 
 -- If m ∉ Prop(A) or n ∉ Prop(A), then the weight of m ⟶ n in 
 -- the *once* updated net is the same as in the original net.
 --------------------------------------------------------------------
-theorem hebb_once_weights_eq (net : BFNN) :
+theorem hebb_once_weights_eq (net : Net) :
   (m ∉ propagate net A ∨ n ∉ propagate net A)
-  → (hebb net A).toNet.graph.getEdgeWeight m n =
+  → (hebb net A).graph.getEdgeWeight m n =
     net.graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
   intro h₁
@@ -1901,9 +1735,9 @@ theorem hebb_once_weights_eq (net : BFNN) :
 -- The weights of the new net are nondecreasing
 -- (One round of Hebbian update can only increase the weights)
 --------------------------------------------------------------------
-theorem hebb_once_weights_le (net : BFNN) :
+theorem hebb_once_weights_le (net : Net) :
   net.graph.getEdgeWeight m n ≤ 
-  (hebb net A).toNet.graph.getEdgeWeight m n := by
+  (hebb net A).graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
   simp only [hebb, graph_update]
 
@@ -1938,7 +1772,7 @@ case inr h₂ =>
 -- to activate (in the worst case where all of its negative signals
 -- activate but none of its positive ones do).  If a neuron has
 -- no negative incoming weights, we give it a score of 0.
-def neg_weight_score (net : BFNN) (n : ℕ) : ℚ :=
+def neg_weight_score (net : Net) (n : ℕ) : ℚ :=
   List.foldr (· + ·) 0 (List.map (fun m => 
     if net.graph.getEdgeWeight m n < 0 then 
       net.graph.getEdgeWeight m n
@@ -1947,7 +1781,7 @@ def neg_weight_score (net : BFNN) (n : ℕ) : ℚ :=
 
 
 -- NOTE: If there are no nodes to score, a value of 0 is fine.
-def min_score (net : BFNN) : WithTop ℚ :=
+def min_score (net : Net) : WithTop ℚ :=
   let scores := List.map (fun n => neg_weight_score net n) net.graph.get_vertices
   scores.minimum
 
@@ -1956,7 +1790,7 @@ def min_score (net : BFNN) : WithTop ℚ :=
 -- any possible weighted sum over activated predecessors of n.
 -- (i.e. no matter what the activation list 'x' is.)
 --------------------------------------------------------------------
-lemma neg_weight_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
+lemma neg_weight_score_le (net : Net) (n : ℕ) (fx₁ : ℕ → Bool) :
   let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
   let w : List ℚ := List.map (fun m => 
     Graph.getEdgeWeight net.graph m n) (preds net n)
@@ -2021,7 +1855,7 @@ lemma neg_weight_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
 -- The *minimum* score is smaller than any possible weighted sum
 -- (over activated predecessors of n) *for all n*.
 --------------------------------------------------------------------
-lemma min_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
+lemma min_score_le (net : Net) (n : ℕ) (fx₁ : ℕ → Bool) :
   let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
   let w : List ℚ := List.map (fun m => 
     Graph.getEdgeWeight net.graph m n) (preds net n)
@@ -2056,7 +1890,7 @@ lemma min_score_le (net : BFNN) (n : ℕ) (fx₁ : ℕ → Bool) :
 -- (X - n_score) / η   *(I think!)*
 -- UPDATE: we can iterate a different number of times
 -- FOR EACH m, n!  So we should take the *max* of all these!
-def no_times (net : BFNN) (S : Set ℕ) : ℕ :=
+def no_times (net : Net) (S : Set ℕ) : ℕ :=
   -- mcs is the "max composite score"
   let (comp_scores : List ℚ) := sorry
     -- net.active_input - sorry
@@ -2082,7 +1916,7 @@ def no_times (net : BFNN) (S : Set ℕ) : ℕ :=
   -- let n_score := sorry
   -- sorry
 
-lemma no_times_pos (net : BFNN) (S : Set ℕ) :
+lemma no_times_pos (net : Net) (S : Set ℕ) :
   0 < no_times net S := by
   sorry
 
@@ -2090,7 +1924,7 @@ lemma no_times_pos (net : BFNN) (S : Set ℕ) :
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by (no_times) * η * act(m) * act(n).
 noncomputable
-def graph_update_star (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
+def graph_update_star (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
   map_edges g (fun m n weight => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
@@ -2112,9 +1946,15 @@ def graph_update_star (net : BFNN) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ
 -- 
 -- FUTURE: Consider re-doing this using limits of graphs/categories
 noncomputable
-def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
+def hebb_star (net : Net) (S : Set ℕ) : Net :=
 { net with
   graph := graph_update_star net net.graph S
+  
+  -- We need to check that this new net is still acyclic and connected.
+  acyclic := by
+    sorry
+  connected := by
+    sorry
 }
 
 
@@ -2126,7 +1966,7 @@ def hebb_star (net : BFNN) (S : Set ℕ) : BFNN :=
 -- to hebb_star.  (This holds *because* hebb_star is the fixed point
 -- of hebb.)
 --------------------------------------------------------------------
-theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) : 
+theorem hebb_lift (net : Net) (S : Set ℕ) (P : Net → α) : 
   (P (hebb net S) = P net)
   → (P (hebb_star net S) = P net) := by
 --------------------------------------------------------------------
@@ -2156,19 +1996,9 @@ theorem hebb_lift (net : BFNN) (S : Set ℕ) (P : BFNN → α) :
     -- sorry
     
 
-
--- Hebbian update hebb_star preserves the acyclicness of the graph.
--- (So the updated net is still acyclic.)
--- [LIFTED from hebb_once_acyclic]
---------------------------------------------------------------------
-lemma hebb_acyclic (net : BFNN) (S : Set ℕ) : 
-  (hebb_star net S).graph.is_acyclic = net.graph.is_acyclic := by
---------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => x.graph.is_acyclic) (hebb_once_acyclic _ _)
-
 -- Hebbian update hebb_star does not affect the vertices of the graph.
 --------------------------------------------------------------------
-theorem hebb_vertices (net : BFNN) (S : Set ℕ) : 
+theorem hebb_vertices (net : Net) (S : Set ℕ) : 
   (hebb_star net S).graph.get_vertices = net.graph.get_vertices := by
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => x.graph.get_vertices) (hebb_once_vertices _ _)
@@ -2177,7 +2007,7 @@ theorem hebb_vertices (net : BFNN) (S : Set ℕ) :
 -- of any node.
 -- [LIFTED from hebb_once_preds]
 --------------------------------------------------------------------
-theorem hebb_preds (net : BFNN) (S : Set ℕ) : 
+theorem hebb_preds (net : Net) (S : Set ℕ) : 
   preds (hebb_star net S) n = preds net n := by
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => preds x n) (hebb_once_preds _ _ _)
@@ -2186,7 +2016,7 @@ theorem hebb_preds (net : BFNN) (S : Set ℕ) :
 -- on which layer of the net.
 -- [LIFTED from hebb_once_layers]
 --------------------------------------------------------------------
-theorem hebb_layers (net : BFNN) (S : Set ℕ) : 
+theorem hebb_layers (net : Net) (S : Set ℕ) : 
   layer (hebb_star net S) n = layer net n := by
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => layer x n) (hebb_once_layers _ _)
@@ -2194,7 +2024,7 @@ theorem hebb_layers (net : BFNN) (S : Set ℕ) :
 -- Hebbian update hebb_star does not affect the activation function.
 -- [LIFTED from hebb_once_activation]
 --------------------------------------------------------------------
-theorem hebb_activation (net : BFNN) (S : Set ℕ) : 
+theorem hebb_activation (net : Net) (S : Set ℕ) : 
   (hebb_star net S).activation = net.activation := by 
 --------------------------------------------------------------------
   exact hebb_lift _ _ (fun x => x.activation) (hebb_once_activation _ _)
@@ -2203,11 +2033,11 @@ theorem hebb_activation (net : BFNN) (S : Set ℕ) :
 -- (It only affects the edge weights)
 -- -- [LIFTED from hebb_once_reach]
 --------------------------------------------------------------------
-theorem hebb_reach (net : BFNN) (A B : Set ℕ) : 
-  reachable (hebb_star net A) A B = 
-    reachable net A B := by 
+theorem hebb_reach (net : Net) (B : Set ℕ) : 
+  reachable (hebb_star net A) B = 
+    reachable net B := by 
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => reachable x A B) (hebb_once_reach _ _ _)
+  exact hebb_lift _ _ (fun x => reachable x B) (hebb_once_reach _ _)
 
 
 -- If m ∉ Prop(A) or n ∉ Prop(A), then the edge m ⟶ n was not
@@ -2215,13 +2045,13 @@ theorem hebb_reach (net : BFNN) (A B : Set ℕ) :
 -- net is the same as its weight in the original net.
 -- Lifted from hebb_once_weights
 --------------------------------------------------------------------
-theorem hebb_weights_eq (net : BFNN) : 
+theorem hebb_weights_eq (net : Net) : 
   (m ∉ propagate net A ∨ n ∉ propagate net A)
-  → ((hebb_star net A).toNet.graph.getEdgeWeight m n =
+  → ((hebb_star net A).graph.getEdgeWeight m n =
     net.graph.getEdgeWeight m n) := by
 --------------------------------------------------------------------
   intro h₁
-  exact hebb_lift _ _ (fun x => x.toNet.graph.getEdgeWeight m n) 
+  exact hebb_lift _ _ (fun x => x.graph.getEdgeWeight m n) 
     (hebb_once_weights_eq _ h₁)
 
  
@@ -2230,9 +2060,9 @@ theorem hebb_weights_eq (net : BFNN) :
 -- Note that we *cannot* lift this property straightforwardly,
 -- since it's an inequality.
 --------------------------------------------------------------------
-theorem hebb_weights_le (net : BFNN) :
+theorem hebb_weights_le (net : Net) :
   net.graph.getEdgeWeight m n ≤ 
-  (hebb_star net A).toNet.graph.getEdgeWeight m n := by
+  (hebb_star net A).graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
   simp only [hebb_star]
   generalize hpt : (no_times net A) = pt
@@ -2254,7 +2084,7 @@ theorem hebb_weights_le (net : BFNN) :
 -- The lemma for 'activ' and 'hebb', essentially:
 -- activ net prev_activ n  ⟶  activ (hebb_star net A) prev_activ n
 --------------------------------------------------------------------
-lemma hebb_activ_nondecreasing (net : BFNN) (A S : Set ℕ) (n : ℕ) :
+lemma hebb_activ_nondecreasing (net : Net) (A S : Set ℕ) (n : ℕ) :
   activ net (List.map (fun i => 
       let m := (preds net n).get! i
       if S m then 1 else 0) 
@@ -2288,7 +2118,7 @@ lemma hebb_activ_nondecreasing (net : BFNN) (A S : Set ℕ) (n : ℕ) :
 
 -- If n ∉ Prop(A), then activ (hebb_star net A) _ n = activ net _ n.
 --------------------------------------------------------------------
-theorem hebb_activ_equal₁ (net : BFNN) (A : Set ℕ) (prev_activ : List ℚ) :
+theorem hebb_activ_equal₁ (net : Net) (A : Set ℕ) (prev_activ : List ℚ) :
   n ∉ propagate net A
   → (activ (hebb_star net A) prev_activ n ↔ activ net prev_activ n) := by
 --------------------------------------------------------------------
@@ -2307,19 +2137,19 @@ theorem hebb_activ_equal₁ (net : BFNN) (A : Set ℕ) (prev_activ : List ℚ) :
 -- Like activ_agree, we have to simplify the statement of this
 -- lemma in order for Lean to be able to infer types efficiently.
 --------------------------------------------------------------------
-theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
+theorem hebb_activ_equal₂ (net : Net) (A S : Set ℕ) :
   (∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net S))
 
   → (activ (hebb_star net A) (List.map (fun i => 
-      if propagate_acc net S ((Graph.predecessors net.toNet.graph n).get! i) 
-        (layer net ((Graph.predecessors net.toNet.graph n).get! i)) 
+      if propagate_acc net S ((Graph.predecessors net.graph n).get! i) 
+        (layer net ((Graph.predecessors net.graph n).get! i)) 
       then 1 else 0) 
-        (List.range (Graph.predecessors net.toNet.graph n).length)) n
+        (List.range (Graph.predecessors net.graph n).length)) n
   ↔ activ net (List.map (fun i =>
-      if propagate_acc net S ((Graph.predecessors net.toNet.graph n).get! i) 
-        (layer net ((Graph.predecessors net.toNet.graph n).get! i)) 
+      if propagate_acc net S ((Graph.predecessors net.graph n).get! i) 
+        (layer net ((Graph.predecessors net.graph n).get! i)) 
       then 1 else 0) 
-        (List.range (Graph.predecessors net.toNet.graph n).length)) n) := by
+        (List.range (Graph.predecessors net.graph n).length)) n) := by
 --------------------------------------------------------------------
   intro h₁
   apply Eq.to_iff
@@ -2328,13 +2158,13 @@ theorem hebb_activ_equal₂ (net : BFNN) (A S : Set ℕ) :
   simp only [activ]
   rw [hebb_activation net A]
   rw [hebb_preds net A]
-  apply congr_arg (fun x => Net.activation net.toNet x = 1)
+  apply congr_arg (fun x => net.activation x = 1)
 
   -- The weighted sums are equal, ∑ w₁ x₁ = ∑ w₂ x₂,
   -- if all of their entries are equal, w₁ᵢ * x₁ᵢ = w₂ᵢ * x₂ᵢ
   apply weighted_sum_eq
   intro i
-  generalize hm : List.get! (Graph.predecessors net.toNet.graph n) i = m
+  generalize hm : List.get! (Graph.predecessors net.graph n) i = m
 
   -- We have two cases;
   by_cases m ∈ propagate net S
@@ -2404,7 +2234,7 @@ n ∈ Prop$(B)
 -- -- if m is activated in (hebb_star net) then n is too
 -- -- (the activation automatically goes through in (hebb_star net))
 --------------------------------------------------------------------
-theorem hebb_activated_by (net : BFNN) (A B : Set ℕ) :
+theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
   let preds := preds net n
   let prev_activ := List.map (fun i => 
     let m := preds.get! i
@@ -2436,7 +2266,7 @@ theorem hebb_activated_by (net : BFNN) (A B : Set ℕ) :
 
   -- match net.activ_pos with
   -- | ⟨t, ht⟩ => 
-  apply activation_from_inequality _ (net.active_input) _ _ (net.activ_pos)
+  apply activation_from_inequality _ (net.threshold) _ _ (net.activ_thres)
   apply net.activ_nondecr _ _
   
   sorry
@@ -2449,7 +2279,7 @@ theorem hebb_activated_by (net : BFNN) (A B : Set ℕ) :
 -- don't touch Prop(A) ∩ Prop(B), then n is activated in the
 -- updated net iff it was in the original net.
 --------------------------------------------------------------------
-lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
+lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
   (∀ x, layer net x < layer net n → x ∉ propagate net A ∩ propagate net B) 
   → (n ∈ propagate (hebb_star net A) B ↔ n ∈ propagate net B) := by
 --------------------------------------------------------------------
@@ -2495,7 +2325,7 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         -- in particular this holds for n's predecessors.
         have h₃ : ∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net B) := by
           intro x hx
-          exact h₁ _ (preds_decreasing _ _ _ hx)
+          exact h₁ _ (layer_preds _ _ _ hx)
 
         rw [hebb_layers] at h₂
         rw [hL] at h₂
@@ -2510,7 +2340,7 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         -- We write down the usual lemmas for 'm', but we don't
         -- know what the index 'i' is we're grabbing yet.  So
         -- we write these for all i.
-        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m at h₂
+        generalize hm : List.get! (Graph.predecessors net.graph n) = m at h₂
         
         have h₄ : ∀ i, (m i) ∈ preds net n := by
           intro i
@@ -2522,12 +2352,12 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
           intro i
           apply Nat.lt_succ.mp
           rw [symm hL]
-          exact preds_decreasing net (m i) n (h₄ i)
+          exact layer_preds net (m i) n (h₄ i)
         
         have h₆ : ∀ (i x : ℕ), layer net x < layer net (m i) 
           → ¬x ∈ propagate net A ∩ propagate net B := by
           intro i x hx
-          exact h₁ _ (lt_trans hx (preds_decreasing _ _ _ (h₄ i)))
+          exact h₁ _ (lt_trans hx (layer_preds _ _ _ (h₄ i)))
 
         -- Go into h₂ and apply our inductive hypothesis
         conv at h₂ =>
@@ -2558,7 +2388,7 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         -- in particular this holds for n's predecessors.
         have h₃ : ∀ x, x ∈ (preds net n) → x ∉ (propagate net A) ∩ (propagate net B) := by
           intro x hx
-          exact h₁ _ (preds_decreasing _ _ _ hx)
+          exact h₁ _ (layer_preds _ _ _ hx)
 
         rw [hebb_layers]
         rw [hL]
@@ -2572,7 +2402,7 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
         -- We write down the usual lemmas for 'm', but we don't
         -- know what the index 'i' is we're grabbing yet.  So
         -- we write these for all i.
-        generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m
+        generalize hm : List.get! (Graph.predecessors net.graph n) = m
         
         
         have h₄ : ∀ i, (m i) ∈ preds net n := by
@@ -2585,12 +2415,12 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
           intro i
           apply Nat.lt_succ.mp
           rw [symm hL]
-          exact preds_decreasing net (m i) n (h₄ i)
+          exact layer_preds net (m i) n (h₄ i)
         
         have h₆ : ∀ (i x : ℕ), layer net x < layer net (m i) 
           → ¬x ∈ propagate net A ∩ propagate net B := by
           intro i x hx
-          exact h₁ _ (lt_trans hx (preds_decreasing _ _ _ (h₄ i)))
+          exact h₁ _ (lt_trans hx (layer_preds _ _ _ (h₄ i)))
 
         -- Go into the goal and apply our inductive hypothesis
         conv =>
@@ -2606,7 +2436,7 @@ lemma hebb_before_intersection (net : BFNN) (A B : Set ℕ) (n : ℕ) :
 
 -- The updated propagation at least contains Prop(A) ∩ Prop(B).
 --------------------------------------------------------------------
-theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
+theorem hebb_extens (net : Net) (A B : Set ℕ) :
   propagate net A ∩ propagate net B 
   ⊆ propagate (hebb_star net A) B := by
 --------------------------------------------------------------------
@@ -2669,14 +2499,14 @@ theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
         -- to get an edge m⟶n.
         have h₃ : m ∈ preds net n := by
           rw [edge_from_preds]
-          exact connected _ m n h₂
+          exact layer_connected _ m n h₂
         
         -- We apply our IH to m
         rw [← hS] at hm
         have h₄ : layer net m ≤ L := by
           apply Nat.lt_succ.mp
           rw [symm hL]
-          exact preds_decreasing net m n h₃
+          exact layer_preds net m n h₃
         have h₅ : m ∈ propagate (hebb_star net A) B :=
           IH _ h₄ hm.1 rfl
 
@@ -2712,8 +2542,8 @@ theorem hebb_extens (net : BFNN) (A B : Set ℕ) :
 -- This is the key lemma for the backwards direction of the 
 -- reduction; it expresses an upper bound for Reach(Prop(A), Prop(B))
 --------------------------------------------------------------------
-theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
-  reachable net (propagate net A) (propagate net B)
+theorem hebb_updated_path (net : Net) (A B : Set ℕ) :
+  propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B))
   ⊆ propagate (hebb_star net A) B := by
 --------------------------------------------------------------------
   intro (n : ℕ)
@@ -2728,36 +2558,35 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
   --------------------------------
   -- Easy; at layer zero, show that B = B.
   case hz =>
-    have h₂ : n ∈ propagate net B :=
-      reach_layer_zero _ _ _ _ hL h₁
-
-    simp only [Membership.mem, Set.Mem, propagate]
-    simp only [Membership.mem, Set.Mem, propagate] at h₂
-    rw [hebb_layers net A]
-    rw [hL]
-    rw [hL] at h₂
-    simp only [propagate_acc]
-    simp only [propagate_acc] at h₂
-    exact h₂
+    have h₂ : n ∈ (propagate net A) ∩ (propagate net B) :=
+      reach_layer_zero _ _ _ hL h₁.2
     
+    exact hebb_extens _ _ _ h₂
+
   --------------------------------
   -- Inductive Step
   --------------------------------
   case hi L IH₁ => 
     -- We have a path from Prop(B) to n, going through Prop(A).
-    match h₁ with
+    match h₁.2 with
     | ⟨m, hm⟩ => 
       -- By induction on the length of this path
       induction hm.2
 
-      case trivial hmA => exact hebb_extens _ _ _ ⟨hmA, hm.1⟩
-      case from_path x y path_mx edge_xy hy _ => 
+      case trivial => exact hebb_extens _ _ _ hm.1
+      case from_path x y path_mx edge_xy _ => 
         -- Split by whether y ∈ B in order to simplify propagate_acc
-        by_cases y ∈ propagate net B
-        case pos => exact hebb_extens _ _ _ ⟨hy, h⟩
+        by_cases y ∈ (propagate net B)
+        case pos => exact hebb_extens _ _ _ ⟨h₁.1, h⟩
         case neg =>
-          have y_not_in_B : y ∉ B := fun h_contr => 
-            absurd (propagate_is_extens _ _ h_contr) h
+          have m_not_eq_y : m ≠ y := by
+            intro hcontr
+            rw [← hcontr] at h
+            exact absurd hm.1.2 h
+            -- exact absurd hm.1.2 sorry
+          have y_not_in_B : y ∉ B := by
+            intro hcontr
+            exact absurd (propagate_is_extens _ _ hcontr) h
 
           -- Simplifications and rewriting
           simp only [propagate, Membership.mem, Set.Mem]
@@ -2767,36 +2596,39 @@ theorem hebb_updated_path (net : BFNN) (A B : Set ℕ) :
           rw [hebb_preds]
           simp
 
-          -- Apply our inductive hypothesis: x ∈ Prop(B) in (hebb_star net) 
-          have hpreds : x ∈ preds net y := (edge_from_preds _ _ _).mpr edge_xy
-          have hpred_dec : layer net x ≤ L := 
-            (Nat.lt_succ).mp (lt_of_lt_of_eq (preds_decreasing _ _ _ hpreds) hL)
-          have hx_reachable : x ∈ reachable net (propagate net A) (propagate net B) :=
-            ⟨m, ⟨hm.1, path_mx⟩⟩
-          have hx_propA : x ∈ propagate net A := 
-            reach_subset _ _ _ hx_reachable
-          have hx_propB : x ∈ propagate (hebb_star net A) B := 
-            IH₁ (layer net x) hpred_dec hx_reachable rfl
+          -- THIS IS A CRUCIAL STEP; it depends on the net being fully connected.
+          -- Since we have a path from m ⟶ ... ⟶ y, and the net is 
+          -- fully connected, we actually have a single edge m ⟶ y.
+          have edge_my : net.graph.hasEdge m y := 
+            Path_edge _ (Path.from_path path_mx edge_xy) m_not_eq_y
+          have hpreds : m ∈ preds net y := 
+            (edge_from_preds _ _ _).mpr edge_my
+          have hpred_dec : layer net m ≤ L := 
+            (Nat.lt_succ).mp (lt_of_lt_of_eq (layer_preds _ _ _ hpreds) hL)
+          have hm_reachable : m ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
+            ⟨hm.1.1, ⟨m, ⟨hm.1, Path.trivial⟩⟩⟩
+          have hm_propB : m ∈ propagate (hebb_star net A) B := 
+            IH₁ (layer net m) hpred_dec hm_reachable rfl
           
           -- Apply simp_hebb_activ₃, which says:
-          --  x, y ∈ Prop(A)
-          --  There's an edge from x ⟶ y
-          --  x ∈ Prop(B) in (hebb_star net)
+          --  m, y ∈ Prop(A)
+          --  There's an edge from m ⟶ y
+          --  m ∈ Prop(B) in (hebb_star net)
           --  -------------------------------
           --  y is activ in hebb_star net
-          exact hebb_activated_by net A B hy ⟨hpreds, hx_propA⟩ hx_propB
+          exact hebb_activated_by net A B h₁.1 ⟨hpreds, hm_reachable.1⟩ hm_propB
 
 
 -- Complementary to [hebb_updated_path]:
---     Reach(Prop(A), Prop(B)) ⊆ Prop*(B)
+--     Prop(A) ∩ Reach(Prop(A) ∩ B) ⊆ Prop*(B)
 -- we have
---     Prop(A) ∩ Prop*(B) ⊆ Reach(Prop(A), Prop(B)).
+--     Prop(A) ∩ Prop*(B) ⊆ Prop(A) ∩ Reach(Prop(A) ∩ B).
 -- This is the key lemma for the forward direction of the reduction;
--- it expresses a lower bound for Reach(Prop(A), Prop(B)).
+-- it expresses a lower bound for Prop(A) ∩ Reach(Prop(A) ∩ B).
 --------------------------------------------------------------------
-theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
+theorem reach_of_hebb_prop (net : Net) (A B : Set ℕ) :
   propagate net A ∩ propagate (hebb_star net A) B
-  ⊆ reachable net (propagate net A) (propagate net B) := by
+  ⊆ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) := by
 --------------------------------------------------------------------
   intro n h₁
 
@@ -2814,9 +2646,10 @@ theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
     rw [hebb_layers] at h₁
     rw [hL] at h₁
     simp only [propagate_acc] at h₁
-      
-    exact reach_is_extens _ _ _ 
-      ⟨propagate_is_extens _ _ h₁.1, propagate_is_extens _ _ h₁.2⟩
+    
+    exact ⟨propagate_is_extens _ _ h₁.1, 
+           reach_is_extens _ _ 
+            ⟨propagate_is_extens _ _ h₁.1, propagate_is_extens _ _ h₁.2⟩⟩
 
   --------------------------------
   -- Inductive Step
@@ -2824,10 +2657,7 @@ theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
   case hi L IH => 
     -- First, we case on n ∈ B to simplify propagate_acc.
     by_cases n ∈ B
-    case pos => 
-      exact reach_is_extens _ _ _ 
-        ⟨h₁.1, propagate_is_extens _ _ h⟩
-      
+    case pos => exact ⟨h₁.1, reach_is_extens _ _ ⟨h₁.1, propagate_is_extens _ _ h⟩⟩
     case neg => 
       -- By the well-ordering principle, let m be the node
       -- in Prop(A) ∩ Prop*(B) with the *smallest layer*
@@ -2858,9 +2688,9 @@ theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
         -- to get an edge m⟶n.
         have h₃ : m ∈ preds net n := by
           rw [edge_from_preds]
-          exact connected _ m n h₂
+          exact layer_connected _ m n h₂
 
-        have hedge : Graph.hasEdge net.toNet.graph m n :=
+        have hedge : Graph.hasEdge net.graph m n :=
               (edge_from_preds _ _ _).mp h₃
         
         -- We apply our IH to m
@@ -2868,15 +2698,16 @@ theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
         have h₄ : layer net m ≤ L := by
           apply Nat.lt_succ.mp
           rw [symm hL]
-          exact preds_decreasing net m n h₃
-        have h₅ : m ∈ reachable net (propagate net A) (propagate net B) :=
+          exact layer_preds net m n h₃
+        have h₅ : m ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
           IH _ h₄ hm.1 rfl
 
-        -- n is reachable from the same x ∈ Prop(A) ∩ Prop(B)
+        -- n is reachable from the same x ∈ Prop(A) ∩ B
         -- that m is reachable by.
         rw [← hS] at hn
-        match h₅ with
-        | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, focusedPath.from_path hx.2 hedge hn.1⟩⟩
+        match h₅.2 with
+        | ⟨x, hx⟩ => 
+          exact ⟨hn.1, ⟨x, ⟨hx.1, Path.from_path hx.2 hedge⟩⟩⟩
 
       -------------------------------
       -- Case 2: layer[m] = layer[n]
@@ -2894,32 +2725,20 @@ theorem reach_of_hebb_prop (net : BFNN) (A B : Set ℕ) :
           rw [← h₂] at h₄
           exact absurd h₄ (not_lt_of_le (hm.2 _ ⟨hx.1, hebb_extens _ _ _ hx⟩))
         
-        exact reach_is_extens _ _ _ 
-          ⟨h₁.1, (hebb_before_intersection _ _ _ n h₃).mp h₁.2⟩
+        have h₄ : n ∈ propagate net B :=
+          (hebb_before_intersection _ _ _ _ h₃).mp h₁.2
+        
+        exact ⟨h₁.1, reach_is_extens _ _ ⟨h₁.1, h₄⟩⟩
 
 
 /-══════════════════════════════════════════════════════════════════
   Reduction for Unstable Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
-/-
-Prop*(B) = propagate (hebb_star net A) B
-
-Prop(A) ∩ Prop(B) ⊆ Prop*(B)
-Reach(Prop(A), Prop(B)) ⊆ Prop*(B)
-Prop(A) ∩ Prop*(B) ⊆ Reach(Prop(A), Prop(B))
---------------------
-Prop*(B) = Prop(B ∪ Reach(Prop(A), Prop(B)))
--/
-/-
-⟦Tp⟧ = Propagate(⟦p⟧)
-⟦K(p, q)⟧ = Reach(⟦p⟧, ⟦q⟧)
--/
-
 --------------------------------------------------------------------
-theorem hebb_reduction (net : BFNN) (A B : Set ℕ) : 
+theorem hebb_reduction (net : Net) (A B : Set ℕ) : 
   propagate (hebb_star net A) B =
-  propagate net (B ∪ reachable net (propagate net A) (propagate net B)) := by 
+  propagate net (B ∪ (propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)))) := by 
 --------------------------------------------------------------------
   apply ext
   intro (n : ℕ)
@@ -2938,6 +2757,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
     rw [hL]
     simp only [propagate_acc]
     simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
+    simp only [Inter.inter, Set.inter, Membership.mem, Set.Mem, setOf]
 
     -- Forward direction is the easy part, so we do it first.
     -- Backwards direction relies on reach_layer_zero,
@@ -2946,29 +2766,28 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
     case mp => exact fun h₁ => Or.inl h₁
     case mpr => 
       intro h₁
-
-      -- Either n ∈ B or n is reachable from Prop(B) using only
-      -- paths within Prop(A).  At layer 0, this means n ∈ B.
+      
+      -- Either n ∈ B or n ∈ Prop(A) ∩ Reach(Prop(A) ∩ Prop(B)).  
+      -- At layer 0, this means n ∈ B, or n ∈ A ∩ B.
       cases h₁
       case inl h₂ => exact h₂
       case inr h₂ => 
-        have heq : layer net n = 0 := 
-          Eq.trans (symm (hebb_layers net A)) (Eq.trans (hebb_layers _ _) hL)
-        have h₃ : n ∈ propagate net B :=
-          reach_layer_zero _ _ _ _ heq h₂
-
-        simp only [propagate, Membership.mem, Set.Mem] at h₃
+        
+        have h₃ : n ∈ (propagate net A) ∩ (propagate net B) :=
+          reach_layer_zero _ _ _ hL h₂.2
+        
+        simp only [Inter.inter, Set.inter, Membership.mem, Set.Mem, setOf] at h₃
+        simp only [Membership.mem, Set.Mem, propagate] at h₃
         rw [hL] at h₃
         simp only [propagate_acc] at h₃
-        exact h₃
-
+        exact h₃.2
+        
   --------------------------------
   -- Inductive Step
   --------------------------------
-  case hi L IH => 
+  case hi L IH =>
     apply Iff.intro
     
-
     ---------------------
     -- Forward Direction
     ---------------------
@@ -2976,7 +2795,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
       intro h₁
 
       -- By cases in order to simplify propagate_acc
-      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
+      by_cases n ∈ B ∪ (propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)))
       case pos => 
         -- In this case, just apply propagate_is_extens
         rw [← hL]
@@ -2987,53 +2806,57 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
         -- From here, we have two cases.  Either:
         --   - n ∈ Prop(A) and ∃ an active predecessor m⟶n in Prop(A)
         --   - or n ∉ Prop(A) *or* all predecessors m⟶n ∉ Prop(A) ∩ Prop(...)
-        by_cases (n ∈ propagate net A) 
-                  ∧ (∃ m, m ∈ preds net n ∧ 
+        by_cases (n ∈ propagate net A) ∧
+                  (∃ m, m ∈ preds net n ∧ 
                     m ∈ propagate net A ∩ propagate net (B ∪ 
-                      reachable net (propagate net A) (propagate net B)))
+                      (propagate net A ∩ reachable net 
+                        ((propagate net A) ∩ (propagate net B)))))
         
         ---------------------------------------
         -- Case 1: n ∈ Prop(A)
         -- and some m⟶n ∈ Prop(A) ∩ Prop(B ∪ ...)
         ---------------------------------------
-        -- Since m ∈ Prop(B ∪ Reach(Prop(A), Prop(B))),
+        -- Since m ∈ Prop(B ∪ (Prop(A) ∩ Reach(Prop(A) ∩ Prop(B))))),
         --       m ∈ Prop(B) in the updated net. (by IH)
         -- But by [reach_of_hebb_prop], this means
-        --       m ∈ Reach(Prop(A), Prop(B))
+        --       m ∈ Prop(A) ∩ Reach(Prop(A) ∩ Prop(B))
         -- Then, since m, n ∈ Prop(A) and m ⟶ n,
-        --       n ∈ Reach(Prop(A), Prop(B)).
+        --       n ∈ Prop(A) ∩ Reach(Prop(A) ∩ Prop(B))
         case pos =>
           match h.2 with
           | ⟨m, hm⟩ =>
             -- Simplifications to prepare for IH
             simp only [propagate, Membership.mem, Set.Mem] at hm
+            simp only [propagate, Membership.mem, Set.Mem] at IH
             simp only [Inter.inter, Set.inter, setOf] at hm
+            simp only [Inter.inter, Set.inter, setOf] at IH
             simp only [Membership.mem, Set.Mem] at hm
+            simp only [Membership.mem, Set.Mem] at IH
 
             have hlayer : layer net m ≤ L := by
               apply Nat.lt_succ.mp
               rw [symm hL]
-              exact preds_decreasing net m n hm.1
+              exact layer_preds net m n hm.1
 
             conv at hm =>
               enter [2, 2]
               rw [← IH (layer net m) hlayer m rfl]
             
             -- We can now apply [reach_of_hebb_prop]
-            have h₂ : m ∈ reachable net (propagate net A) (propagate net B) :=
+            have h₂ : m ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
               reach_of_hebb_prop _ _ _ hm.2 
-            have hedge : Graph.hasEdge net.toNet.graph m n :=
+            have hedge : Graph.hasEdge net.graph m n :=
               (edge_from_preds _ _ _).mp hm.1
             
-            -- n is reachable from exactly that x ∈ Prop(A) ∩ Prop(B) 
+            -- n is reachable from exactly that x ∈ Prop(A) ∩ B 
             -- that m is reachable from.
-            have h₃ : n ∈ reachable net (propagate net A) (propagate net B) :=
-              match h₂ with
-              | ⟨x, hx⟩ => ⟨x, ⟨hx.1, focusedPath.from_path hx.2 hedge h.1⟩⟩ 
+            have h₃ : n ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
+              match h₂.2 with
+              | ⟨x, hx⟩ => ⟨h.1, ⟨x, ⟨hx.1, Path.from_path hx.2 hedge⟩⟩⟩
             
             rw [← hL]
             exact propagate_acc_is_extens _ _ (Or.inr h₃)
-            
+
         ---------------------------------------
         -- Case 2: n ∉ Prop(A)
         -- or all m⟶n ∉ Prop(A) ∩ Prop(B ∪ ...)  
@@ -3089,7 +2912,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
               rw [symm hLm]
               apply Nat.lt_succ.mp
               rw [symm hL]
-              exact preds_decreasing net m n h₂
+              exact layer_preds net m n h₂
             exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
 
           ---------------------------------------
@@ -3104,7 +2927,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             -- We write down the usual lemmas for 'm', but we don't
             -- know what the index 'i' is we're grabbing yet.  So
             -- we write these for all i.
-            generalize hm : List.get! (Graph.predecessors net.toNet.graph n) = m at h₁
+            generalize hm : List.get! (Graph.predecessors net.graph n) = m at h₁
             have h₄ : ∀ i, (m i) ∈ preds net n := by
               intro i
               rw [symm hm]
@@ -3115,7 +2938,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
               intro i
               apply Nat.lt_succ.mp
               rw [symm hL]
-              exact preds_decreasing net (m i) n (h₄ i)
+              exact layer_preds net (m i) n (h₄ i)
 
             -- Go into h₁ and apply our inductive hypothesis
             conv at h₁ =>
@@ -3127,9 +2950,10 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             rw [← hm]
 
             -- Apply [hebb_activ_equal₂]
-            let S := (B ∪ reachable net (fun n => 
-              propagate_acc net A n (layer net n)) fun n => 
-                propagate_acc net B n (layer net n))
+            let S := (B ∪ ((fun n => 
+              propagate_acc net A n (layer net n)) ∩ reachable net ((fun n => 
+                propagate_acc net A n (layer net n)) ∩ 
+                  (fun n => propagate_acc net B n (layer net n)))))
             rw [hebb_activ_equal₂ _ _ S h₂] at h₁
             exact h₁ 
 
@@ -3141,12 +2965,12 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
     case mpr =>
       intro h₁
       
-      -- By cases; either n ∈ B ∪ Reach(Prop(A), Prop(B)), or not.
-      by_cases n ∈ B ∪ reachable net (propagate net A) (propagate net B)
+      -- By cases; either n ∈ B ∪ (Prop(A) ∩ Reach(Prop(A) ∩ Prop(B))), or not.
+      by_cases n ∈ B ∪ (propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)))
       case pos =>
         -- From here, we split again; either:
         --    1. n ∈ B, and by extens n ∈ Prop(B) in (hebb_star net)
-        --    2. n ∈ Reach(Prop(A), Prop(B)).  In this case, this path
+        --    2. n ∈ Prop(A) ∩ Reach(B).  In this case, this path
         --       has been updated in the (hebb_star net), so of course
         --       n ∈ Prop(B) in (hebb_star_net) (by [hebb_updated_path]) 
         cases h
@@ -3175,15 +2999,11 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
         -- The plan is to now apply our inductive hypothesis
         -- and use the 'activ_agree' lemmas.
         -- We write the two sets as S₁ and S₂ for convenience 
-        -- let S₁ := fun m => 
-        --   propagate_acc net (B ∪ reachable net 
-        --     (fun n => propagate_acc net A n (layer net n)) 
-        --     (fun n => propagate_acc net B n (layer net n)))
-        --     m (layer net m)
-        let S₁ := fun m => 
-          propagate_acc net (B ∪ reachable net 
-            (fun n => propagate_acc net A n (layer net n)) 
-            (fun n => propagate_acc net B n (layer net n))) m (layer net m)
+        let S₁ := fun m => propagate_acc net (B ∪ ((fun n => 
+          propagate_acc net A n (layer net n)) ∩ 
+          reachable net ((fun n =>
+            propagate_acc net A n (layer net n)) ∩ (fun n =>
+              propagate_acc net B n (layer net n)) ))) m (layer net m)
         let S₂ := fun m => propagate_acc (hebb_star net A) B m (layer (hebb_star net A) m)
 
         -- Apply IH to the predecessors
@@ -3195,7 +3015,7 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
             rw [symm hLm]
             apply Nat.lt_succ.mp
             rw [symm hL]
-            exact preds_decreasing net m n hm
+            exact layer_preds net m n hm
           exact (symm (IH Lm h₃ m hLm).to_eq).to_iff
 
         -- Argument: 
@@ -3209,30 +3029,28 @@ theorem hebb_reduction (net : BFNN) (A B : Set ℕ) :
         exact hebb_activ_nondecreasing net A S₂ _
           (activ_agree _ S₁ S₂ _ h₂ h₁)
 
-
 -- COROLLARY: If we plug in Prop(A) ∩ Prop(B) = ∅,
 -- then the update has no effect on the propagation!  
 --------------------------------------------------------------------
-theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) : 
+theorem hebb_reduction_empty (net : Net) (A B : Set ℕ) : 
   propagate net A ∩ propagate net B = ∅ →
 
   propagate (hebb_star net A) B = propagate net B := by 
 --------------------------------------------------------------------
-  intro h_empty
+  intro h₁
   apply ext
   intro (n : ℕ)
 
-  -- If Prop(A) ∩ Prop(B) = ∅,
-  -- then Reach(Prop(A), Prop(B)) must be empty as well!
-  -- (In order for there to be a path at all, there must
-  --  be a path of length 0.)
-  have h₁ : reachable net (propagate net A) (propagate net B) = ∅ :=
-    reach_empty_of_inter_empty _ _ _ h_empty
-  
+  -- We apply [reach_empty_of_inter_empty]
+  -- to get Prop(A) ∩ Reach(Prop(A) ∩ Prop(B)) = ∅
+  have h₂ : propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) = ∅ :=
+    reach_empty_of_inter_empty _ _ _ h₁
+
   -- And now we just substitute ∅
   rw [hebb_reduction net A B]
-  rw [h₁]
+  rw [h₂]
   rw [Set.union_empty B]
+
 
 
 -- TODO: Prove that we can unravel these nets into ordinary
@@ -3272,7 +3090,7 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
 -- It's somewhat interesting, but might not help with the
 -- reduction.
 -- --------------------------------------------------------------------
--- theorem hebb_iteration_is_well_defined (net : BFNN) (S : Set ℕ) : 
+-- theorem hebb_iteration_is_well_defined (net : Net) (S : Set ℕ) : 
 --   propagate (hebb net S) S = propagate net S := by
 -- --------------------------------------------------------------------
 --   apply ext
@@ -3334,7 +3152,7 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
 -- NOTE: Not sure if I need this before.  It's interesting,
 -- but I'm not sure if it helps with the proof for the reduction.
 -- --------------------------------------------------------------------
--- theorem hebb_star_is_fixed_point (net : BFNN) (S : Set ℕ) : 
+-- theorem hebb_star_is_fixed_point (net : Net) (S : Set ℕ) : 
 --   hebb (hebb_star net S) S ≡ hebb_star net S := by 
 -- --------------------------------------------------------------------
 --   sorry
@@ -3343,7 +3161,7 @@ theorem hebb_reduction_empty (net : BFNN) (A B : Set ℕ) :
 -- ANOTHER THEOREM
 -- that I didn't end up using
 -- --------------------------------------------------------------------
--- theorem propagate_reach_inclusion (net : BFNN) : ∀ (S : Set ℕ),
+-- theorem propagate_reach_inclusion (net : Net) : ∀ (S : Set ℕ),
 --   propagate net S ⊆ reachable net S := by
 -- --------------------------------------------------------------------
 --   sorry
@@ -3383,10 +3201,10 @@ So we need:
       Model translation from pref models ⟷ nets
 -/
 
--- def complete_and_max (net : BFNN) (A : Set ℕ) : BFNN :=
+-- def complete_and_max (net : Net) (A : Set ℕ) : Net :=
 --   sorry
 
--- def fire_together (net : BFNN) (A : Set ℕ) : BFNN :=
+-- def fire_together (net : Net) (A : Set ℕ) : Net :=
 -- { net with
 --   graph := sorry
 --   activation := sorry
@@ -3408,7 +3226,7 @@ So we need:
 -- -- sets S, every node activated in the propagation of S
 -- -- in net₁ is activated in the propagation of S in net₂.
 -- -- (They both have the same *propagation structure*)
--- def subnet (net₁ net₂ : BFNN) : Prop :=
+-- def subnet (net₁ net₂ : Net) : Prop :=
 --   ∀ (S : Set ℕ), propagate net₁ S ⊆ propagate net₂ S
 
 -- infixl:65   " ≼ " => subnet
@@ -3417,7 +3235,7 @@ So we need:
 -- -- Two nets are equivalent if they have the same 
 -- -- *propagation structure* (i.e. if their propagations agree 
 -- -- for every set S)
--- def net_eq (net₁ net₂ : BFNN) : Prop :=
+-- def net_eq (net₁ net₂ : Net) : Prop :=
 --   net₁ ≼ net₂ ∧ net₂ ≼ net₁
 
 -- infixl:65   " ≡ " => net_eq
