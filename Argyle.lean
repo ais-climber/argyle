@@ -48,6 +48,8 @@ open Classical
 -- implementation, but modified slightly.
 -------------------------------------------------
 
+-- About to change the structure of graphs
+
 -- α is the type of the nodes
 -- β is the type of the weights
 structure Vertex (α β : Type) where
