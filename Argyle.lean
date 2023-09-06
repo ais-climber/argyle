@@ -43,38 +43,48 @@ open Classical
 -- Whenever I construct a new graph, I will check that
 -- it preserves acyclic-ness.  But when making a graph
 -- from scratch, kindly refrain from creating cycles.
--- 
--- These graphs are based on Peter Kementzey's 
--- implementation, but modified slightly.
 -------------------------------------------------
 
--- About to change the structure of graphs
+-- structure Edge (α : Type) where
+--   prev : α
+--   next : α
+-- deriving Repr
+
+-- instance [Inhabited α] : Inhabited (Edge α) := 
+--   ⟨ { prev := default, next := default } ⟩
 
 -- α is the type of the nodes
 -- β is the type of the weights
-structure Vertex (α β : Type) where
-  label : α 
-  successors : List (ℕ × β)
-deriving Repr
-
-instance [Inhabited α] : Inhabited (Vertex α β) := 
-  ⟨ { label := default, successors := default } ⟩
-
+-- We assume that the data is hygenic
 structure Graph (α : Type) (β : Type) where
-  vertices : List (Vertex α β) := []
+  vertices : List α
+  edges : List (α × α)
+  weights : List (α × α × β)
 deriving Repr
 
 -- Notice that this graph is acyclic, since each predecessor
--- list only refers to nodes above the current node.  This
--- is foreshadowing.
+-- list only refers to nodes above the current node.
 def graphA : Graph ℕ ℚ :=
-  ⟨[⟨0, [⟨1, 0.5⟩, ⟨2, 0.6⟩, ⟨3, 0.7⟩]⟩, 
-    ⟨1, [⟨2, 0.8⟩, ⟨3, 0.9⟩]⟩, 
-    ⟨2, [⟨3, 1⟩, ⟨3, 3.0⟩]⟩, 
-    ⟨3, []⟩]⟩
+{ vertices := [0, 1, 2, 3]
+  edges := 
+    [ ⟨0, 1⟩, ⟨0, 2⟩, ⟨0, 3⟩, 
+      ⟨1, 2⟩, ⟨1, 3⟩,
+      ⟨2, 3⟩
+    ]
+  weights :=
+    [ ⟨0, 1, 0.5⟩,
+      ⟨0, 2, 0.6⟩,
+      ⟨0, 3, 0.7⟩,
+      ⟨1, 2, 0.8⟩,
+      ⟨1, 3, 0.9⟩,
+      ⟨2, 3, 1.0⟩,
+      ⟨2, 3, 3.0⟩
+    ]
+}
 
-#check graphA
-#eval graphA
+-- TODO: Make graph a Repr!
+-- #check graphA
+-- #eval graphA
 
 
 -------------------------------------------------
@@ -88,52 +98,40 @@ def graphA : Graph ℕ ℚ :=
 -- hard -- right now it just depends on 'Prop')
 namespace Graph
 
-def get_vertices (g : Graph ℕ ℚ) : List ℕ :=
-  List.map (fun ⟨label, _⟩ => label) g.vertices
+def get_vertices (g : Graph ℕ ℚ) : List ℕ := g.vertices
 
 -- Helper function to collect the List of pairs of n's successors
-def successor_pairs (vertices : List (Vertex ℕ ℚ)) (n : ℕ) : List (ℕ × ℚ) :=
-  match vertices with
-  | [] => []
-  | ⟨vertex, succ⟩ :: rest => 
-    if vertex = n then succ 
-    else successor_pairs rest n
+-- def successor_pairs (vertices : List (Vertex ℕ)) (n : ℕ) : List (ℕ × ℚ) :=
+--   match vertices with
+--   | [] => []
+--   | ⟨vertex, succ⟩ :: rest => 
+--     if vertex = n then succ 
+--     else successor_pairs rest n
 
 -- We get all vertices that are in n's successor list
 def successors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter 
-    (fun m => m ∈ (successor_pairs g.vertices n).unzip.1) 
-    g.get_vertices
-
-  -- List.get n g.vertices -- successors.unzip.1
-  -- g.vertices[n]!.successors.unzip.1
-
+  (List.filter (fun ⟨u, _⟩ => u = n) g.edges).unzip.2
 
 def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter (fun v => n ∈ (g.successors v)) g.get_vertices
-  
-  -- List.map (fun ⟨label, _⟩ => label) 
-  --   (List.filter (fun v => n ∈ (g.successors v)) g.vertices)
-
-  -- List.filter 
-  --   (fun m => n ∈ (g.successors m)) 
-  --   g.get_vertices
+  List.filter 
+    (fun v => if n ∈ (g.successors v) then true else false) 
+    g.get_vertices
 
 -- Using 'predecessors' is slower than 'successors',
 -- but we will tend to look backwards from a node rather
 -- than forwards.
 def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
-  m ∈ (g.predecessors n)
+  if m ∈ (g.predecessors n) then true else false
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
 -- If it does not exist, we say the weight is 0
 -- TODO: In the future, it's better to use Option here
 -- and return none if none!!!
 def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
-  match g.vertices[m]!.successors.find? (fun ⟨label, _⟩ => label = n) with
-  | some ⟨_, weight⟩ => weight
+  match g.weights.find? (fun ⟨u, v, _⟩ => u = m ∧ v = n) with
+  | some ⟨_, _, weight⟩ => weight
   | none => 0
-
+  
 -- Some sanity checks
 #eval get_vertices graphA
 #eval successors graphA 0
@@ -146,30 +144,28 @@ def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
 #eval predecessors graphA 3
 #eval hasEdge graphA 1 2
 #eval hasEdge graphA 1 3
-#eval hasEdge graphA 4 2
+#eval hasEdge graphA 3 2
 #eval getEdgeWeight graphA 1 2
 #eval getEdgeWeight graphA 1 3
-#eval getEdgeWeight graphA 4 2
+#eval getEdgeWeight graphA 3 2
 
-
-
-inductive hasPath (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
+inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
-      hasPath g u u
+      Path g u u
   | from_path {u v w : ℕ} : 
-      hasPath g u v → hasEdge g v w → hasPath g u w
+      Path g u v → g.hasEdge v w → Path g u w
 
 --------------------------------------------------------------------
-theorem hasPath_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
-  hasPath g u v → hasPath g v w → hasPath g u w := by
+theorem Path_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
+  Path g u v → Path g v w → Path g u w := by
 --------------------------------------------------------------------
-  intro (h₁ : hasPath g u v)
-  intro (h₂ : hasPath g v w)
+  intro (h₁ : Path g u v)
+  intro (h₂ : Path g v w)
 
   induction h₂
   case trivial => exact h₁
   case from_path x y _ edge_xy path_ux => 
-    exact hasPath.from_path path_ux edge_xy
+    exact Path.from_path path_ux edge_xy
 
 
 def is_refl (g : Graph ℕ ℚ) : Prop := ∀ (u : ℕ), 
@@ -183,7 +179,7 @@ def is_trans (g : Graph ℕ ℚ) : Prop := ∀ (u v w : ℕ),
 
 -- Note that we don't allow reflexive edges at all.
 def is_acyclic (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
-  g.hasPath u v → ¬ g.hasPath v u
+  g.Path u v → ¬ g.Path v u
 
 -- Fully connected:
 -- Either u ⟶ v, v ⟶ u, or u and v have the same
@@ -419,8 +415,7 @@ theorem edge_from_preds (net : Net) (m n : ℕ) :
   m ∈ preds net n ↔ net.graph.hasEdge m n := by
 --------------------------------------------------------------------
   simp only [preds, Graph.hasEdge]
-  rw [Bool.decide_iff]
-
+  sorry
 
 -- (Weightless) *minimal* graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
@@ -1008,30 +1003,12 @@ theorem propagate_is_cumulative :
   Graph Reachability
 ══════════════════════════════════════════════════════════════════-/
 
-inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
-  | trivial {u : ℕ} :
-      Path g u u
-  | from_path {u v w : ℕ} : 
-      Path g u v → g.hasEdge v w → Path g u w
-
--- Paths are transitive
---------------------------------------------------------------------
-theorem Path_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
-  Path g u v → Path g v w → Path g u w := by
---------------------------------------------------------------------
-  intro h₁ h₂
-
-  induction h₂
-  case trivial => exact h₁
-  case from_path x y _ edge_xy path_ux => 
-    exact Path.from_path path_ux edge_xy
-
 --------------------------------------------------------------------
 theorem Path_of_preds {m n : ℕ} (net : Net) :
-  m ∈ preds net n → Path net.graph m n := by
+  m ∈ preds net n → net.graph.Path m n := by
 --------------------------------------------------------------------
   intro h₁
-  exact Path.from_path (Path.trivial) ((edge_from_preds _ _ _).mp h₁)
+  exact Graph.Path.from_path (Graph.Path.trivial) ((edge_from_preds _ _ _).mp h₁)
 
 -- Any nontrivial path can be shortcutted with an edge
 -- (this is because the graph is connected.)
@@ -1039,7 +1016,7 @@ theorem Path_of_preds {m n : ℕ} (net : Net) :
 --   and continue replacing reachable with reachable!
 --------------------------------------------------------------------
 theorem Path_edge {u v : ℕ} (net : Net) :
-  Path net.graph u v → u ≠ v → net.graph.hasEdge u v := by
+  net.graph.Path u v → u ≠ v → net.graph.hasEdge u v := by
 --------------------------------------------------------------------
   intro h₁
   
@@ -1066,7 +1043,7 @@ theorem Path_edge {u v : ℕ} (net : Net) :
 -- Set of nodes reachable from S
 def reachable (net : Net) (S : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
-    ∃ (m : ℕ), m ∈ S ∧ Path net.graph m n
+    ∃ (m : ℕ), m ∈ S ∧ net.graph.Path m n
 
 --------------------------------------------------------------------
 lemma reach_layer_zero (net : Net) : ∀ (B : Set ℕ) (n : ℕ),
@@ -1120,7 +1097,7 @@ theorem reach_is_extens (net : Net) : ∀ (B : Set ℕ),
   B ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro B n h₁
-  exact ⟨n, ⟨h₁, Path.trivial⟩⟩
+  exact ⟨n, ⟨h₁, Graph.Path.trivial⟩⟩
 
 
 --------------------------------------------------------------------
@@ -1144,7 +1121,7 @@ theorem reach_is_idempotent (net : Net) : ∀ (B : Set ℕ),
     match h₁ with
     | ⟨m, hm⟩ =>
       match hm.1 with
-      | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, Path_trans _ hx.2 hm.2⟩⟩
+      | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, Graph.Path_trans _ hx.2 hm.2⟩⟩
 
 --------------------------------------------------------------------
 theorem reach_is_monotone (net : Net) : ∀ (A B : Set ℕ),
@@ -1193,14 +1170,14 @@ theorem reach_union (net : Net) : ∀ (A B : Set ℕ),
 -- Set of nodes reachable from S
 def reachedby (net : Net) (S : Set ℕ) : Set ℕ :=
   fun (m : ℕ) =>
-    ∃ (n : ℕ), n ∈ S ∧ Path net.graph m n
+    ∃ (n : ℕ), n ∈ S ∧ Graph.Path net.graph m n
 
 --------------------------------------------------------------------
 theorem reachedby_is_extens (net : Net) : ∀ (B : Set ℕ),
   B ⊆ reachedby net B := by
 --------------------------------------------------------------------
   intro B m h₁
-  exact ⟨m, ⟨h₁, Path.trivial⟩⟩
+  exact ⟨m, ⟨h₁, Graph.Path.trivial⟩⟩
 
 --------------------------------------------------------------------
 theorem reachedby_is_idempotent (net : Net) : ∀ (B : Set ℕ),
@@ -1223,7 +1200,7 @@ theorem reachedby_is_idempotent (net : Net) : ∀ (B : Set ℕ),
     match h₁ with
     | ⟨n, hn⟩ =>
       match hn.1 with
-      | ⟨y, hy⟩ => exact ⟨y, ⟨hy.1, Path_trans _ hn.2 hy.2⟩⟩
+      | ⟨y, hy⟩ => exact ⟨y, ⟨hy.1, Graph.Path_trans _ hn.2 hy.2⟩⟩
 
 --------------------------------------------------------------------
 theorem reachedby_is_monotone (net : Net) : ∀ (A B : Set ℕ),
@@ -1342,7 +1319,7 @@ lemma minimal_cause_helper (net : Net) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
           exact layer_preds net m n h₄
         have h₆ : m ∈ reachedby net B :=
           match h₁ with
-          | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩ -- (preds_path _ h₄)
+          | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Graph.Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩ -- (preds_path _ h₄)
         exact (symm (IH Lm h₅ m h₆ hLm).to_eq).to_iff
 
     -- Backwards Direction (should be similar)
@@ -1384,7 +1361,7 @@ lemma minimal_cause_helper (net : Net) : ∀ (A B : Set ℕ), ∀ (n : ℕ),
           exact layer_preds net m n h₄
         have h₆ : m ∈ reachedby net B :=
           match h₁ with
-          | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩
+          | ⟨x, hx⟩ => ⟨x, ⟨hx.1, Graph.Path_trans _ (Path_of_preds _ h₄) hx.2⟩⟩
         exact IH Lm h₅ m h₆ hLm
 
 
@@ -1412,111 +1389,88 @@ theorem minimal_cause (net : Net) : ∀ (A B : Set ℕ),
   Naive (Unstable) Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- A function to map edges in the graph.  
--- We update the edge weight x₁ ⟶ x₂, but we also allow information 
--- about the *nodes* x₁ and x₂.
--- Credit to Peter Kementzey for the original mapEdges function.
-def map_edges (g : Graph ℕ ℚ) (f : ℕ → ℕ → ℚ → ℚ) : Graph ℕ ℚ := ⟨
-  g.vertices.map (fun vertex => 
-    { vertex with successors := vertex.successors.map (fun 
-      ⟨target, weight⟩ => ⟨target, f vertex.label target weight⟩
-  )})
-⟩
-
---------------------------------------------------------------------
-lemma map_edges_apply (g : Graph ℕ ℚ) (f : ℕ → ℕ → ℚ → ℚ) (m n : ℕ) :
-  (map_edges g f).getEdgeWeight m n = (f m n (g.getEdgeWeight m n)) := by
---------------------------------------------------------------------
-  -- I have no idea... this one's tough, and it's hard to see
-  -- what's going on.
-  -- TODO: Reasoning about weights is hard!  Redefine getEdgeWeight!
-  simp only [Graph.getEdgeWeight]
-
-  match List.find? (fun x => decide (x.fst = n)) g.vertices[m]!.successors with
-  | none => sorry
-  | some ⟨_, weight⟩ => sorry
-  
-  /-
-  split
-  case _ op₁ target₁ weight₁ hop₁ => 
-    split
-    case _ op₂ target₂ weight₂ hop₂ => sorry
-    case _ op₂ hop₂ => sorry
-  case _ op₁ hop₁ => 
-    split
-    case _ op₂ target₂ weight₂ hop₂ => sorry
-    case _ op₂ hop₂ => sorry
-  -/
-
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by η * act(m) * act(n).
 noncomputable
 def graph_update (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
-  map_edges g (fun m n weight => 
+{ g with weights := List.map (fun ⟨m, n, weight⟩ => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
-    weight + (net.rate * activ_m * activ_n))
-
-
+    ⟨m, n, weight + (net.rate * activ_m * activ_n)⟩) g.weights
+}
 
 -- This graph update does not affect the vertices of the graph.
 --------------------------------------------------------------------
 lemma graph_update_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
   (graph_update net g S).get_vertices = g.get_vertices := by
 --------------------------------------------------------------------
-  simp only [graph_update, map_edges]
-  simp only [Graph.get_vertices]
+  simp only [graph_update, Graph.get_vertices]
 
-  -- Go in and compose the maps.  This seems to do the trick.
-  conv => lhs; rw [List.map_map]
-
-
--- This graph update does not affect the *successor/edge* structure
+-- This graph update does not affect the *successor* structure
 -- of the graph (it only affects weights!!!)
 --------------------------------------------------------------------
 lemma graph_update_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  -- Simplify definitions
-  simp only [Graph.successors]
-  rw [graph_update_vertices]
-  simp [graph_update, map_edges] 
-  -- NOTE: FULL simp because there's a hidden dependent argument
-  --   here we need to knock out.
+  simp only [graph_update, Graph.successors]
+
+-- This graph update does not affect the *predecessor* structure
+-- of the graph
+--------------------------------------------------------------------
+lemma graph_update_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
+  (graph_update net g S).predecessors n = g.predecessors n := by
+--------------------------------------------------------------------
+  simp only [Graph.predecessors]
+  conv => lhs; enter [1, v]; rw [graph_update_successors]
+
+-- This graph update does not affect the *edge* structure
+-- of the graph
+--------------------------------------------------------------------
+lemma graph_update_edges (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
+  (graph_update net g S).hasEdge m n ↔ g.hasEdge m n := by
+--------------------------------------------------------------------
+  simp only [Graph.hasEdge, graph_update_predecessors]
+
+-- This graph update does not affect the *path* structure
+-- of the graph
+--------------------------------------------------------------------
+lemma graph_update_path (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
+  (graph_update net g S).Path m n ↔ g.Path m n := by
+--------------------------------------------------------------------
+  -- By induction on the path in each case.
+  apply Iff.intro
+  case mp =>
+    intro h₁
+    induction h₁
+    case trivial => exact Graph.Path.trivial
+    case from_path x y _ edge_xy IH =>
+      rw [graph_update_edges] at edge_xy
+      exact Graph.Path.from_path IH edge_xy
   
-  -- Rewrite 'unzip's as 'map's
-  rw [List.unzip_eq_map _]
-  rw [List.unzip_eq_map _]
-  simp only [Prod.fst]
+  case mpr =>
+    intro h₁
+    induction h₁
+    case trivial => exact Graph.Path.trivial
+    case from_path x y _ edge_xy IH =>
+      rw [← graph_update_edges] at edge_xy
+      exact Graph.Path.from_path IH edge_xy
 
-  -- Get to the heart of the expression
-  congr
-  funext m
-  apply Bool.decide_congr
-
-  -- Our goal is to now show that when we *only* consider the target
-  -- vertices, the graph_update is essentially the identity function.
-  -- By induction on the graph's list of vertices:
-  induction g.vertices
-  case nil => 
-    simp only [Graph.successor_pairs]
-
-  case cons v rest IH => 
-    simp only [Graph.successor_pairs]
-
-    -- By cases; either v.label = n or not.  If so, we go in
-    -- and compose the maps.  Otherwise we just apply our IH.
-    by_cases (v.label = n)
-    case pos => 
-      rw [if_pos h]
-      rw [if_pos h]
-      rw [List.map_map]
-      simp
-
-    case neg =>
-      rw [if_neg h]
-      rw [if_neg h]
-      exact IH
+-- This graph update preserves whether the graph is connected.
+--------------------------------------------------------------------
+lemma graph_update_connected (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
+  g.is_connected → (graph_update net g S).is_connected := by
+--------------------------------------------------------------------
+  simp only [Graph.is_connected]
+  intro h₁ u v
+  
+  rw [graph_update_edges]
+  rw [graph_update_edges]
+  rw [graph_update_successors]
+  rw [graph_update_successors]
+  rw [graph_update_predecessors]
+  rw [graph_update_predecessors]
+  
+  exact h₁ u v
 
 -- This graph update preserves whether the graph is acyclic.
 --------------------------------------------------------------------
@@ -1527,25 +1481,13 @@ lemma graph_update_acyclic (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
   intro g_acyclic
   intro u v
   intro path_uv
-  
-  -- We have a path in the updated graph from u to v
-  -- and another path from v to u.
-  -- We now need to show that u = v.
-  -- By induction on the length of this first path.
-  induction path_uv
-  case trivial => 
-    simp only [graph_update]
-    sorry
+  intro path_vu
 
-  case from_path x y path_ux edge_xy IH => sorry
-
-
--- This graph update preserves whether the graph is connected.
---------------------------------------------------------------------
-lemma graph_update_connected (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
-  g.is_connected → (graph_update net g S).is_connected := by
---------------------------------------------------------------------
-  sorry
+  -- In the original graph, we have a path from u to v
+  -- and a path from v to u, contradicting g_acyclic.
+  rw [graph_update_path] at path_uv
+  rw [graph_update_path] at path_vu
+  exact g_acyclic u v path_uv path_vu
 
 -- A single step of Hebbian update.
 -- Propagate S through the net, and then increase the weights
@@ -1576,26 +1518,13 @@ theorem hebb_once_vertices (net : Net) (S : Set ℕ) :
   rw [graph_update_vertices]
 
 -- A single round of Hebbian update does not affect the predecessors
--- of any node.  To prove this, we just show that Hebbian update
--- does not affect the vertices of the graph, or the successor
--- structure of the graph.
+-- of any node.
 --------------------------------------------------------------------
 theorem hebb_once_preds (net : Net) (S : Set ℕ) (n : ℕ) : 
   preds (hebb net S) n = preds net n := by
 --------------------------------------------------------------------
-  simp only [preds, hebb]
-  simp only [Graph.predecessors]
+  simp only [preds, hebb, Graph.predecessors]
   congr 1
-
-  -- graph_update doesn't affect successors of a node
-  case _ => 
-    funext v
-    congr 2
-    exact graph_update_successors _ (net.graph) _ v
-
-  -- graph_update doesn't affect vertices of the graph
-  case _ => exact graph_update_vertices _ (net.graph) _
-
   
 -- A single round of Hebbian update hebb does not affect which 
 -- neurons are on which layer of the net.
@@ -1603,7 +1532,9 @@ theorem hebb_once_preds (net : Net) (S : Set ℕ) (n : ℕ) :
 theorem hebb_once_layers (net : Net) (S : Set ℕ) : 
   layer (hebb net S) n = layer net n := by
 --------------------------------------------------------------------
+  simp only [preds, hebb, layer]
   sorry
+
   /-
   simp only [layer]
   rw [hebb_once_vertices net S] -- vertices are the same
@@ -1678,9 +1609,8 @@ theorem hebb_once_reach (net : Net) (B : Set ℕ) :
             rw [← edge_from_preds]
             rw [← edge_from_preds] at edge_xy
             convert edge_xy using 1
-            exact symm (hebb_once_preds _ _ _)
           
-          exact ⟨u, ⟨hu.1, (Path.from_path hu.2 h₄)⟩⟩
+          exact ⟨u, ⟨hu.1, (Graph.Path.from_path hu.2 h₄)⟩⟩
 
   -- This direction is very similar.
   case mpr => 
@@ -1707,9 +1637,8 @@ theorem hebb_once_reach (net : Net) (B : Set ℕ) :
             rw [← edge_from_preds]
             rw [← edge_from_preds] at edge_xy
             convert edge_xy using 1
-            exact hebb_once_preds _ _ _
           
-          exact ⟨u, ⟨hu.1, (Path.from_path hu.2 h₄)⟩⟩
+          exact ⟨u, ⟨hu.1, (Graph.Path.from_path hu.2 h₄)⟩⟩
 
 -- If m ∉ Prop(A) or n ∉ Prop(A), then the weight of m ⟶ n in 
 -- the *once* updated net is the same as in the original net.
@@ -1721,18 +1650,26 @@ theorem hebb_once_weights_eq (net : Net) :
 --------------------------------------------------------------------
   intro h₁
   simp only [hebb, graph_update]
-  rw [map_edges_apply _ _ _ _]
-
+  
   -- We have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
   -- In either case, the term that we're updating by reduces 
   -- to weight + 0 = weight.
   cases h₁
-  case inl h₂ => 
+  case inl h₂ => sorry
+  case inr h₂ => sorry
+
+
+  
+  
+  -- rw [map_edges_apply _ _ _ _]
+
+  /-
     rw [if_neg h₂]
     simp
-  case inr h₂ => 
+
     rw [if_neg h₂]
     simp
+  -/
 
 -- The weights of the new net are nondecreasing
 -- (One round of Hebbian update can only increase the weights)
@@ -1927,10 +1864,92 @@ lemma no_times_pos (net : Net) (S : Set ℕ) :
 -- of that edge by (no_times) * η * act(m) * act(n).
 noncomputable
 def graph_update_star (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
-  map_edges g (fun m n weight => 
+{ g with weights := List.map (fun ⟨m, n, weight⟩ => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
-    weight + (↑(no_times net S) * net.rate * activ_m * activ_n))
+    ⟨m, n, weight + (↑(no_times net S) * net.rate * activ_m * activ_n)⟩) g.weights
+}
+
+-- We have exactly the same preservation properties that
+-- we had for graph_update.
+--------------------------------------------------------------------
+lemma graph_update_star_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
+  (graph_update_star net g S).get_vertices = g.get_vertices := by
+--------------------------------------------------------------------
+  simp only [graph_update_star, Graph.get_vertices]
+
+--------------------------------------------------------------------
+lemma graph_update_star_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
+  (graph_update_star net g S).successors n = g.successors n := by
+--------------------------------------------------------------------
+  simp only [graph_update_star, Graph.successors]
+
+--------------------------------------------------------------------
+lemma graph_update_star_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
+  (graph_update_star net g S).predecessors n = g.predecessors n := by
+--------------------------------------------------------------------
+  simp only [Graph.predecessors]
+  conv => lhs; enter [1, v]; rw [graph_update_star_successors]
+  
+--------------------------------------------------------------------
+lemma graph_update_star_edges (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
+  (graph_update_star net g S).hasEdge m n ↔ g.hasEdge m n := by
+--------------------------------------------------------------------
+  simp only [Graph.hasEdge, graph_update_star_predecessors]
+
+--------------------------------------------------------------------
+lemma graph_update_star_path (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
+  (graph_update_star net g S).Path m n ↔ g.Path m n := by
+--------------------------------------------------------------------
+  -- By induction on the path in each case.
+  apply Iff.intro
+  case mp =>
+    intro h₁
+    induction h₁
+    case trivial => exact Graph.Path.trivial
+    case from_path x y _ edge_xy IH =>
+      rw [graph_update_star_edges] at edge_xy
+      exact Graph.Path.from_path IH edge_xy
+  
+  case mpr =>
+    intro h₁
+    induction h₁
+    case trivial => exact Graph.Path.trivial
+    case from_path x y _ edge_xy IH =>
+      rw [← graph_update_star_edges] at edge_xy
+      exact Graph.Path.from_path IH edge_xy
+
+--------------------------------------------------------------------
+lemma graph_update_star_connected (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
+  g.is_connected → (graph_update_star net g S).is_connected := by
+--------------------------------------------------------------------
+  simp only [Graph.is_connected]
+  intro h₁ u v
+  
+  rw [graph_update_star_edges]
+  rw [graph_update_star_edges]
+  rw [graph_update_star_successors]
+  rw [graph_update_star_successors]
+  rw [graph_update_star_predecessors]
+  rw [graph_update_star_predecessors]
+  
+  exact h₁ u v
+
+--------------------------------------------------------------------
+lemma graph_update_star_acyclic (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
+  g.is_acyclic → (graph_update_star net g S).is_acyclic := by
+--------------------------------------------------------------------
+  simp only [Graph.is_acyclic]
+  intro g_acyclic
+  intro u v
+  intro path_uv
+  intro path_vu
+
+  -- In the original graph, we have a path from u to v
+  -- and a path from v to u, contradicting g_acyclic.
+  rw [graph_update_star_path] at path_uv
+  rw [graph_update_star_path] at path_vu
+  exact g_acyclic u v path_uv path_vu
 
 -- Iterated Hebbian Update
 -- 
@@ -1953,10 +1972,8 @@ def hebb_star (net : Net) (S : Set ℕ) : Net :=
   graph := graph_update_star net net.graph S
   
   -- We need to check that this new net is still acyclic and connected.
-  acyclic := by
-    sorry
-  connected := by
-    sorry
+  acyclic := graph_update_star_acyclic _ _ _ net.acyclic
+  connected := graph_update_star_connected _ _ _ net.connected
 }
 
 
@@ -1972,6 +1989,11 @@ theorem hebb_lift (net : Net) (S : Set ℕ) (P : Net → α) :
   (P (hebb net S) = P net)
   → (P (hebb_star net S) = P net) := by
 --------------------------------------------------------------------
+  simp only [hebb]
+  simp only [hebb_star]
+  sorry
+
+  /- SAVE FOR graph_update_lift
   intro h₁
   
   -- By induction on the unstable point of the net
@@ -1996,7 +2018,7 @@ theorem hebb_lift (net : Net) (S : Set ℕ) (P : Net → α) :
     -- rename_i x₁ x₂ w
 
     -- sorry
-    
+  -/
 
 -- Hebbian update hebb_star does not affect the vertices of the graph.
 --------------------------------------------------------------------
@@ -2295,11 +2317,7 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
   --------------------------------
   -- Base Step
   --------------------------------
-  case hz =>
-    -- After simplifications, just n ∈ B → n ∈ B.
-    rw [hebb_layers]
-    rw [hL]
-    simp only [propagate_acc]
+  case hz => simp only [propagate_acc]
 
   --------------------------------
   -- Inductive Step
@@ -2329,14 +2347,11 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
           intro x hx
           exact h₁ _ (layer_preds _ _ _ hx)
 
-        rw [hebb_layers] at h₂
-        rw [hL] at h₂
         rw [simp_propagate_acc _ h] at h₂
         rw [simp_propagate_acc _ h]
         rw [hebb_preds] at h₂
         simp
         simp at h₂
-        
         
         -- Get ready to apply IH
         -- We write down the usual lemmas for 'm', but we don't
@@ -2364,6 +2379,7 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
         -- Go into h₂ and apply our inductive hypothesis
         conv at h₂ =>
           enter [2, 1, i]
+          rw [hebb_layers]
           rw [IH (layer net (m i)) (h₅ i) (m i) (h₆ i) rfl]
         
         -- Unpack the (m i) term
@@ -2381,7 +2397,7 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
       by_cases n ∈ B
       case pos => 
         intro h₂
-        rw [← hL] at h₂
+        rw [← hL]
         exact propagate_acc_is_extens _ _ h
       case neg =>
         intro h₂
@@ -2392,8 +2408,6 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
           intro x hx
           exact h₁ _ (layer_preds _ _ _ hx)
 
-        rw [hebb_layers]
-        rw [hL]
         rw [simp_propagate_acc _ h]
         rw [simp_propagate_acc _ h] at h₂
         rw [hebb_preds]
@@ -2427,6 +2441,7 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
         -- Go into the goal and apply our inductive hypothesis
         conv =>
           enter [2, 1, i]
+          rw [hebb_layers]
           rw [IH (layer net (m i)) (h₅ i) (m i) (h₆ i) rfl]
 
         -- Unpack the (m i) term
@@ -2602,13 +2617,13 @@ theorem hebb_updated_path (net : Net) (A B : Set ℕ) :
           -- Since we have a path from m ⟶ ... ⟶ y, and the net is 
           -- fully connected, we actually have a single edge m ⟶ y.
           have edge_my : net.graph.hasEdge m y := 
-            Path_edge _ (Path.from_path path_mx edge_xy) m_not_eq_y
+            Path_edge _ (Graph.Path.from_path path_mx edge_xy) m_not_eq_y
           have hpreds : m ∈ preds net y := 
             (edge_from_preds _ _ _).mpr edge_my
           have hpred_dec : layer net m ≤ L := 
             (Nat.lt_succ).mp (lt_of_lt_of_eq (layer_preds _ _ _ hpreds) hL)
           have hm_reachable : m ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
-            ⟨hm.1.1, ⟨m, ⟨hm.1, Path.trivial⟩⟩⟩
+            ⟨hm.1.1, ⟨m, ⟨hm.1, Graph.Path.trivial⟩⟩⟩
           have hm_propB : m ∈ propagate (hebb_star net A) B := 
             IH₁ (layer net m) hpred_dec hm_reachable rfl
           
@@ -2709,7 +2724,7 @@ theorem reach_of_hebb_prop (net : Net) (A B : Set ℕ) :
         rw [← hS] at hn
         match h₅.2 with
         | ⟨x, hx⟩ => 
-          exact ⟨hn.1, ⟨x, ⟨hx.1, Path.from_path hx.2 hedge⟩⟩⟩
+          exact ⟨hn.1, ⟨x, ⟨hx.1, Graph.Path.from_path hx.2 hedge⟩⟩⟩
 
       -------------------------------
       -- Case 2: layer[m] = layer[n]
@@ -2755,8 +2770,6 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
   --------------------------------
   case hz => 
     -- First, do the base case simplifications
-    rw [hebb_layers]
-    rw [hL]
     simp only [propagate_acc]
     simp only [Union.union, Set.union, Membership.mem, Set.Mem, setOf]
     simp only [Inter.inter, Set.inter, Membership.mem, Set.Mem, setOf]
@@ -2854,7 +2867,7 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
             -- that m is reachable from.
             have h₃ : n ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
               match h₂.2 with
-              | ⟨x, hx⟩ => ⟨h.1, ⟨x, ⟨hx.1, Path.from_path hx.2 hedge⟩⟩⟩
+              | ⟨x, hx⟩ => ⟨h.1, ⟨x, ⟨hx.1, Graph.Path.from_path hx.2 hedge⟩⟩⟩
             
             rw [← hL]
             exact propagate_acc_is_extens _ _ (Or.inr h₃)
@@ -2879,8 +2892,6 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
             fun n_in_B => absurd (Set.mem_union_left _ n_in_B) h_reach
 
           -- Simplifications and rewriting, to prepare for IH
-          rw [hebb_layers] at h₁
-          rw [hL] at h₁
           simp only [propagate] at h_reach
           rw [simp_propagate_acc _ h_B] at h₁
           rw [simp_propagate_acc _ h_reach]
@@ -2945,6 +2956,7 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
             -- Go into h₁ and apply our inductive hypothesis
             conv at h₁ =>
               enter [2, 1, i]
+              rw [hebb_layers]
               rw [IH (layer net (m i)) (h₅ i) (m i) rfl]
             
             -- Unpack the (m i) term
@@ -2976,11 +2988,14 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
         --       has been updated in the (hebb_star net), so of course
         --       n ∈ Prop(B) in (hebb_star_net) (by [hebb_updated_path]) 
         cases h
-        case inl h₂ => exact propagate_acc_is_extens _ _ h₂
+        case inl h₂ => 
+          rw [← hL]
+          exact propagate_acc_is_extens _ _ h₂
         case inr h₂ =>
           have h₃ : n ∈ propagate (hebb_star net A) B :=
             hebb_updated_path _ _ _ h₂
           simp only [propagate, Membership.mem, Set.Mem] at h₃
+          rw [← hL]
           exact h₃
           
       case neg =>
@@ -2991,8 +3006,6 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
         -- Simplifications and rewriting, to prepare for IH
         -- We also rewrite the 'preds', 'layers', and 'activ'
         -- for (hebb_star net) in terms of the original 'net'.
-        rw [hebb_layers]
-        rw [hL]
         simp only [propagate] at h
         rw [simp_propagate_acc _ n_not_in_B]
         rw [simp_propagate_acc _ h] at h₁
@@ -3277,18 +3290,18 @@ def prod_comprehens (xs : List α) (ys : List β) : List (α × β) :=
 -/
 
 /-
-TODO for later:  Make 'hasPath' computable so that we can execute
+TODO for later:  Make 'Path' computable so that we can execute
 this code:
-> #eval hasPath graphA 1 3
+> #eval Path graphA 1 3
 
 Some old code when I was trying to do this:
 
-instance decPath : Decidable (hasPath g u v) :=
+instance decPath : Decidable (Path g u v) :=
   sorry -- this should implement BFS!!!
   -- if h : u = v then
-  --   isTrue (Eq.subst h hasPath.trivial)
+  --   isTrue (Eq.subst h Path.trivial)
   -- else if h : hasEdge g u v then
-  --   isTrue (hasPath.from_path (hasPath.trivial) h)
+  --   isTrue (Path.from_path (Path.trivial) h)
   -- else
   --   sorry
 
@@ -3394,7 +3407,7 @@ end TopologicalSort
 -- 
 -- theorem graphA_is_acyclic : graphA.is_acyclic := by
 --   intro (u : ℕ) (v : ℕ)
---         (path_uv : hasPath graphA u v)
---         (path_vu : hasPath graphA v u)
+--         (path_uv : Path graphA u v)
+--         (path_vu : Path graphA v u)
 
 --   sorry
