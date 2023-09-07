@@ -20,6 +20,38 @@ open Tactic
 open Classical
 
 -------------------------------------------------
+-- Helper functions and lemmas
+-------------------------------------------------
+
+-- This isn't in the standard library, but essentially it says:
+-- If we treat xs like an association list, and we *don't*
+-- change the indices, lookup after mapping f to the outputs 
+-- is the same as applying f to the original lookup.
+--------------------------------------------------------------------
+theorem lookup_map (xs : List ((ℕ × ℕ) × ℚ)) (a : ℕ × ℕ) (f : ((ℕ × ℕ) × ℚ) → ℚ) :
+  List.lookup a (List.map (fun x => (x.1, f x)) xs) = 
+    match List.lookup a xs with
+    | some v => f (a, v)
+    | none => none := by
+--------------------------------------------------------------------
+  induction xs
+  case nil => simp
+  case cons x xs IH =>
+    simp only [List.map, List.lookup]
+
+    -- Break up the inner match statements, and apply our IH!
+    by_cases (a = x.fst)
+    case pos => simp [h]
+    case neg =>
+      have h₁ : (a == x.fst) = false := by
+        apply Classical.byContradiction
+        intro hcontr
+        exact absurd (eq_of_beq (eq_true_of_ne_false hcontr)) h
+      
+      simp [h₁]
+      exact IH
+
+-------------------------------------------------
 -- Weighted Directed Graphs
 -- 
 -- Since graphs are internally represented by lists,
@@ -59,7 +91,7 @@ open Classical
 structure Graph (α : Type) (β : Type) where
   vertices : List α
   edges : List (α × α)
-  weights : List (α × α × β)
+  weights : List ((α × α) × β)
 deriving Repr
 
 -- Notice that this graph is acyclic, since each predecessor
@@ -72,13 +104,13 @@ def graphA : Graph ℕ ℚ :=
       ⟨2, 3⟩
     ]
   weights :=
-    [ ⟨0, 1, 0.5⟩,
-      ⟨0, 2, 0.6⟩,
-      ⟨0, 3, 0.7⟩,
-      ⟨1, 2, 0.8⟩,
-      ⟨1, 3, 0.9⟩,
-      ⟨2, 3, 1.0⟩,
-      ⟨2, 3, 3.0⟩
+    [ ⟨⟨0, 1⟩, 0.5⟩,
+      ⟨⟨0, 2⟩, 0.6⟩,
+      ⟨⟨0, 3⟩, 0.7⟩,
+      ⟨⟨1, 2⟩, 0.8⟩,
+      ⟨⟨1, 3⟩, 0.9⟩,
+      ⟨⟨2, 3⟩, 1.0⟩,
+      ⟨⟨2, 3⟩, 3.0⟩
     ]
 }
 
@@ -124,12 +156,10 @@ def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
   if m ∈ (g.predecessors n) then true else false
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
--- If it does not exist, we say the weight is 0
--- TODO: In the future, it's better to use Option here
--- and return none if none!!!
+-- Otherwise we return None.
 def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
-  match g.weights.find? (fun ⟨u, v, _⟩ => u = m ∧ v = n) with
-  | some ⟨_, _, weight⟩ => weight
+  match List.lookup ⟨m, n⟩ g.weights with
+  | some weight => weight
   | none => 0
   
 -- Some sanity checks
@@ -269,6 +299,7 @@ structure Net where
   graph : Graph ℕ ℚ
   activation : ℚ → ℚ
   rate : ℚ  -- learning rate
+  rate_nonneg : rate ≥ 0
 
   -- The activation function is binary
   binary : ∀ (x : ℚ), (activation x = 0) ∨ (activation x = 1)
@@ -406,16 +437,24 @@ lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → ℚ) (ls : List ℕ) :
 axiom get!_mem {α : Type} [Inhabited α] : 
   ∀ (l : List α) i, (l.get! i) ∈ l
 
+-- Just an abbreviation for the predecessors of n in 'net'
 @[simp]
 def preds (net : Net) (n : ℕ): List ℕ :=
   net.graph.predecessors n
 
 --------------------------------------------------------------------
-theorem edge_from_preds (net : Net) (m n : ℕ) :
+theorem edge_iff_preds (net : Net) (m n : ℕ) :
   m ∈ preds net n ↔ net.graph.hasEdge m n := by
 --------------------------------------------------------------------
   simp only [preds, Graph.hasEdge]
-  sorry
+  
+  by_cases m ∈ net.graph.predecessors n
+  case pos => 
+    rw [if_pos h]
+    simp [h]
+  case neg => 
+    rw [if_neg h]
+    simp [h]
 
 -- (Weightless) *minimal* graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
@@ -594,7 +633,7 @@ lemma layer_connected : ∀ (net : Net) (m n : ℕ),
       -- Case 2: n ⟶ m
       -- But then layer(n) < layer(m)
       apply not_lt_of_gt h₁ (layer_preds _ _ _ _)
-      rw [edge_from_preds]
+      rw [edge_iff_preds]
       exact h₃
 
     case inr h₃ =>
@@ -1008,7 +1047,7 @@ theorem Path_of_preds {m n : ℕ} (net : Net) :
   m ∈ preds net n → net.graph.Path m n := by
 --------------------------------------------------------------------
   intro h₁
-  exact Graph.Path.from_path (Graph.Path.trivial) ((edge_from_preds _ _ _).mp h₁)
+  exact Graph.Path.from_path (Graph.Path.trivial) ((edge_iff_preds _ _ _).mp h₁)
 
 -- Any nontrivial path can be shortcutted with an edge
 -- (this is because the graph is connected.)
@@ -1034,9 +1073,9 @@ theorem Path_edge {u v : ℕ} (net : Net) :
       exact edge_xy
     case neg =>
       have h₄ : layer net u < layer net x := 
-        layer_preds _ _ _ ((edge_from_preds _ _ _).mpr (IH h))
+        layer_preds _ _ _ ((edge_iff_preds _ _ _).mpr (IH h))
       have h₅ : layer net x < layer net y := 
-        layer_preds _ _ _ ((edge_from_preds _ _ _).mpr edge_xy)
+        layer_preds _ _ _ ((edge_iff_preds _ _ _).mpr edge_xy)
       
       exact layer_connected _ _ _ (lt_trans h₄ h₅)
 
@@ -1064,7 +1103,7 @@ lemma reach_layer_zero (net : Net) : ∀ (B : Set ℕ) (n : ℕ),
     case from_path x y _ edge_xy _ => 
       -- Contradiction; y's layer is 0, but there is an edge from x to y!
       have h₃ : layer net x < layer net y :=
-        layer_preds net x y ((edge_from_preds _ _ _).mpr edge_xy)
+        layer_preds net x y ((edge_iff_preds _ _ _).mpr edge_xy)
       
       exact absurd h₁ (Nat.not_eq_zero_of_lt h₃)
 
@@ -1393,10 +1432,10 @@ theorem minimal_cause (net : Net) : ∀ (A B : Set ℕ),
 -- of that edge by η * act(m) * act(n).
 noncomputable
 def graph_update (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
-{ g with weights := List.map (fun ⟨m, n, weight⟩ => 
+{ g with weights := List.map (fun ⟨⟨m, n⟩, weight⟩ => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
-    ⟨m, n, weight + (net.rate * activ_m * activ_n)⟩) g.weights
+    ⟨⟨m, n⟩, weight + (net.rate * activ_m * activ_n)⟩) g.weights
 }
 
 -- This graph update does not affect the vertices of the graph.
@@ -1606,8 +1645,8 @@ theorem hebb_once_reach (net : Net) (B : Set ℕ) :
           -- We have an edge from x to y in the *updated* net,
           -- but we have to bring it down to the *original* net.
           have h₄ : Graph.hasEdge net.graph x y = true := by
-            rw [← edge_from_preds]
-            rw [← edge_from_preds] at edge_xy
+            rw [← edge_iff_preds]
+            rw [← edge_iff_preds] at edge_xy
             convert edge_xy using 1
           
           exact ⟨u, ⟨hu.1, (Graph.Path.from_path hu.2 h₄)⟩⟩
@@ -1634,8 +1673,8 @@ theorem hebb_once_reach (net : Net) (B : Set ℕ) :
           -- We have an edge from x to y in the *updated* net,
           -- but we have to bring it down to the *original* net.
           have h₄ : Graph.hasEdge (hebb net A).graph x y = true := by
-            rw [← edge_from_preds]
-            rw [← edge_from_preds] at edge_xy
+            rw [← edge_iff_preds]
+            rw [← edge_iff_preds] at edge_xy
             convert edge_xy using 1
           
           exact ⟨u, ⟨hu.1, (Graph.Path.from_path hu.2 h₄)⟩⟩
@@ -1650,26 +1689,41 @@ theorem hebb_once_weights_eq (net : Net) :
 --------------------------------------------------------------------
   intro h₁
   simp only [hebb, graph_update]
+  simp only [Graph.getEdgeWeight]
+  simp only [Prod.mk.eta]
+  congr 1
   
-  -- We have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
+  -- Because we're not changing the indices, we can decompose
+  -- lookup ∘ map
+  rw [lookup_map]
+
+  -- From here we have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
   -- In either case, the term that we're updating by reduces 
   -- to weight + 0 = weight.
   cases h₁
-  case inl h₂ => sorry
-  case inr h₂ => sorry
+  case inl h₂ =>
+    simp only [Prod.mk.eta]
+    conv => 
+      lhs; enter [3, v, 1]
+      rw [if_neg h₂]
+      simp
 
+    -- The 'match' statement obviously matches the goal.
+    induction List.lookup (m, n) net.graph.weights
+    case some v => simp
+    case none => simp
 
-  
-  
-  -- rw [map_edges_apply _ _ _ _]
-
-  /-
-    rw [if_neg h₂]
-    simp
-
-    rw [if_neg h₂]
-    simp
-  -/
+  case inr h₂ =>
+    simp only [Prod.mk.eta]
+    conv => 
+      lhs; enter [3, v, 1]
+      rw [if_neg h₂]
+      simp
+    
+    -- The 'match' statement obviously matches the goal.
+    induction List.lookup (m, n) net.graph.weights
+    case some v => simp
+    case none => simp
 
 -- The weights of the new net are nondecreasing
 -- (One round of Hebbian update can only increase the weights)
@@ -1678,29 +1732,39 @@ theorem hebb_once_weights_le (net : Net) :
   net.graph.getEdgeWeight m n ≤ 
   (hebb net A).graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
-  simp only [hebb, graph_update]
+  simp only [hebb, graph_update, Graph.getEdgeWeight]
+  simp only [Prod.mk.eta]
+  
+  rw [lookup_map]
 
-  -- how do I just get the 'weight + blah' from the net??
+  -- Break up the outermost match statement
+  induction List.lookup (m, n) net.graph.weights
+  case some weight => 
+    simp only [some]
+    
+    -- Break up the m ∈ Prop(A) and n ∈ Prop(A) cases
+    by_cases m ∈ propagate net A
+    case pos => 
+      rw [if_pos h]
+      
+      by_cases n ∈ propagate net A
+      case pos => 
+        -- This is the important case, where we use the fact
+        -- that net.rate ≥ 0. Knock it out with linarith!
+        rw [if_pos h]
+        linarith [net.rate_nonneg]
 
-  sorry -- Weights are hard to reason about,
-        -- because of the 'match'!  Maybe redefine getEdgeWeights!
+      case neg => 
+        rw [if_neg h]
+        simp
+    
+    case neg => 
+      rw [if_neg h]
 
-/-
-intro h₁
-simp only [hebb, graph_update]
-rw [map_edges_apply _ _ _ _]
-
--- We have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
--- In either case, the term that we're updating by reduces 
--- to weight + 0 = weight.
-cases h₁
-case inl h₂ => 
-  rw [if_neg h₂]
-  simp
-case inr h₂ => 
-  rw [if_neg h₂]
-  simp
--/
+      by_cases n ∈ propagate net A
+      case pos => simp [if_pos h]
+      case neg => simp [if_neg h]
+  case none => simp only [none]
 
 /-══════════════════════════════════════════════════════════════════
   "Iterated"/Fixed-Point Naive Hebbian Update
@@ -1864,10 +1928,10 @@ lemma no_times_pos (net : Net) (S : Set ℕ) :
 -- of that edge by (no_times) * η * act(m) * act(n).
 noncomputable
 def graph_update_star (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ ℚ :=
-{ g with weights := List.map (fun ⟨m, n, weight⟩ => 
+{ g with weights := List.map (fun ⟨⟨m, n⟩, weight⟩ => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
-    ⟨m, n, weight + (↑(no_times net S) * net.rate * activ_m * activ_n)⟩) g.weights
+    ⟨⟨m, n⟩, weight + (↑(no_times net S) * net.rate * activ_m * activ_n)⟩) g.weights
 }
 
 -- We have exactly the same preservation properties that
@@ -2078,7 +2142,7 @@ theorem hebb_weights_eq (net : Net) :
   exact hebb_lift _ _ (fun x => x.graph.getEdgeWeight m n) 
     (hebb_once_weights_eq _ h₁)
 
- 
+
 -- The weights of the new net are nondecreasing
 -- (Hebbian update can only increase the weights)
 -- Note that we *cannot* lift this property straightforwardly,
@@ -2088,18 +2152,46 @@ theorem hebb_weights_le (net : Net) :
   net.graph.getEdgeWeight m n ≤ 
   (hebb_star net A).graph.getEdgeWeight m n := by
 --------------------------------------------------------------------
-  simp only [hebb_star]
-  generalize hpt : (no_times net A) = pt
-  
-  -- By induction on the unstable point of the net
-  induction pt
-  case zero => 
-    -- This case is impossible; hebb_unstable_point cannot be zero!
-    exact absurd hpt (ne_of_gt (no_times_pos _ _))
-  case succ k IH => 
-    simp only [graph_update_star]
-    sorry -- Graph weights are hard to reason about because of 'match'!
+  simp only [hebb_star, graph_update_star, Graph.getEdgeWeight]
+  simp only [Prod.mk.eta]
+  rw [lookup_map]
 
+  -- Break up the outermost match statement
+  induction List.lookup (m, n) net.graph.weights
+  case some weight => 
+    simp only [some]
+    
+    -- Break up the m ∈ Prop(A) and n ∈ Prop(A) cases
+    by_cases m ∈ propagate net A
+    case pos => 
+      rw [if_pos h]
+      
+      by_cases n ∈ propagate net A
+      case pos => 
+        -- This is the important case, where we use the fact
+        -- that net.rate ≥ 0 and no_times > 0. 
+        -- Knock it out with linarith!
+        rw [if_pos h]
+        have h₂ : (0 : ℚ) < ↑(no_times net A) := by
+          exact Nat.cast_pos.mpr (no_times_pos net A)
+        have h₃ : ↑(no_times net A) * net.rate * 1 * 1 ≥ 0 := by
+          simp
+          rw [zero_le_mul_left h₂]
+          exact net.rate_nonneg
+          
+        linarith [h₃]
+        
+      case neg => 
+        rw [if_neg h]
+        simp
+    
+    case neg => 
+      rw [if_neg h]
+
+      by_cases n ∈ propagate net A
+      case pos => simp [if_pos h]
+      case neg => simp [if_neg h]
+  case none => simp only [none]
 
 /-══════════════════════════════════════════════════════════════════
   The more interesting/crucial properties
@@ -2396,7 +2488,7 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
       -- By cases, in order to reduce propagate_acc
       by_cases n ∈ B
       case pos => 
-        intro h₂
+        intro _
         rw [← hL]
         exact propagate_acc_is_extens _ _ h
       case neg =>
@@ -2515,7 +2607,7 @@ theorem hebb_extens (net : Net) (A B : Set ℕ) :
         -- the net is fully connected / transitively closed
         -- to get an edge m⟶n.
         have h₃ : m ∈ preds net n := by
-          rw [edge_from_preds]
+          rw [edge_iff_preds]
           exact layer_connected _ m n h₂
         
         -- We apply our IH to m
@@ -2619,7 +2711,7 @@ theorem hebb_updated_path (net : Net) (A B : Set ℕ) :
           have edge_my : net.graph.hasEdge m y := 
             Path_edge _ (Graph.Path.from_path path_mx edge_xy) m_not_eq_y
           have hpreds : m ∈ preds net y := 
-            (edge_from_preds _ _ _).mpr edge_my
+            (edge_iff_preds _ _ _).mpr edge_my
           have hpred_dec : layer net m ≤ L := 
             (Nat.lt_succ).mp (lt_of_lt_of_eq (layer_preds _ _ _ hpreds) hL)
           have hm_reachable : m ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
@@ -2704,11 +2796,11 @@ theorem reach_of_hebb_prop (net : Net) (A B : Set ℕ) :
         -- the net is fully connected / transitively closed
         -- to get an edge m⟶n.
         have h₃ : m ∈ preds net n := by
-          rw [edge_from_preds]
+          rw [edge_iff_preds]
           exact layer_connected _ m n h₂
 
         have hedge : Graph.hasEdge net.graph m n :=
-              (edge_from_preds _ _ _).mp h₃
+              (edge_iff_preds _ _ _).mp h₃
         
         -- We apply our IH to m
         rw [← hS] at hm
@@ -2861,7 +2953,7 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
             have h₂ : m ∈ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) :=
               reach_of_hebb_prop _ _ _ hm.2 
             have hedge : Graph.hasEdge net.graph m n :=
-              (edge_from_preds _ _ _).mp hm.1
+              (edge_iff_preds _ _ _).mp hm.1
             
             -- n is reachable from exactly that x ∈ Prop(A) ∩ B 
             -- that m is reachable from.
