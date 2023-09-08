@@ -292,6 +292,7 @@ theorem binary_step_nondecr (x₁ x₂ : ℚ) (hyp : x₁ ≤ x₂) :
 --   - The activation function is binary
 --   - The activation function is nondecreasing
 --   - The activation function has a threshold
+--   - The graph is nonempty
 --   - The graph is acyclic
 --   - The graph is fully connected
 -------------------------------------------------
@@ -311,7 +312,8 @@ structure Net where
   threshold : ℚ
   activ_thres : activation (is_active) = 1
 
-  -- The graph is acyclic and fully connected
+  -- The graph is nonempty, acyclic and fully connected
+  nonempty : graph.vertices ≠ []
   acyclic : graph.is_acyclic
   connected : graph.is_connected
 
@@ -1782,96 +1784,140 @@ def neg_weight_score (net : Net) (n : ℕ) : ℚ :=
     else 0) 
     (preds net n))
 
-
 -- NOTE: If there are no nodes to score, a value of 0 is fine.
-def min_score (net : Net) : WithTop ℚ :=
+def min_score (net : Net) : ℚ :=
   let scores := List.map (fun n => neg_weight_score net n) net.graph.get_vertices
-  scores.minimum
+  match scores.minimum with
+  | some m => m
+  | none => 0
 
-
--- For a *given* n, the neg_weight_score is smaller than
--- any possible weighted sum over activated predecessors of n.
--- (i.e. no matter what the activation list 'x' is.)
---------------------------------------------------------------------
-lemma neg_weight_score_le (net : Net) (n : ℕ) (fx₁ : ℕ → Bool) :
-  let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
-  let w : List ℚ := List.map (fun m => 
-    Graph.getEdgeWeight net.graph m n) (preds net n)
+-- -- For a *given* n, the neg_weight_score is smaller than
+-- -- any possible weighted sum over activated predecessors of n.
+-- -- (i.e. no matter what the activation list 'x' is.)
+-- --------------------------------------------------------------------
+-- lemma neg_weight_score_le (net : Net) (n : ℕ) (fx₁ : ℕ → Bool) :
+--   let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
+--   let w : List ℚ := List.map (fun m => 
+--     Graph.getEdgeWeight net.graph m n) (preds net n)
   
-  (neg_weight_score net n) ≤ (weighted_sum w x) := by
---------------------------------------------------------------------
-  intro x w
-  simp only [neg_weight_score, weighted_sum]
+--   (neg_weight_score net n) ≤ (weighted_sum w x) := by
+-- --------------------------------------------------------------------
+--   intro x w
+--   simp only [neg_weight_score, weighted_sum]
   
-  -- First, we simplify the foldr and zipWith
-  rw [List.foldr_map]
-  rw [List.zipWith_map]
-  rw [List.zipWith_same]
+--   -- First, we simplify the foldr and zipWith
+--   rw [List.foldr_map]
+--   rw [List.zipWith_map]
+--   rw [List.zipWith_same]
 
-  -- By induction on the predecessor list
-  induction preds net n
-  case nil => simp only [List.filter, List.foldr]
-  case cons m ms IH => 
-    simp only [List.foldr]
+--   -- By induction on the predecessor list
+--   induction preds net n
+--   case nil => simp only [List.filter, List.foldr]
+--   case cons m ms IH => 
+--     simp only [List.foldr]
 
-    -- We break up the if-statement.
-    by_cases (net.graph.getEdgeWeight m n < 0)
+--     -- We break up the if-statement.
+--     by_cases (net.graph.getEdgeWeight m n < 0)
     
-    -- In this case, we need to show that
-    --     weight ≤ weight * (fx₁ m),
-    -- which is true because (fx₁ m) can only be 0 or 1,
-    -- and weight < 0.
-    case pos =>
-      rw [if_pos h]
+--     -- In this case, we need to show that
+--     --     weight ≤ weight * (fx₁ m),
+--     -- which is true because (fx₁ m) can only be 0 or 1,
+--     -- and weight < 0.
+--     case pos =>
+--       rw [if_pos h]
 
-      by_cases (fx₁ m)
-      case pos => 
-        rw [if_pos h]
-        apply add_le_add _ IH
-        simp only [mul_one, le_refl]
-      case neg => 
-        rename_i neg_weight
-        rw [if_neg h]
-        apply add_le_add _ IH
-        rw [Rat.mul_zero]
-        exact le_of_lt neg_weight
+--       by_cases (fx₁ m)
+--       case pos => 
+--         rw [if_pos h]
+--         apply add_le_add _ IH
+--         simp only [mul_one, le_refl]
+--       case neg => 
+--         rename_i neg_weight
+--         rw [if_neg h]
+--         apply add_le_add _ IH
+--         rw [Rat.mul_zero]
+--         exact le_of_lt neg_weight
       
-    -- In this case, we need to show that
-    --     0 ≤ weight * (fx₁ m),
-    -- which is true because (fx₁ m) can only be 0 or 1,
-    -- and weight ≥ 0! 
-    case neg => 
-      rw [if_neg h]
+--     -- In this case, we need to show that
+--     --     0 ≤ weight * (fx₁ m),
+--     -- which is true because (fx₁ m) can only be 0 or 1,
+--     -- and weight ≥ 0! 
+--     case neg => 
+--       rw [if_neg h]
 
-      by_cases (fx₁ m)
-      case pos =>
-        rename_i pos_weight
-        rw [if_pos h]
-        rw [Rat.mul_one]
-        apply add_le_add _ IH
-        exact le_of_not_lt pos_weight
-      case neg =>
-        rw [if_neg h]
-        rw [Rat.mul_zero]
-        exact add_le_add rfl IH
+--       by_cases (fx₁ m)
+--       case pos =>
+--         rename_i pos_weight
+--         rw [if_pos h]
+--         rw [Rat.mul_one]
+--         apply add_le_add _ IH
+--         exact le_of_not_lt pos_weight
+--       case neg =>
+--         rw [if_neg h]
+--         rw [Rat.mul_zero]
+--         exact add_le_add rfl IH
 
 -- The *minimum* score is smaller than any possible weighted sum
 -- (over activated predecessors of n) *for all n*.
 --------------------------------------------------------------------
-lemma min_score_le (net : Net) (n : ℕ) (fx₁ : ℕ → Bool) :
-  let x : List ℚ := List.map (fun m => if fx₁ m then 1 else 0) (preds net n)
-  let w : List ℚ := List.map (fun m => 
-    Graph.getEdgeWeight net.graph m n) (preds net n)
+lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
+  let x := if m ∈ S then 1 else 0
+  let weight := net.graph.getEdgeWeight m n
   
-  min_score net ≤ (weighted_sum w x) := by
+  min_score net ≤ weight * x := by
 --------------------------------------------------------------------
-  intro x w
+  intro x weight
   simp only [min_score]
-  apply le_of_not_lt
-  apply List.not_lt_minimum_of_mem'
   
-  sorry
-  -- apply le_trans _ (neg_weight_score_le net n fx₁)
+  -- Split on the match to ensure that there is a minimum at all.
+  split
+  case _ min hmin => 
+    have h₁ : 
+      min ≤ List.foldr (· + ·) 0 (List.map (fun m => 
+        if net.graph.getEdgeWeight m n < 0 then 
+          net.graph.getEdgeWeight m n
+        else 0) 
+        (preds net n)) := by
+      
+      simp only [neg_weight_score] at hmin
+      sorry -- the minimum thing is a member of the whole list
+    
+    have h₂ : 
+      List.foldr (· + ·) 0 (List.map (fun m => 
+        if net.graph.getEdgeWeight m n < 0 then 
+          net.graph.getEdgeWeight m n
+        else 0) 
+        (preds net n)) 
+      ≤ 
+      List.foldr (· + ·) 0 (List.map (fun m => 
+        if net.graph.getEdgeWeight m n < 0 then 
+          (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) 
+        else 0) 
+        (preds net n)) := by
+      
+      sorry
+      -- by_cases m ∈ S
+      -- case pos => 
+      --   -- If m ∈ S, then (if m ∈ S then 1 else 0) = 1, and we just reduce.
+      --   rw [if_pos]
+      -- case neg => sorry
+    
+    have h₃ : 
+      List.foldr (· + ·) 0 (List.map (fun m => 
+        if net.graph.getEdgeWeight m n < 0 then 
+          (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) 
+        else 0) 
+        (preds net n))
+      ≤ (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) :=
+      sorry
+    
+    exact le_trans h₁ (le_trans h₂ h₃)
+  
+  case _ hmin => 
+    -- The case where there is no minimum is impossible, since 
+    -- net.graph is nonempty!
+    simp [Graph.get_vertices] at hmin
+    exact absurd hmin net.nonempty
 
 
 -- This is the exact number of iterations of Hebbian learning
@@ -2045,102 +2091,153 @@ def hebb_star (net : Net) (S : Set ℕ) : Net :=
   Properties of "Iterated" Naive Hebbian Update
 ══════════════════════════════════════════════════════════════════-/
 
--- This lemma allows us to "lift" equational properties of hebb 
--- to hebb_star.  (This holds *because* hebb_star is the fixed point
--- of hebb.)
---------------------------------------------------------------------
-theorem hebb_lift (net : Net) (S : Set ℕ) (P : Net → α) : 
-  (P (hebb net S) = P net)
-  → (P (hebb_star net S) = P net) := by
---------------------------------------------------------------------
-  simp only [hebb]
-  simp only [hebb_star]
-  sorry
-
-  /- SAVE FOR graph_update_lift
-  intro h₁
-  
-  -- By induction on the unstable point of the net
-  -- (we don't actually need to know what the unstable point *is*
-  --  for this lemma to hold.)
-  generalize hpt : (no_times net S) = pt
-  induction pt generalizing net
-  case zero => 
-    -- This case is impossible; hebb_unstable_point cannot be zero!
-    exact absurd hpt (ne_of_gt (no_times_pos _ _))
-
-  case succ k IH =>
-    -- simp only [hebb] at h₁
-    simp only [hebb_star]
-    sorry
-    -- rw [hpt]
-    -- simp only [graph_update] at h₁
-    -- simp only [graph_update_star]
-
-    -- convert h₁ using 9
-    -- convert h₁ using 3
-    -- rename_i x₁ x₂ w
-
-    -- sorry
-  -/
-
 -- Hebbian update hebb_star does not affect the vertices of the graph.
 --------------------------------------------------------------------
 theorem hebb_vertices (net : Net) (S : Set ℕ) : 
   (hebb_star net S).graph.get_vertices = net.graph.get_vertices := by
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => x.graph.get_vertices) (hebb_once_vertices _ _)
+  simp only [hebb_star]
+  rw [graph_update_star_vertices]
 
 -- Hebbian update hebb_star does not affect the predecessors
 -- of any node.
--- [LIFTED from hebb_once_preds]
 --------------------------------------------------------------------
 theorem hebb_preds (net : Net) (S : Set ℕ) : 
   preds (hebb_star net S) n = preds net n := by
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => preds x n) (hebb_once_preds _ _ _)
-  
+  simp only [preds, hebb_star, Graph.predecessors]
+  congr 1
+
 -- Hebbian update hebb_star does not affect which neurons are
 -- on which layer of the net.
--- [LIFTED from hebb_once_layers]
 --------------------------------------------------------------------
 theorem hebb_layers (net : Net) (S : Set ℕ) : 
   layer (hebb_star net S) n = layer net n := by
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => layer x n) (hebb_once_layers _ _)
+  simp only [preds, hebb, layer]
+  sorry -- fix definition of layers first!
 
 -- Hebbian update hebb_star does not affect the activation function.
--- [LIFTED from hebb_once_activation]
 --------------------------------------------------------------------
 theorem hebb_activation (net : Net) (S : Set ℕ) : 
   (hebb_star net S).activation = net.activation := by 
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => x.activation) (hebb_once_activation _ _)
+  exact rfl
 
 -- Hebbian update hebb_star does not affect graph reachability
 -- (It only affects the edge weights)
--- -- [LIFTED from hebb_once_reach]
 --------------------------------------------------------------------
 theorem hebb_reach (net : Net) (B : Set ℕ) : 
   reachable (hebb_star net A) B = 
     reachable net B := by 
 --------------------------------------------------------------------
-  exact hebb_lift _ _ (fun x => reachable x B) (hebb_once_reach _ _)
+  -- Same proof as [hebb_once_reach].
+  apply ext
+  intro (n : ℕ)
+  
+  apply Iff.intro
+  case mp => 
+    intro h₁
 
+    -- There is some m with path from m to n in the *updated* net
+    match h₁ with
+    | ⟨m, hm⟩ =>
+      induction hm.2
+      case trivial hma => exact reach_is_extens _ _ hm.1
+      case from_path x y path_mx edge_xy IH =>
+        -- First, apply our IH to get x ∈ Reach(B)
+        have h₂ : x ∈ reachable (hebb_star net A) B := ⟨m, ⟨hm.1, path_mx⟩⟩
+        have h₃ : x ∈ reachable net B := IH h₂ ⟨hm.1, path_mx⟩
+
+        -- So there is some u ∈ B with path from u to x (in the 
+        -- *original* net).  We extend this path with the edge 
+        -- from x to y.
+        match h₃ with
+        | ⟨u, hu⟩ =>
+          -- We have an edge from x to y in the *updated* net,
+          -- but we have to bring it down to the *original* net.
+          have h₄ : Graph.hasEdge net.graph x y = true := by
+            rw [← edge_iff_preds]
+            rw [← edge_iff_preds] at edge_xy
+            convert edge_xy using 1
+          
+          exact ⟨u, ⟨hu.1, (Graph.Path.from_path hu.2 h₄)⟩⟩
+
+  -- This direction is very similar.
+  case mpr => 
+    intro h₁
+
+    -- There is some m with path from m to n in the *original* net
+    match h₁ with
+    | ⟨m, hm⟩ =>
+      induction hm.2
+      case trivial hma => exact reach_is_extens _ _ hm.1
+      case from_path x y path_mx edge_xy IH =>
+        -- First, apply our IH to get x ∈ Reach(B)
+        have h₂ : x ∈ reachable net B := ⟨m, ⟨hm.1, path_mx⟩⟩
+        have h₃ : x ∈ reachable (hebb_star net A) B := IH h₂ ⟨hm.1, path_mx⟩
+
+        -- So there is some u ∈ B with path from u to x (in the 
+        -- *original* net).  We extend this path with the edge 
+        -- from x to y.
+        match h₃ with
+        | ⟨u, hu⟩ =>
+          -- We have an edge from x to y in the *updated* net,
+          -- but we have to bring it down to the *original* net.
+          have h₄ : Graph.hasEdge (hebb net A).graph x y = true := by
+            rw [← edge_iff_preds]
+            rw [← edge_iff_preds] at edge_xy
+            convert edge_xy using 1
+          
+          exact ⟨u, ⟨hu.1, (Graph.Path.from_path hu.2 h₄)⟩⟩
 
 -- If m ∉ Prop(A) or n ∉ Prop(A), then the edge m ⟶ n was not
 -- increased by Hebbian update.  So its weight in the updated
 -- net is the same as its weight in the original net.
--- Lifted from hebb_once_weights
 --------------------------------------------------------------------
 theorem hebb_weights_eq (net : Net) : 
   (m ∉ propagate net A ∨ n ∉ propagate net A)
   → ((hebb_star net A).graph.getEdgeWeight m n =
     net.graph.getEdgeWeight m n) := by
 --------------------------------------------------------------------
+  -- Same proof as [hebb_once_weights_eq]
   intro h₁
-  exact hebb_lift _ _ (fun x => x.graph.getEdgeWeight m n) 
-    (hebb_once_weights_eq _ h₁)
+  simp only [hebb_star, graph_update_star]
+  simp only [Graph.getEdgeWeight]
+  simp only [Prod.mk.eta]
+  congr 1
+  
+  -- Because we're not changing the indices, we can decompose
+  -- lookup ∘ map
+  rw [lookup_map]
+
+  -- From here we have two cases; either m ∉ Prop(A) or n ∉ Prop(A).
+  -- In either case, the term that we're updating by reduces 
+  -- to weight + 0 = weight.
+  cases h₁
+  case inl h₂ =>
+    simp only [Prod.mk.eta]
+    conv => 
+      lhs; enter [3, v, 1]
+      rw [if_neg h₂]
+      simp
+
+    -- The 'match' statement obviously matches the goal.
+    induction List.lookup (m, n) net.graph.weights
+    case some v => simp
+    case none => simp
+
+  case inr h₂ =>
+    simp only [Prod.mk.eta]
+    conv => 
+      lhs; enter [3, v, 1]
+      rw [if_neg h₂]
+      simp
+    
+    -- The 'match' statement obviously matches the goal.
+    induction List.lookup (m, n) net.graph.weights
+    case some v => simp
+    case none => simp
 
 
 -- The weights of the new net are nondecreasing
