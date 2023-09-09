@@ -1923,52 +1923,33 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
 -- This is the exact number of iterations of Hebbian learning
 -- on 'net' and 'S' that we need to make the network unstable,
 -- i.e. any activation involved within Prop(S) simply goes through.
--- 
--- This is the trickiest part to get right -- we actually need
--- to *construct* this number, based on the net's activation
--- function and the edge weights within Prop(S)!
--- 
--- We first pick the neuron with the lowest 'neg_weight_score' n_min.
--- The number of iterations is that number which would (in the worst
--- case) guarantee that n_min gets activated.
--- 
--- If n_score is n_min's score, and X is that point at which
--- our activation function is guranteed to be 1, and η is the
--- learning rate, then we return
--- 
--- (X - n_score) / η   *(I think!)*
--- UPDATE: we can iterate a different number of times
--- FOR EACH m, n!  So we should take the *max* of all these!
-def no_times (net : Net) (S : Set ℕ) : ℕ :=
-  -- mcs is the "max composite score"
-  let (comp_scores : List ℚ) := sorry
-    -- net.active_input - sorry
-  let (mcs : WithBot ℚ) := List.maximum comp_scores
-
-  -- Ensure that the number of iterations is a *positive*
-  -- natural number.
-  if mcs > 0 then 
-    sorry
-    -- abs (round mcs)
-  else 1
-
-  -- HOW TO ROUND?  HOW TO DIVIDE?
-  -- net.active_input
+def no_times (net : Net) : ℕ :=
+  let N := ↑(net.graph.vertices.length)
+  let iter := Int.toNat (Rat.ceil 
+    ((net.threshold - N * min_score net) / net.rate))
   
-  -- match net.activ_pos with
-  -- | ⟨t, ht⟩ => sorry 
+  -- Ensure that no_times is not 0.
+  -- Int.toNat already ensures it is not negative.
+  if iter > 0 then iter else 1
+
+--------------------------------------------------------------------
+lemma no_times_pos (net : Net) :
+  0 < no_times net := by
+--------------------------------------------------------------------
+  simp only [no_times]
+  let N := ↑(net.graph.vertices.length)
+  generalize hiter : Int.toNat (Rat.ceil 
+    ((net.threshold - N * min_score net) / net.rate)) = iter
   
-  -- let x := choose net.activ_pos
-  -- have h₁ : net.activation x = 1 := sorry
-
-  -- let n_min := @List.minimum (Vertex ℕ ℚ) sorry sorry net.graph.vertices.toList
-  -- let n_score := sorry
-  -- sorry
-
-lemma no_times_pos (net : Net) (S : Set ℕ) :
-  0 < no_times net S := by
-  sorry
-
+  -- We have two cases: either iter > 0 or iter = 1.
+  -- In either case, iter is positive.
+  cases lt_or_ge 0 iter
+  case inl h₁ => 
+    rw [if_pos h₁]
+    exact h₁
+  case inr h₁ => 
+    rw [if_neg (not_lt_of_le h₁)]
+    decide
 
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by (no_times) * η * act(m) * act(n).
@@ -1977,7 +1958,7 @@ def graph_update_star (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) : Graph ℕ 
 { g with weights := List.map (fun ⟨⟨m, n⟩, weight⟩ => 
     let activ_m := if m ∈ propagate net S then 1 else 0
     let activ_n := if n ∈ propagate net S then 1 else 0
-    ⟨⟨m, n⟩, weight + (↑(no_times net S) * net.rate * activ_m * activ_n)⟩) g.weights
+    ⟨⟨m, n⟩, weight + (↑(no_times net) * net.rate * activ_m * activ_n)⟩) g.weights
 }
 
 -- We have exactly the same preservation properties that
@@ -2269,9 +2250,9 @@ theorem hebb_weights_le (net : Net) :
         -- that net.rate ≥ 0 and no_times > 0. 
         -- Knock it out with linarith!
         rw [if_pos h]
-        have h₂ : (0 : ℚ) < ↑(no_times net A) := by
-          exact Nat.cast_pos.mpr (no_times_pos net A)
-        have h₃ : ↑(no_times net A) * net.rate * 1 * 1 ≥ 0 := by
+        have h₂ : (0 : ℚ) < ↑(no_times net) := by
+          exact Nat.cast_pos.mpr (no_times_pos net)
+        have h₃ : ↑(no_times net) * net.rate * 1 * 1 ≥ 0 := by
           simp
           rw [zero_le_mul_left h₂]
           exact net.rate_nonneg
