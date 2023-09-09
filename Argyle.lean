@@ -300,7 +300,7 @@ structure Net where
   graph : Graph ℕ ℚ
   activation : ℚ → ℚ
   rate : ℚ  -- learning rate
-  rate_nonneg : rate ≥ 0
+  rate_pos : rate > 0
 
   -- The activation function is binary
   binary : ∀ (x : ℚ), (activation x = 0) ∨ (activation x = 1)
@@ -1754,7 +1754,7 @@ theorem hebb_once_weights_le (net : Net) :
         -- This is the important case, where we use the fact
         -- that net.rate ≥ 0. Knock it out with linarith!
         rw [if_pos h]
-        linarith [net.rate_nonneg]
+        linarith [net.rate_pos]
 
       case neg => 
         rw [if_neg h]
@@ -1925,8 +1925,7 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
 -- i.e. any activation involved within Prop(S) simply goes through.
 def no_times (net : Net) : ℕ :=
   let N := ↑(net.graph.vertices.length)
-  let iter := Int.toNat (Rat.ceil 
-    ((net.threshold - N * min_score net) / net.rate))
+  let iter := Nat.ceil ((net.threshold - N * min_score net) / net.rate)
   
   -- Ensure that no_times is not 0.
   -- Int.toNat already ensures it is not negative.
@@ -1938,8 +1937,7 @@ lemma no_times_pos (net : Net) :
 --------------------------------------------------------------------
   simp only [no_times]
   let N := ↑(net.graph.vertices.length)
-  generalize hiter : Int.toNat (Rat.ceil 
-    ((net.threshold - N * min_score net) / net.rate)) = iter
+  generalize hiter : Nat.ceil ((net.threshold - N * min_score net) / net.rate) = iter
   
   -- We have two cases: either iter > 0 or iter = 1.
   -- In either case, iter is positive.
@@ -2252,10 +2250,10 @@ theorem hebb_weights_le (net : Net) :
         rw [if_pos h]
         have h₂ : (0 : ℚ) < ↑(no_times net) := by
           exact Nat.cast_pos.mpr (no_times_pos net)
-        have h₃ : ↑(no_times net) * net.rate * 1 * 1 ≥ 0 := by
+        have h₃ : ↑(no_times net) * net.rate * 1 * 1 > 0 := by
           simp
-          rw [zero_le_mul_left h₂]
-          exact net.rate_nonneg
+          rw [zero_lt_mul_left h₂]
+          exact net.rate_pos
           
         linarith [h₃]
         
@@ -2441,33 +2439,76 @@ theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
   → m ∈ propagate (hebb_star net A) B
   → activ (hebb_star net A) prev_activ n := by
 --------------------------------------------------------------------
-  intro preds
-  intro prev_activ
-  intro h₁
-  intro h₂
-  intro h₃
-
+  intro preds prev_activ h₁ h₂ h₃
   simp only [activ]
   rw [hebb_activation net A]
   rw [hebb_preds net A]
   
   -- NOTE: This is one of the most crucial steps of the whole proof!
-  -- We have some point 't' at which the activation = 1.
+  -- We have some threshold 't' at which the activation = 1.
   -- Since the activation function is nondecreasing, we just have
   -- to show that the inner weighted sum ≥ t. 
-  
-  -- 'net.active_input' is t; 'net.activ_pos' says that t is active.
-
-  -- match net.activ_pos with
-  -- | ⟨t, ht⟩ => 
   apply activation_from_inequality _ (net.threshold) _ _ (net.activ_thres)
   apply net.activ_nondecr _ _
   
+  -- We work inside-out; this is the final inequality we work towards.
+  let N := ↑(net.graph.vertices.length)
+  have h₄ : net.threshold ≤ (N * min_score net) + (no_times net) * net.rate := by
+    simp only [no_times]
+    generalize hiter : Nat.ceil ((net.threshold - ↑(net.graph.vertices.length) * min_score net) / net.rate) = iter
+    
+    -- We split into cases based on iter > 0
+    -----
+    cases (lt_or_ge 0 iter)
+    case inl h₅ => 
+      rw [if_pos h₅]
+      rw [← hiter]
+
+      have h₆ : 
+        (net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate * net.rate
+        ≤ Nat.ceil ((net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate) * net.rate := by
+        rw [← hiter] at h₅
+        apply mul_le_mul _ le_rfl (le_of_lt net.rate_pos) (le_of_lt _)
+        rw [← Nat.ceil_le]
+        
+        sorry
+        -- rw [← Rat.cast_id 0]
+        -- apply le_trans _ _
+        -- rw [← Rat.cast_id ((net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate)]
+        -- rw [Rat.cast_le]
+        -- apply le_of_lt
+
+      have h₇ : net.rate ≠ 0 :=
+        fun hcontr => absurd net.rate_pos (not_lt_of_le (le_of_eq hcontr))
+
+      apply le_add_of_le_add_left _ h₆
+      rw [div_mul_cancel _ h₇]
+      linarith
+    -----
+    -----
+    case inr h₅ => 
+      rw [if_neg (not_lt_of_le h₅)]
+      rw [← hiter] at h₅
+      simp
+
+      rw [ge_iff_le] at h₅
+      simp at h₅
+      rw [add_comm]
+      rw [← sub_le_iff_le_add]
+      
+      have h₆ : ((net.threshold - ↑(List.length net.graph.vertices) * 
+        min_score net) / net.rate) * net.rate ≤ 0 * net.rate :=
+        mul_le_mul h₅ le_rfl (le_of_lt net.rate_pos) le_rfl
+      have h₇ : net.rate ≠ 0 :=
+        fun hcontr => absurd net.rate_pos (not_lt_of_le (le_of_eq hcontr))
+
+      rw [div_mul_cancel _ h₇] at h₆
+      simp only [Rat.mul] at h₆
+      rw [Rat.zero_mul] at h₆
+      exact le_trans h₆ (le_of_lt net.rate_pos)
+    -----
+
   sorry
-
-        -- I have the proof written on paper, I should consult that.
-        -- Depends on things like the monotonicity of 'activation', etc.
-
 
 -- If all predecessors of n (and all predecessors of those, etc.)
 -- don't touch Prop(A) ∩ Prop(B), then n is activated in the
