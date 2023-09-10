@@ -1857,16 +1857,16 @@ def min_score (net : Net) : ℚ :=
 --         rw [Rat.mul_zero]
 --         exact add_le_add rfl IH
 
--- The *minimum* score is smaller than any possible weighted sum
--- (over activated predecessors of n) *for all n*.
+-- The *minimum* score is smaller than any individual weight
 --------------------------------------------------------------------
 lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
-  let x := if m ∈ S then 1 else 0
+  -- let x : ℚ := if m ∈ S then 1 else 0
+  -- min_score net ≤ weight * x
   let weight := net.graph.getEdgeWeight m n
   
-  min_score net ≤ weight * x := by
+  min_score net ≤ weight := by
 --------------------------------------------------------------------
-  intro x weight
+  intro weight
   simp only [min_score]
   
   -- Split on the match to ensure that there is a minimum at all.
@@ -1911,7 +1911,7 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
       ≤ (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) :=
       sorry
     
-    exact le_trans h₁ (le_trans h₂ h₃)
+    exact le_trans h₁ (le_trans h₂ sorry)
   
   case _ hmin => 
     -- The case where there is no minimum is impossible, since 
@@ -1948,6 +1948,59 @@ lemma no_times_pos (net : Net) :
   case inr h₁ => 
     rw [if_neg (not_lt_of_le h₁)]
     decide
+
+-- no_times may seem arbitrary, but we picked it to satisfy precisly
+-- this inequality.
+--------------------------------------------------------------------
+lemma no_times_inequality (net : Net) :
+  let N := ↑(net.graph.vertices.length)
+  net.threshold ≤ (N * min_score net) + (no_times net) * net.rate := by
+--------------------------------------------------------------------
+  simp only [no_times]
+  generalize hiter : Nat.ceil ((net.threshold - ↑(net.graph.vertices.length) * min_score net) / net.rate) = iter
+  
+  -- We split into cases based on iter > 0
+  cases (lt_or_ge 0 iter)
+  case inl h₅ => 
+    rw [if_pos h₅]
+    rw [← hiter]
+
+    have h₆ : 
+      (net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate * net.rate
+      ≤ Nat.ceil ((net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate) * net.rate := by
+      rw [← hiter] at h₅
+      apply mul_le_mul _ le_rfl (le_of_lt net.rate_pos) (le_of_lt _)
+      rw [← Nat.ceil_le]
+      rw [Nat.cast_pos]
+      exact h₅
+
+    have h₇ : net.rate ≠ 0 :=
+      fun hcontr => absurd net.rate_pos (not_lt_of_le (le_of_eq hcontr))
+
+    apply le_add_of_le_add_left _ h₆
+    rw [div_mul_cancel _ h₇]
+    linarith
+  
+  case inr h₅ => 
+    rw [if_neg (not_lt_of_le h₅)]
+    rw [← hiter] at h₅
+    simp
+
+    rw [ge_iff_le] at h₅
+    simp at h₅
+    rw [add_comm]
+    rw [← sub_le_iff_le_add]
+    
+    have h₆ : ((net.threshold - ↑(List.length net.graph.vertices) * 
+      min_score net) / net.rate) * net.rate ≤ 0 * net.rate :=
+      mul_le_mul h₅ le_rfl (le_of_lt net.rate_pos) le_rfl
+    have h₇ : net.rate ≠ 0 :=
+      fun hcontr => absurd net.rate_pos (not_lt_of_le (le_of_eq hcontr))
+
+    rw [div_mul_cancel _ h₇] at h₆
+    simp only [Rat.mul] at h₆
+    rw [Rat.zero_mul] at h₆
+    exact le_trans h₆ (le_of_lt net.rate_pos)
 
 -- For every m ⟶ n where m, n ∈ Prop(S), increase the weight
 -- of that edge by (no_times) * η * act(m) * act(n).
@@ -2269,6 +2322,29 @@ theorem hebb_weights_le (net : Net) :
       case neg => simp [if_neg h]
   case none => simp only [none]
 
+-- A simplification lemma to get the full expression for
+-- Weights(m, n) in (hebb_star net).
+--------------------------------------------------------------------
+theorem hebb_weights_simp (net : Net) (S : Set ℕ) (m n : ℕ) :
+  let activ_m := if m ∈ propagate net S then (1 : ℚ) else (0 : ℚ)
+  let activ_n := if n ∈ propagate net S then (1 : ℚ) else (0 : ℚ)
+  (hebb_star net S).graph.getEdgeWeight m n
+  = match List.lookup ⟨m, n⟩ net.graph.weights with
+    | some weight => weight + (↑(no_times net) * net.rate * activ_m * activ_n)
+    | none => 0 := by
+    -- net.graph.getEdgeWeight m n + (↑(no_times net) * net.rate * activ_m * activ_n) := by
+--------------------------------------------------------------------
+  intro activ_m activ_n
+  simp only [hebb_star, graph_update_star]
+  simp only [Graph.getEdgeWeight]
+  simp only [Prod.mk.eta]
+  rw [lookup_map]
+
+  -- Break up the innermost match statement
+  induction List.lookup (m, n) net.graph.weights
+  case some weight => simp only [some]
+  case none => simp only [some]
+
 /-══════════════════════════════════════════════════════════════════
   The more interesting/crucial properties
 ══════════════════════════════════════════════════════════════════-/
@@ -2450,65 +2526,53 @@ theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
   -- to show that the inner weighted sum ≥ t. 
   apply activation_from_inequality _ (net.threshold) _ _ (net.activ_thres)
   apply net.activ_nondecr _ _
-  
-  -- We work inside-out; this is the final inequality we work towards.
-  let N := ↑(net.graph.vertices.length)
-  have h₄ : net.threshold ≤ (N * min_score net) + (no_times net) * net.rate := by
-    simp only [no_times]
-    generalize hiter : Nat.ceil ((net.threshold - ↑(net.graph.vertices.length) * min_score net) / net.rate) = iter
+
+  let N := ↑(List.length net.graph.vertices)
+  generalize hx : (if m ∈ propagate (hebb_star net A) B then (1 : ℚ) else (0 : ℚ)) = x
+
+  have h₄ : N * min_score net + ↑(no_times net) * net.rate
+    ≤ (N - 1) * min_score net + (hebb_star net A).graph.getEdgeWeight m n * x := by
     
-    -- We split into cases based on iter > 0
-    -----
-    cases (lt_or_ge 0 iter)
-    case inl h₅ => 
-      rw [if_pos h₅]
-      rw [← hiter]
-
-      have h₆ : 
-        (net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate * net.rate
-        ≤ Nat.ceil ((net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate) * net.rate := by
-        rw [← hiter] at h₅
-        apply mul_le_mul _ le_rfl (le_of_lt net.rate_pos) (le_of_lt _)
-        rw [← Nat.ceil_le]
-        
-        sorry
-        -- rw [← Rat.cast_id 0]
-        -- apply le_trans _ _
-        -- rw [← Rat.cast_id ((net.threshold - ↑(List.length net.graph.vertices) * min_score net) / net.rate)]
-        -- rw [Rat.cast_le]
-        -- apply le_of_lt
-
-      have h₇ : net.rate ≠ 0 :=
-        fun hcontr => absurd net.rate_pos (not_lt_of_le (le_of_eq hcontr))
-
-      apply le_add_of_le_add_left _ h₆
-      rw [div_mul_cancel _ h₇]
-      linarith
-    -----
-    -----
-    case inr h₅ => 
-      rw [if_neg (not_lt_of_le h₅)]
-      rw [← hiter] at h₅
+    rw [← hx]
+    rw [hebb_weights_simp net A m n]
+    
+    rw [if_pos h₃]
+    rw [if_pos h₂.2]
+    rw [if_pos h₁]
+    rw [mul_one, mul_one, mul_one]
+    
+    -- Split up the match statement.  In the first case,
+    -- we have some weight for m ⟶ n.
+    split
+    case _ weight h₅ => 
+      have h₆ : net.graph.getEdgeWeight m n = weight := by
+        simp only [Graph.getEdgeWeight]
+        rw [h₅]
+      
+      rw [← h₆]
+      rw [← add_assoc]
+      apply add_le_add_right _ _
+      apply le_add_of_le_add_left _ (min_score_le net A m n)
+      apply le_of_eq
+      
+      -- From here we just need to show
+      --     N * min_score = (N - 1) * min_score + min_score
+      -- So we factor out the min_score, and let Lean simp do the rest.
+      conv => rhs; enter [2]; rw [← one_mul (min_score net)]
+      rw [← right_distrib]
       simp
 
-      rw [ge_iff_le] at h₅
-      simp at h₅
-      rw [add_comm]
-      rw [← sub_le_iff_le_add]
-      
-      have h₆ : ((net.threshold - ↑(List.length net.graph.vertices) * 
-        min_score net) / net.rate) * net.rate ≤ 0 * net.rate :=
-        mul_le_mul h₅ le_rfl (le_of_lt net.rate_pos) le_rfl
-      have h₇ : net.rate ≠ 0 :=
-        fun hcontr => absurd net.rate_pos (not_lt_of_le (le_of_eq hcontr))
+    -- In this second case, there is no weight from m ⟶ n.
+    -- But this is impossible, since it means there is no edge m ⟶ n
+    -- whatsoever!
+    case _ h₅ => 
+      apply absurd h₂.1 _
+      sorry
+      -- simp only [preds]
 
-      rw [div_mul_cancel _ h₇] at h₆
-      simp only [Rat.mul] at h₆
-      rw [Rat.zero_mul] at h₆
-      exact le_trans h₆ (le_of_lt net.rate_pos)
-    -----
-
-  sorry
+    
+  exact le_trans (no_times_inequality net) 
+    (le_trans h₄ sorry)
 
 -- If all predecessors of n (and all predecessors of those, etc.)
 -- don't touch Prop(A) ∩ Prop(B), then n is activated in the
