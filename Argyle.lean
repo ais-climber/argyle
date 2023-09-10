@@ -1872,46 +1872,31 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
   -- Split on the match to ensure that there is a minimum at all.
   split
   case _ min hmin => 
+    -------------------------
+    -- The min is ≤ the sum of negative weights
     have h₁ : 
       min ≤ List.foldr (· + ·) 0 (List.map (fun m => 
         if net.graph.getEdgeWeight m n < 0 then 
           net.graph.getEdgeWeight m n
         else 0) 
         (preds net n)) := by
-      
+    -------------------------
       simp only [neg_weight_score] at hmin
       sorry -- the minimum thing is a member of the whole list
     
+    -------------------------
+    -- The sum of negative weights is ≤ any single weight 
     have h₂ : 
       List.foldr (· + ·) 0 (List.map (fun m => 
         if net.graph.getEdgeWeight m n < 0 then 
-          net.graph.getEdgeWeight m n
-        else 0) 
-        (preds net n)) 
-      ≤ 
-      List.foldr (· + ·) 0 (List.map (fun m => 
-        if net.graph.getEdgeWeight m n < 0 then 
-          (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) 
-        else 0) 
-        (preds net n)) := by
-      
-      sorry
-      -- by_cases m ∈ S
-      -- case pos => 
-      --   -- If m ∈ S, then (if m ∈ S then 1 else 0) = 1, and we just reduce.
-      --   rw [if_pos]
-      -- case neg => sorry
-    
-    have h₃ : 
-      List.foldr (· + ·) 0 (List.map (fun m => 
-        if net.graph.getEdgeWeight m n < 0 then 
-          (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) 
+          (net.graph.getEdgeWeight m n) 
         else 0) 
         (preds net n))
-      ≤ (net.graph.getEdgeWeight m n) * (if m ∈ S then 1 else 0) :=
+      ≤ net.graph.getEdgeWeight m n := by
+    -------------------------
       sorry
     
-    exact le_trans h₁ (le_trans h₂ sorry)
+    exact le_trans h₁ h₂
   
   case _ hmin => 
     -- The case where there is no minimum is impossible, since 
