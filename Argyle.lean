@@ -120,6 +120,9 @@ structure Graph (α : Type) (β : Type) where
   vertices : List α
   edges : List (α × α)
   weights : List ((α × α) × β)
+
+  edges_from_vertices_left : ∀ {x y : α}, ⟨x, y⟩ ∈ edges → x ∈ vertices
+  edges_from_vertices_right : ∀ {x y : α}, ⟨x, y⟩ ∈ edges → y ∈ vertices
 deriving Repr
 
 -- Notice that this graph is acyclic, since each predecessor
@@ -140,6 +143,8 @@ def graphA : Graph ℕ ℚ :=
       ⟨⟨2, 3⟩, 1.0⟩,
       ⟨⟨2, 3⟩, 3.0⟩
     ]
+  edges_from_vertices_left := sorry
+  edges_from_vertices_right := sorry
 }
 
 -- TODO: Make graph a Repr!
@@ -181,7 +186,10 @@ def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
 -- but we will tend to look backwards from a node rather
 -- than forwards.
 def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
-  if m ∈ (g.predecessors n) then true else false
+  match List.lookup m g.edges with
+  | some v => if v = n then true else false
+  | none => false
+  -- if m ∈ (g.predecessors n) then true else false
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
 -- Otherwise we return None.
@@ -447,18 +455,12 @@ lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → ℚ) (ls : List ℕ) :
   rw [List.zipWith_map_left]
   rw [List.zipWith_map_right]
   rw [List.zipWith_map_right]
-  simp [List.sum]
-  rw [List.foldl_map]
-  rw [List.foldl_map]
+  simp
   
-  -- By induction on the length of the list we're foldr-ing
-  induction List.range (List.length ls)
-  case nil => simp only [List.foldl]
-  case cons i is IH => 
-    simp only [List.foldl]
-    sorry
-    -- exact add_le_add (h₁ i) IH
-
+  apply List.sum_le_sum
+  intro m _
+  exact h₁ m
+  
 -- WARNING:
 -- This is actually FALSE!  For infinite sets, l[i] is not provably
 -- in l (as far as I can figure.)
@@ -1888,50 +1890,53 @@ def min_score (net : Net) : ℚ :=
 
 -- The *minimum* score is smaller than any individual weight
 --------------------------------------------------------------------
-lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
-  -- let x : ℚ := if m ∈ S then 1 else 0
-  -- min_score net ≤ weight * x
+lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) (hpred : m ∈ preds net n) :
   let weight := net.graph.getEdgeWeight m n
-  
   min_score net ≤ weight := by
 --------------------------------------------------------------------
   intro weight
   simp only [min_score]
   
+  -- These will be convenient for abbreviating later.
+  generalize hLst : (List.eraseP (fun x => decide (Graph.getEdgeWeight net.graph m n =
+    if Graph.getEdgeWeight net.graph x n < 0 then 
+      Graph.getEdgeWeight net.graph x n 
+    else 0)) (preds net n)) = Lst
+  generalize hf : (fun m => 
+    if Graph.getEdgeWeight net.graph m n < 0 then 
+      Graph.getEdgeWeight net.graph m n 
+    else 0) = f
+
   -- Split on the match to ensure that there is a minimum at all.
   split
   case _ min hmin => 
     -------------------------
     -- The min is ≤ the sum of negative weights
-    have h₁ : 
-      min ≤ List.sum (List.map (fun m => 
-        if net.graph.getEdgeWeight m n < 0 then 
-          net.graph.getEdgeWeight m n
-        else 0) 
-        (preds net n)) := by
+    have h₁ : min ≤ List.sum (List.map f (preds net n)) := by
     -------------------------
       simp only [neg_weight_score] at hmin
-      sorry -- the minimum thing is a member of the whole list
+      simp only [neg_weight_score] at hmin
+      apply le_of_not_lt
+      
+      -- The minimum thing is a member of the whole list
+      apply List.minimum_not_lt_of_mem _ hmin
+      rw [← hf]
+      apply List.mem_map_of_mem (fun n => List.sum (List.map (fun m => 
+        if Graph.getEdgeWeight net.graph m n < 0 then 
+          Graph.getEdgeWeight net.graph m n 
+        else 0) (preds net n)))
+      simp only [Graph.get_vertices]
+
+      -- Finally, we just need to show that n is a vertex in our graph.
+      sorry
+      -- exact net.graph.edges_from_vertices_left 
     
     -------------------------
     -- The sum of negative weights is ≤ any single weight 
     have h₂ : 
-      List.sum (List.map (fun m => 
-        if net.graph.getEdgeWeight m n < 0 then 
-          (net.graph.getEdgeWeight m n) 
-        else 0) 
-        (preds net n))
+      List.sum (List.map f (preds net n))
       ≤ net.graph.getEdgeWeight m n := by
     -------------------------
-      -- These will be convenient for abbreviating later.
-      generalize hLst : (List.eraseP (fun x => decide (Graph.getEdgeWeight net.graph m n =
-        if Graph.getEdgeWeight net.graph x n < 0 then 
-          Graph.getEdgeWeight net.graph x n 
-        else 0)) (preds net n)) = Lst
-      generalize hf : (fun m => 
-        if Graph.getEdgeWeight net.graph m n < 0 then 
-          Graph.getEdgeWeight net.graph m n 
-        else 0) = f
 
       -- We show that the sum of the original list is negative.
       have h₃ : List.sum (List.map f (preds net n)) ≤ 0 := by
@@ -1972,26 +1977,34 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
           exact h
         case neg => rw [if_neg h]
 
+      -- If Weight(m, n) < 0, then this weight is in the list of weights.
+      have h₅ : net.graph.getEdgeWeight m n < 0 
+        → net.graph.getEdgeWeight m n ∈ List.map f (preds net n) := by
+        intro h₆
+        rw [← hf]
+
+        -- By induction on the predecessor list
+        -- (I can't find a lemma in the mathlib that will help us here)
+        induction (preds net n)
+        case nil => 
+          -- This case is impossible; if preds = [], then
+          -- Weight(m, n) = 0.  But Weight(m, n) < 0!
+          simp only [Graph.getEdgeWeight]
+          sorry
+        case cons x xs IH => 
+          simp only [List.map]
+          sorry
+
       -- We split into two cases;
       --   - Weight(m, n) < 0, and so it's a part of the sum,
       --       and we can pull it out of the sum
       --   - Weight(m, n) ≥ 0, and so it's positive, whereas
       --       the rest of the sum is negative. 
       cases lt_or_ge (net.graph.getEdgeWeight m n) 0
-      case inl h₅ =>
-        -- Weight(m, n) is in the list
-        have h₆ : net.graph.getEdgeWeight m n ∈ List.map f (preds net n) := by
-          rw [← hf]
-          sorry
-          -- exact List.mem_map_of_mem _ _
-
-        rw [← List.sum_erase h₆]
+      case inl h₆ =>
+        rw [← List.sum_erase (h₅ h₆)]
         exact add_le_of_le_of_nonpos le_rfl h₄
-
-      case inr h₅ => 
-        -- In this case, Weight(m, n) ≥ 0, whereas the rest of the
-        -- sum is negative.
-        exact le_trans h₃ h₅
+      case inr h₆ => exact le_trans h₃ h₆
 
     exact le_trans h₁ h₂
   case _ hmin => 
@@ -2633,7 +2646,7 @@ theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
       rw [← h₆]
       rw [← add_assoc]
       apply add_le_add_right _ _
-      apply le_add_of_le_add_left _ (min_score_le net A m n)
+      apply le_add_of_le_add_left _ (min_score_le net A m n h₂.1)
       apply le_of_eq
       
       -- From here we just need to show
