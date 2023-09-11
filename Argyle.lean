@@ -6,7 +6,6 @@ import Lean.Meta.Tactic.Simp.Main
 import Mathlib.Tactic.Basic
 import Mathlib.Data.List.Sigma
 import Mathlib.Data.Real.Basic
-import Mathlib.Algebra.Order.Kleene
 
 import Lean.Parser.Tactic
 import Mathlib.Init.Set
@@ -173,14 +172,7 @@ def get_vertices (g : Graph ℕ ℚ) : List ℕ := g.vertices
 --     if vertex = n then succ 
 --     else successor_pairs rest n
 
--- We get all vertices that are in n's successor list
-def successors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  (List.filter (fun ⟨u, _⟩ => u = n) g.edges).unzip.2
 
-def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter 
-    (fun v => if n ∈ (g.successors v) then true else false) 
-    g.get_vertices
 
 -- Using 'predecessors' is slower than 'successors',
 -- but we will tend to look backwards from a node rather
@@ -189,7 +181,12 @@ def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
   match List.lookup m g.edges with
   | some v => if v = n then true else false
   | none => false
-  -- if m ∈ (g.predecessors n) then true else false
+
+def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
+  List.filter (fun m => g.hasEdge m n) g.get_vertices
+
+def successors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
+  List.filter (fun m => g.hasEdge n m) g.get_vertices
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
 -- Otherwise we return None.
@@ -198,6 +195,12 @@ def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
   | some weight => weight
   | none => 0
   
+--------------------------------------------------------------------
+lemma hasEdge_iff_edge (g : Graph ℕ ℚ) (m n : ℕ) :
+  g.hasEdge m n ↔ ⟨m, n⟩ ∈ g.edges :=
+--------------------------------------------------------------------
+  sorry 
+
 -- Some sanity checks
 #eval get_vertices graphA
 #eval successors graphA 0
@@ -479,8 +482,26 @@ def preds (net : Net) (n : ℕ): List ℕ :=
 theorem edge_iff_preds (net : Net) (m n : ℕ) :
   m ∈ preds net n ↔ net.graph.hasEdge m n := by
 --------------------------------------------------------------------
-  simp only [preds, Graph.hasEdge]
-  
+  simp only [preds, Graph.predecessors]
+  apply Iff.intro
+  case mp => 
+    intro h₁
+    sorry
+  case mpr => 
+    intro h₁
+    exact List.mem_filter_of_mem sorry h₁
+  -- exact List.mem_filter_of_mem _ _
+
+
+  -- induction List.lookup m net.graph.edges
+  -- case some v => 
+  --   simp only [some]
+  --   by_cases m ∈ net.graph.predecessors n
+  --   case pos => sorry
+  --   case neg => sorry
+  -- case none => sorry
+
+  /-
   by_cases m ∈ net.graph.predecessors n
   case pos => 
     rw [if_pos h]
@@ -488,6 +509,7 @@ theorem edge_iff_preds (net : Net) (m n : ℕ) :
   case neg => 
     rw [if_neg h]
     simp [h]
+  -/
 
 -- (Weightless) *minimal* graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
@@ -1484,7 +1506,8 @@ lemma graph_update_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
 lemma graph_update_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  simp only [graph_update, Graph.successors]
+  sorry
+  -- simp only [graph_update, Graph.successors]
 
 -- This graph update does not affect the *predecessor* structure
 -- of the graph
@@ -1492,8 +1515,11 @@ lemma graph_update_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n :
 lemma graph_update_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).predecessors n = g.predecessors n := by
 --------------------------------------------------------------------
+  sorry
+  /-
   simp only [Graph.predecessors]
   conv => lhs; enter [1, v]; rw [graph_update_successors]
+  -/
 
 -- This graph update does not affect the *edge* structure
 -- of the graph
@@ -1501,7 +1527,8 @@ lemma graph_update_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n
 lemma graph_update_edges (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
   (graph_update net g S).hasEdge m n ↔ g.hasEdge m n := by
 --------------------------------------------------------------------
-  simp only [Graph.hasEdge, graph_update_predecessors]
+  sorry
+  -- simp only [Graph.hasEdge, graph_update_predecessors]
 
 -- This graph update does not affect the *path* structure
 -- of the graph
@@ -1928,8 +1955,17 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) (hpred : m ∈ preds ne
       simp only [Graph.get_vertices]
 
       -- Finally, we just need to show that n is a vertex in our graph.
+      -- sorry
+      apply net.graph.edges_from_vertices_right _
+      exact m
+      
+      have h₂ : net.graph.hasEdge m n := sorry
+
+      simp only [Graph.hasEdge] at h₂
       sorry
-      -- exact net.graph.edges_from_vertices_left 
+      -- induction List.lookup m net.graph.edges
+      -- case some v => sorry
+      -- case none => sorry
     
     -------------------------
     -- The sum of negative weights is ≤ any single weight 
@@ -2118,20 +2154,25 @@ lemma graph_update_star_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
 lemma graph_update_star_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update_star net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  simp only [graph_update_star, Graph.successors]
+  sorry
+  -- simp only [graph_update_star, Graph.successors]
 
 --------------------------------------------------------------------
 lemma graph_update_star_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update_star net g S).predecessors n = g.predecessors n := by
 --------------------------------------------------------------------
+  sorry
+  /-
   simp only [Graph.predecessors]
   conv => lhs; enter [1, v]; rw [graph_update_star_successors]
+  -/
   
 --------------------------------------------------------------------
 lemma graph_update_star_edges (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
   (graph_update_star net g S).hasEdge m n ↔ g.hasEdge m n := by
 --------------------------------------------------------------------
-  simp only [Graph.hasEdge, graph_update_star_predecessors]
+  sorry
+  -- simp only [Graph.hasEdge, graph_update_star_predecessors]
 
 --------------------------------------------------------------------
 lemma graph_update_star_path (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
