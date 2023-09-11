@@ -6,6 +6,7 @@ import Lean.Meta.Tactic.Simp.Main
 import Mathlib.Tactic.Basic
 import Mathlib.Data.List.Sigma
 import Mathlib.Data.Real.Basic
+import Mathlib.Algebra.Order.Kleene
 
 import Lean.Parser.Tactic
 import Mathlib.Init.Set
@@ -50,6 +51,33 @@ theorem lookup_map (xs : List ((ℕ × ℕ) × ℚ)) (a : ℕ × ℕ) (f : ((ℕ
       
       simp [h₁]
       exact IH
+/-
+List.sum (List.map (fun m => if Graph.getEdgeWeight net.graph m n < 0 then Graph.getEdgeWeight net.graph m n else 0) Lst) ≤
+  0
+-/
+
+-- I think this should be in the standard library, but it isn't.
+-- It says: If every member of a sum is ≤ 0, then the whole sum is ≤ 0.
+--------------------------------------------------------------------
+theorem sum_le_zero {lst : List ℕ} {f : ℕ → ℚ} : 
+  (∀ (a : ℕ), a ∈ lst → f a ≤ 0)
+  → List.sum (List.map f lst) ≤ 0 := by
+--------------------------------------------------------------------
+  intro h₁
+  induction lst
+  case nil => rw [List.map_nil, List.sum_nil]
+  case cons x xs IH => 
+    simp only [List.map]
+    rw [List.sum_cons]
+
+    -- f(x) ≤ 0 and Sum(Map(xs)) ≤ 0,
+    -- so their sum ≤ 0.
+    have h₂ : f x ≤ 0 := by simp [h₁]
+    have h₃ : ∀ (a : ℕ), a ∈ xs → f a ≤ 0 := by
+      intro a ha
+      simp [h₁, ha]
+
+    exact add_nonpos h₂ (IH h₃)
 
 -------------------------------------------------
 -- Weighted Directed Graphs
@@ -365,7 +393,7 @@ variable (net : Net)
 --     List.sum [w * x | for w in weights, for x in lst],
 -- but list comprehensions are harder to reason about.
 def weighted_sum (weights : List ℚ) (lst : List ℚ) : ℚ :=
-  List.foldr (· + ·) 0 (List.zipWith (· * ·) weights lst)
+  List.sum (List.zipWith (· * ·) weights lst)
 
 
 #eval weighted_sum [] []
@@ -419,16 +447,17 @@ lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → ℚ) (ls : List ℕ) :
   rw [List.zipWith_map_left]
   rw [List.zipWith_map_right]
   rw [List.zipWith_map_right]
-  simp
-  rw [List.foldr_map]
-  rw [List.foldr_map]
+  simp [List.sum]
+  rw [List.foldl_map]
+  rw [List.foldl_map]
   
   -- By induction on the length of the list we're foldr-ing
   induction List.range (List.length ls)
-  case nil => simp only [List.foldr]
+  case nil => simp only [List.foldl]
   case cons i is IH => 
-    simp only [List.foldr]
-    exact add_le_add (h₁ i) IH
+    simp only [List.foldl]
+    sorry
+    -- exact add_le_add (h₁ i) IH
 
 -- WARNING:
 -- This is actually FALSE!  For infinite sets, l[i] is not provably
@@ -1778,7 +1807,7 @@ theorem hebb_once_weights_le (net : Net) :
 -- activate but none of its positive ones do).  If a neuron has
 -- no negative incoming weights, we give it a score of 0.
 def neg_weight_score (net : Net) (n : ℕ) : ℚ :=
-  List.foldr (· + ·) 0 (List.map (fun m => 
+  List.sum (List.map (fun m => 
     if net.graph.getEdgeWeight m n < 0 then 
       net.graph.getEdgeWeight m n
     else 0) 
@@ -1875,7 +1904,7 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
     -------------------------
     -- The min is ≤ the sum of negative weights
     have h₁ : 
-      min ≤ List.foldr (· + ·) 0 (List.map (fun m => 
+      min ≤ List.sum (List.map (fun m => 
         if net.graph.getEdgeWeight m n < 0 then 
           net.graph.getEdgeWeight m n
         else 0) 
@@ -1887,17 +1916,84 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) :
     -------------------------
     -- The sum of negative weights is ≤ any single weight 
     have h₂ : 
-      List.foldr (· + ·) 0 (List.map (fun m => 
+      List.sum (List.map (fun m => 
         if net.graph.getEdgeWeight m n < 0 then 
           (net.graph.getEdgeWeight m n) 
         else 0) 
         (preds net n))
       ≤ net.graph.getEdgeWeight m n := by
     -------------------------
-      sorry
-    
+      -- These will be convenient for abbreviating later.
+      generalize hLst : (List.eraseP (fun x => decide (Graph.getEdgeWeight net.graph m n =
+        if Graph.getEdgeWeight net.graph x n < 0 then 
+          Graph.getEdgeWeight net.graph x n 
+        else 0)) (preds net n)) = Lst
+      generalize hf : (fun m => 
+        if Graph.getEdgeWeight net.graph m n < 0 then 
+          Graph.getEdgeWeight net.graph m n 
+        else 0) = f
+
+      -- We show that the sum of the original list is negative.
+      have h₃ : List.sum (List.map f (preds net n)) ≤ 0 := by
+        apply sum_le_zero
+        intro m hm
+        rw [← hf]
+        simp
+        by_cases (Graph.getEdgeWeight net.graph m n < 0)
+        case pos => 
+          rw [if_pos h]
+          apply le_of_lt
+          exact h
+        case neg => rw [if_neg h]
+
+      -- Next, we show that the sum of the list *without* Weight(m, n)
+      -- is negative.
+      have h₄ : List.sum (List.erase (List.map f (preds net n))
+        (Graph.getEdgeWeight net.graph m n)) ≤ 0 := by
+        -- Push in the 'erase'
+        rw [List.erase_eq_eraseP]
+        rw [List.eraseP_map]
+        simp only [Function.comp]
+
+        -- Rewrite Lst and f from earlier
+        rw [← hf]
+        rw [hLst]
+        rw [hf]
+
+        apply sum_le_zero
+        intro m hm
+        rw [← hLst] at hm
+        rw [← hf]
+        simp
+        by_cases (Graph.getEdgeWeight net.graph m n < 0)
+        case pos => 
+          rw [if_pos h]
+          apply le_of_lt
+          exact h
+        case neg => rw [if_neg h]
+
+      -- We split into two cases;
+      --   - Weight(m, n) < 0, and so it's a part of the sum,
+      --       and we can pull it out of the sum
+      --   - Weight(m, n) ≥ 0, and so it's positive, whereas
+      --       the rest of the sum is negative. 
+      cases lt_or_ge (net.graph.getEdgeWeight m n) 0
+      case inl h₅ =>
+        -- Weight(m, n) is in the list
+        have h₆ : net.graph.getEdgeWeight m n ∈ List.map f (preds net n) := by
+          rw [← hf]
+          sorry
+          -- exact List.mem_map_of_mem _ _
+
+        rw [← List.sum_erase h₆]
+        exact add_le_of_le_of_nonpos le_rfl h₄
+
+      case inr h₅ => 
+        -- In this case, Weight(m, n) ≥ 0, whereas the rest of the
+        -- sum is negative.
+        exact le_trans h₃ h₅
+
     exact le_trans h₁ h₂
-  
   case _ hmin => 
     -- The case where there is no minimum is impossible, since 
     -- net.graph is nonempty!
