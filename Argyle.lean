@@ -50,10 +50,94 @@ theorem lookup_map (xs : List ((ℕ × ℕ) × ℚ)) (a : ℕ × ℕ) (f : ((ℕ
       
       simp [h₁]
       exact IH
+
+-- This should *also* be in the standard library, but isn't!
+--------------------------------------------------------------------
+theorem lookup_mem (xs : List (ℕ × ℕ)) (a b : ℕ) :
+  (List.lookup a xs = some b) → (a, b) ∈ xs := by
+--------------------------------------------------------------------
+  intro h₁
+
+  induction xs
+  case nil => simp at h₁
+  case cons x xs IH => 
+    simp only [List.lookup] at h₁
+
+    -- Split up the match!
+    split at h₁
+    case _ h₂ => 
+      have h₃ : x = (a, b) := by
+        rw [Prod.eq_iff_fst_eq_snd_eq]
+        simp
+        simp at h₁
+        simp at h₂
+        exact ⟨symm h₂, h₁⟩  
+
+      rw [h₃]
+      exact List.mem_cons_self _ _
+    case _ _ => exact List.mem_cons_of_mem _ (IH h₁)
+
 /-
-List.sum (List.map (fun m => if Graph.getEdgeWeight net.graph m n < 0 then Graph.getEdgeWeight net.graph m n else 0) Lst) ≤
-  0
+List.lookup (m, n) net.graph.weights = none
 -/
+
+-- This should *also* be in the standard library, but isn't!
+--------------------------------------------------------------------
+theorem lookup_none (xs : List ((ℕ × ℕ) × ℚ)) (a : ℕ × ℕ) :
+  (List.lookup a xs = none) → ∀ (b : ℚ), (a, b) ∉ xs := by
+--------------------------------------------------------------------
+  intro h₁ b
+
+  induction xs
+  case nil => simp
+  case cons x xs IH => 
+    simp only [List.lookup] at h₁
+    
+    -- Split up the match!
+    split at h₁
+    case _ h₂ => 
+      intro hcontr
+      sorry
+      -- have h₃ : x = (a, b) := by
+      --   rw [Prod.eq_iff_fst_eq_snd_eq]
+      --   simp
+      --   simp at h₁
+      --   simp at h₂
+      --   exact ⟨symm h₂, h₁⟩  
+
+      -- rw [h₃]
+      -- exact List.mem_cons_self _ _
+    case _ h₂ => 
+      intro hcontr
+      rw [List.mem_cons] at hcontr
+
+      -- We split; either (a, b) = x or (a, b) ∈ xs
+      cases hcontr
+      case inl h₃ => 
+        simp at h₂
+        have h₄ : b = x.2 := by
+          apply symm
+          apply Prod.snd_eq_iff.mpr
+          apply symm
+          sorry
+
+        apply h₂
+        apply symm
+        apply Prod.fst_eq_iff.mpr
+        apply symm
+        rw [← h₄]
+        exact h₃
+        -- exact h₂ (symm (Prod.fst_eq_iff.mpr (symm _)))
+        -- conv at h₂ =>
+        --   simp; enter [1]
+        --   rw [Prod.fst_eq_iff]
+        -- simp at h₂
+
+        -- -- rw [symm _ _] at h₂
+        -- rw [Prod.fst_eq_iff] at h₂
+        -- exact h₂ _
+      case inr h₃ => exact IH h₁ h₃
+      -- sorry -- exact List.mem_cons_of_mem _ (IH h₁)
 
 -- I think this should be in the standard library, but it isn't.
 -- It says: If every member of a sum is ≤ 0, then the whole sum is ≤ 0.
@@ -104,14 +188,6 @@ theorem sum_le_zero {lst : List ℕ} {f : ℕ → ℚ} :
 -- from scratch, kindly refrain from creating cycles.
 -------------------------------------------------
 
--- structure Edge (α : Type) where
---   prev : α
---   next : α
--- deriving Repr
-
--- instance [Inhabited α] : Inhabited (Edge α) := 
---   ⟨ { prev := default, next := default } ⟩
-
 -- α is the type of the nodes
 -- β is the type of the weights
 -- We assume that the data is hygenic
@@ -120,12 +196,21 @@ structure Graph (α : Type) (β : Type) where
   edges : List (α × α)
   weights : List ((α × α) × β)
 
+  -- Constraints to make sure everything is hygenic.
   edges_from_vertices_left : ∀ {x y : α}, ⟨x, y⟩ ∈ edges → x ∈ vertices
   edges_from_vertices_right : ∀ {x y : α}, ⟨x, y⟩ ∈ edges → y ∈ vertices
+  -- weights_from_edges : ∀ {x y : α} {w : β}, 
+  --   ⟨⟨x, y⟩, w⟩ ∈ weights → ⟨x, y⟩ ∈ edges
 deriving Repr
+
+/-
+h₇: ∀ (b : ℚ), ¬((m, n), b) ∈ net.graph.weights
+⊢ ¬(m, n) ∈ net.graph.edges
+-/
 
 -- Notice that this graph is acyclic, since each predecessor
 -- list only refers to nodes above the current node.
+/-
 def graphA : Graph ℕ ℚ :=
 { vertices := [0, 1, 2, 3]
   edges := 
@@ -145,6 +230,7 @@ def graphA : Graph ℕ ℚ :=
   edges_from_vertices_left := sorry
   edges_from_vertices_right := sorry
 }
+-/
 
 -- TODO: Make graph a Repr!
 -- #check graphA
@@ -164,19 +250,6 @@ namespace Graph
 
 def get_vertices (g : Graph ℕ ℚ) : List ℕ := g.vertices
 
--- Helper function to collect the List of pairs of n's successors
--- def successor_pairs (vertices : List (Vertex ℕ)) (n : ℕ) : List (ℕ × ℚ) :=
---   match vertices with
---   | [] => []
---   | ⟨vertex, succ⟩ :: rest => 
---     if vertex = n then succ 
---     else successor_pairs rest n
-
-
-
--- Using 'predecessors' is slower than 'successors',
--- but we will tend to look backwards from a node rather
--- than forwards.
 def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
   match List.lookup m g.edges with
   | some v => if v = n then true else false
@@ -196,27 +269,44 @@ def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
   | none => 0
   
 --------------------------------------------------------------------
-lemma hasEdge_iff_edge (g : Graph ℕ ℚ) (m n : ℕ) :
-  g.hasEdge m n ↔ ⟨m, n⟩ ∈ g.edges :=
+theorem edge_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
+  g.hasEdge m n → ⟨m, n⟩ ∈ g.edges := by
 --------------------------------------------------------------------
-  sorry 
+  simp only [Graph.hasEdge]
+  
+  -- Split up the match
+  split 
+  case _ v h₁ => 
+    intro h₂
+    have h₃ : v = n := by
+      apply byContradiction
+      intro hcontr
+      rw [if_neg hcontr] at h₂
+      exact absurd (symm h₂) (Bool.of_decide_false rfl)
+
+    rw [← h₃]
+    exact lookup_mem _ _ _ h₁
+    
+  case _ _ => 
+    intro h₂
+    simp at h₂
 
 -- Some sanity checks
-#eval get_vertices graphA
-#eval successors graphA 0
-#eval successors graphA 1
-#eval successors graphA 2
-#eval successors graphA 3
-#eval predecessors graphA 0
-#eval predecessors graphA 1
-#eval predecessors graphA 2
-#eval predecessors graphA 3
-#eval hasEdge graphA 1 2
-#eval hasEdge graphA 1 3
-#eval hasEdge graphA 3 2
-#eval getEdgeWeight graphA 1 2
-#eval getEdgeWeight graphA 1 3
-#eval getEdgeWeight graphA 3 2
+-- #eval get_vertices graphA
+-- #eval successors graphA 0
+-- #eval successors graphA 1
+-- #eval successors graphA 2
+-- #eval successors graphA 3
+-- #eval predecessors graphA 0
+-- #eval predecessors graphA 1
+-- #eval predecessors graphA 2
+-- #eval predecessors graphA 3
+-- #eval hasEdge graphA 1 2
+-- #eval hasEdge graphA 1 3
+-- #eval hasEdge graphA 3 2
+-- #eval getEdgeWeight graphA 1 2
+-- #eval getEdgeWeight graphA 1 3
+-- #eval getEdgeWeight graphA 3 2
 
 inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :
@@ -484,32 +574,20 @@ theorem edge_iff_preds (net : Net) (m n : ℕ) :
 --------------------------------------------------------------------
   simp only [preds, Graph.predecessors]
   apply Iff.intro
+
   case mp => 
     intro h₁
-    sorry
+    have h₂ := List.of_mem_filter h₁
+    exact h₂
+
   case mpr => 
     intro h₁
-    exact List.mem_filter_of_mem sorry h₁
-  -- exact List.mem_filter_of_mem _ _
+    have h₂ : ⟨m, n⟩ ∈ net.graph.edges := Graph.edge_of_hasEdge _ _ _ h₁
+    have h₃ : m ∈ net.graph.get_vertices := by
+      exact net.graph.edges_from_vertices_left h₂
 
-
-  -- induction List.lookup m net.graph.edges
-  -- case some v => 
-  --   simp only [some]
-  --   by_cases m ∈ net.graph.predecessors n
-  --   case pos => sorry
-  --   case neg => sorry
-  -- case none => sorry
-
-  /-
-  by_cases m ∈ net.graph.predecessors n
-  case pos => 
-    rw [if_pos h]
-    simp [h]
-  case neg => 
-    rw [if_neg h]
-    simp [h]
-  -/
+    apply List.mem_filter_of_mem h₃
+    exact h₁
 
 -- (Weightless) *minimal* graph distance from node m to n.  Just count
 -- the number of edges, i.e. don't apply weights.
@@ -1506,20 +1584,17 @@ lemma graph_update_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
 lemma graph_update_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  sorry
-  -- simp only [graph_update, Graph.successors]
-
+  simp only [Graph.successors]
+  congr 1
+  
 -- This graph update does not affect the *predecessor* structure
 -- of the graph
 --------------------------------------------------------------------
 lemma graph_update_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update net g S).predecessors n = g.predecessors n := by
 --------------------------------------------------------------------
-  sorry
-  /-
   simp only [Graph.predecessors]
-  conv => lhs; enter [1, v]; rw [graph_update_successors]
-  -/
+  congr 1
 
 -- This graph update does not affect the *edge* structure
 -- of the graph
@@ -1527,8 +1602,8 @@ lemma graph_update_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n
 lemma graph_update_edges (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
   (graph_update net g S).hasEdge m n ↔ g.hasEdge m n := by
 --------------------------------------------------------------------
-  sorry
-  -- simp only [Graph.hasEdge, graph_update_predecessors]
+  apply Eq.to_iff
+  congr 1
 
 -- This graph update does not affect the *path* structure
 -- of the graph
@@ -1917,7 +1992,7 @@ def min_score (net : Net) : ℚ :=
 
 -- The *minimum* score is smaller than any individual weight
 --------------------------------------------------------------------
-lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) (hpred : m ∈ preds net n) :
+lemma min_score_le (net : Net) (m n : ℕ) (hpred : m ∈ preds net n) :
   let weight := net.graph.getEdgeWeight m n
   min_score net ≤ weight := by
 --------------------------------------------------------------------
@@ -1958,15 +2033,23 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) (hpred : m ∈ preds ne
       -- sorry
       apply net.graph.edges_from_vertices_right _
       exact m
-      
-      have h₂ : net.graph.hasEdge m n := sorry
-
+      have h₂ : net.graph.hasEdge m n := (edge_iff_preds _ _ _).mp hpred
       simp only [Graph.hasEdge] at h₂
-      sorry
-      -- induction List.lookup m net.graph.edges
-      -- case some v => sorry
-      -- case none => sorry
-    
+      
+      -- Split the 'match' (this is tedious, we just have to work for it...)
+      split at h₂
+      case _ v h₃ => 
+        have h₄ : v = n := by
+          apply byContradiction
+          intro hcontr
+          rw [if_neg hcontr] at h₂
+          exact absurd (symm h₂) (Bool.of_decide_false rfl)
+
+        rw [← h₄]
+        exact lookup_mem _ _ _ h₃
+      case _ _ => 
+        exact absurd (symm h₂) (Bool.of_decide_false rfl)
+      
     -------------------------
     -- The sum of negative weights is ≤ any single weight 
     have h₂ : 
@@ -1977,7 +2060,7 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) (hpred : m ∈ preds ne
       -- We show that the sum of the original list is negative.
       have h₃ : List.sum (List.map f (preds net n)) ≤ 0 := by
         apply sum_le_zero
-        intro m hm
+        intro m _
         rw [← hf]
         simp
         by_cases (Graph.getEdgeWeight net.graph m n < 0)
@@ -2018,18 +2101,13 @@ lemma min_score_le (net : Net) (S : Set ℕ) (m n : ℕ) (hpred : m ∈ preds ne
         → net.graph.getEdgeWeight m n ∈ List.map f (preds net n) := by
         intro h₆
         rw [← hf]
-
-        -- By induction on the predecessor list
-        -- (I can't find a lemma in the mathlib that will help us here)
-        induction (preds net n)
-        case nil => 
-          -- This case is impossible; if preds = [], then
-          -- Weight(m, n) = 0.  But Weight(m, n) < 0!
-          simp only [Graph.getEdgeWeight]
-          sorry
-        case cons x xs IH => 
-          simp only [List.map]
-          sorry
+        rw [← @if_pos _ (Rat.instDecidableLtRatInstLTRat _ _) h₆ _ 
+          (Graph.getEdgeWeight net.graph m n) 0]
+        
+        exact List.mem_map_of_mem (fun m => 
+          if Graph.getEdgeWeight net.graph m n < 0 then 
+            Graph.getEdgeWeight net.graph m n 
+          else 0) hpred
 
       -- We split into two cases;
       --   - Weight(m, n) < 0, and so it's a part of the sum,
@@ -2154,25 +2232,22 @@ lemma graph_update_star_vertices (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) :
 lemma graph_update_star_successors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update_star net g S).successors n = g.successors n := by
 --------------------------------------------------------------------
-  sorry
-  -- simp only [graph_update_star, Graph.successors]
+  simp only [Graph.successors]
+  congr 1
 
 --------------------------------------------------------------------
 lemma graph_update_star_predecessors (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (n : ℕ) :
   (graph_update_star net g S).predecessors n = g.predecessors n := by
 --------------------------------------------------------------------
-  sorry
-  /-
   simp only [Graph.predecessors]
-  conv => lhs; enter [1, v]; rw [graph_update_star_successors]
-  -/
+  congr 1
   
 --------------------------------------------------------------------
 lemma graph_update_star_edges (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
   (graph_update_star net g S).hasEdge m n ↔ g.hasEdge m n := by
 --------------------------------------------------------------------
-  sorry
-  -- simp only [Graph.hasEdge, graph_update_star_predecessors]
+  apply Eq.to_iff
+  congr 1
 
 --------------------------------------------------------------------
 lemma graph_update_star_path (net : Net) (g : Graph ℕ ℚ) (S : Set ℕ) (m n : ℕ) :
@@ -2687,7 +2762,7 @@ theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
       rw [← h₆]
       rw [← add_assoc]
       apply add_le_add_right _ _
-      apply le_add_of_le_add_left _ (min_score_le net A m n h₂.1)
+      apply le_add_of_le_add_left _ (min_score_le net m n h₂.1)
       apply le_of_eq
       
       -- From here we just need to show
@@ -2701,10 +2776,14 @@ theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
     -- But this is impossible, since it means there is no edge m ⟶ n
     -- whatsoever!
     case _ h₅ => 
-      apply absurd h₂.1 _
-      sorry
-      -- simp only [preds]
+      have h₆ : ⟨m, n⟩ ∈ net.graph.edges := by
+        rw [edge_iff_preds] at h₂
+        exact Graph.edge_of_hasEdge _ _ _ h₂.1
+      have h₇ := lookup_none _ _ h₅
 
+      apply absurd h₆
+      intro hcontr
+      sorry -- Need the connection between edges and weights here...
     
   exact le_trans (no_times_inequality net) 
     (le_trans h₄ sorry)
