@@ -1,3 +1,4 @@
+import Argyle.Net
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 
@@ -6,138 +7,53 @@ import Argyle.Operators.Propagate
 ══════════════════════════════════════════════════════════════════-/
 
 inductive Formula : Type where
+  -- Propositional logic
   | proposition : String → Formula
   | not : Formula → Formula
   | and : Formula → Formula → Formula
+
+  -- "Possibly knows" and "Possibly finds typical of" modalities
   | diaKnow : Formula → Formula
   | diaTyp : Formula → Formula
 
 postfix:max "ᵖ"   => Formula.proposition
-prefix:85   "diaKnow " => Formula.diaKnow
-prefix:85   "diaTyp " => Formula.diaTyp
+prefix:85   "⟨K⟩ " => Formula.diaKnow
+prefix:85   "⟨T⟩ " => Formula.diaTyp
 prefix:75   "not "   => Formula.not
 infixl:65   " and " => Formula.and
 
 -- Abbreviations
-notation:85 "Know " A:86 => not (diaKnow (not A))
-notation:85 "Typ " A:86 => not (diaTyp (not A))
-notation:65 A:85 " or " B:86 => (not A) and (not B)
-notation:85 A:85 " ⟶ " B:86 => (not A) or B
+notation:85 "[K] " ϕ:86 => not ⟨K⟩ (not ϕ)
+notation:85 "[T] " ϕ:86 => not ⟨T⟩ (not ϕ)
+notation:65 ϕ:65 " or " ψ:66 => not ϕ and not ψ
+notation:64 ϕ:64 " ⟶ " ψ:65 => (not ϕ) or ψ
 
+-- Some sanity checks
+#check [K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ
 
-example : Formula := Know "a"ᵖ ⟶ "b"ᵖ and Typ "c"ᵖ
-
--- infixl:65 " ⟨T⟩ " => HAdd.hAdd
-
-/-
-infix 13 EQN_
-infix 11 sol_,_ weights_ thres_ rate_
-infix 9 [_,_]_
-infix 9 ◇_
-infix 8 !_
-infix 7 _∧_ _∨_
-infix 6 _⇒_ -- Be careful!  This looks a lot like '→' !!!
-
------------------------------
--- Def: Formula
------------------------------
-data Formula : Set where
-  -- Include all vector space model formulas
-  EQN_        : VSFormula → Formula
-
-  -- Base formulas
-  sol_,_     : VecTerm {N} → BoolTerm → Formula
-  weights_   : VecTerm {N} → Formula
-  thres_     : ScalarTerm → Formula
-  rate_      : ScalarTerm → Formula
-
-  -- Boolean connectives
-  ⊥⁰      : Formula
-  !_       : Formula → Formula
-  _∧_      : Formula → Formula → Formula
-  _∨_      : Formula → Formula → Formula
-  _⇒_      : Formula → Formula → Formula
-
-  -- Observation
-  [_,_]_  : VecTerm {N} → BoolTerm → Formula → Formula
-
-  -- A special existential modality  '◇ φ' 
-  -- to be read "there exists a choice of weights w such that φ holds."
-  ◇_     : Formula → Formula
--/
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
 ══════════════════════════════════════════════════════════════════-/
 
-/-
-infix 5 _,_⊨_
-infix 5 ⊨_
+-- Any neural network N has a uniquely determined interpretation
+-- that maps each formula to a set of neurons.
+def interpret (net : Net) : Formula → Set ℕ := fun
+  | pᵖ => sorry
+  | not ϕ => (interpret net ϕ)ᶜ
+  | ϕ and ψ => (interpret net ϕ) ∩ (interpret net ψ)
+  | ⟨K⟩ ϕ => reachable net (interpret net ϕ)
+  | ⟨T⟩ ϕ => propagate net (interpret net ϕ)
 
------------------------------
--- Def: Models
------------------------------
--- We just specify the learning rate η and the threshold T.
--- The rest of the vector space model is just Agda's interpreter.
--- See vsm.agda for discussion on this.
-Model : Set
-Model = Float × Float
+-- Relation for "net satisfies ϕ at point n"
+def satisfies (net : Net) (ϕ : Formula) (n : ℕ) : Prop :=
+  n ∈ interpret net ϕ
+notation:35 net:40 ", " n:40 " ⊩ " ϕ:40 => satisfies net ϕ n
 
--- A dumb example of a model.
--- Sometimes any model whatsoever will suffice, and in this case
--- we use this one.
-dummy-model : Model
-dummy-model = ⟨ 0.0 , 0.0 ⟩
-
-dummy-weight : Vec Float N
-dummy-weight = {!   !}
-
------------------------------
--- Def: ⊨
------------------------------
--- TODO: Agda can't figure out that sol x , y⋆ is smaller than [ x , y ] φ.
---   So for now, I'll tell it that this does, in fact, terminate.
-{-# TERMINATING #-}
-_,_⊨_ : Model → Vec Float N → Formula → Set
--- vector space model case
-M , w ⊨ EQN E  =    ⊨ⱽ E
-
--- sol case
-⟨ η , T ⟩ , w ⊨ (sol x , y) = 
-  y ≡ bool ⌊ T Data.Float.<? (vsm.dot-prod w (⟦ x ⟧ⱽ)) ⌋
-
--- weights case
-M , w ⊨ weights w⋆ = 
-  vec w ≡ w⋆
-⟨ η , T ⟩ , w ⊨ thres T⋆ =
-  scal T ≡ T⋆
-⟨ η , T ⟩ , w ⊨ rate η⋆ =
-  scal η ≡ η⋆
-
--- connectives
-M , w ⊨ ⊥⁰ =        ⊥
-M , w ⊨ ! φ =       ¬ M , w ⊨ φ
-M , w ⊨ φ ∧ ψ =     (M , w ⊨ φ) × (M , w ⊨ ψ)
-M , w ⊨ φ ∨ ψ =     (M , w ⊨ φ) ⊎ (M , w ⊨ ψ)
-M , w ⊨ φ ⇒ ψ =     (M , w ⊨ φ) → (M , w ⊨ ψ)
-
--- observation case
-⟨ η , T ⟩ , w ⊨ [ x , y ] φ =
-  ∃[ w⋆ ] ∃[ y⋆ ] (⟨ η , T ⟩ , w ⊨ sol x , y⋆
-     × (⟨ η , T ⟩ , w⋆ ⊨ φ)
-     × ⊨ⱽ (vec w⋆ ≡ⱽ vec w +ⱽ (scal η *ⱽ (((cast y) -′ (cast y⋆)) *ⱽ x))))
-
--- existential case
-M , w ⊨ ◇ φ =    ∃[ w⋆ ] (M , ⟦ w⋆ ⟧ⱽ ⊨ φ)
-
------------------------------
--- Def: Validity
------------------------------
-⊨_ : Formula → Set
-⊨_ φ = ∀ (M : Model) → 
-  ∀ (w : Vec Float N) → 
-    M , w ⊨ φ
--/
+-- Relation for "net models ϕ" (at *all* points!)
+def models (net : Net) (ϕ : Formula) : Prop :=
+  ∀ n, (net, n ⊩ ϕ)
+notation:30 net:40 " ⊨ " ϕ:40 => models net ϕ
 
 
 /-══════════════════════════════════════════════════════════════════
