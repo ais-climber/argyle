@@ -9,6 +9,7 @@ import Argyle.Operators.Propagate
 inductive Formula : Type where
 -- Propositional logic
 | proposition : String → Formula
+| top : Formula
 | not : Formula → Formula
 | and : Formula → Formula → Formula
 
@@ -16,10 +17,11 @@ inductive Formula : Type where
 | diaKnow : Formula → Formula
 | diaTyp : Formula → Formula
 
-postfix:max "ᵖ"   => Formula.proposition
-prefix:85   "⟨K⟩ " => Formula.diaKnow
-prefix:85   "⟨T⟩ " => Formula.diaTyp
-prefix:75   "not "   => Formula.not
+postfix:max "ᵖ"     => Formula.proposition
+notation    "⊤"     => Formula.top
+prefix:85   "⟨K⟩ "  => Formula.diaKnow
+prefix:85   "⟨T⟩ "  => Formula.diaTyp
+prefix:75   "not "  => Formula.not
 infixl:65   " and " => Formula.and
 
 -- Abbreviations
@@ -40,6 +42,7 @@ notation:64 ϕ:64 " ⟶ " ψ:65 => (not ϕ) or ψ
 -- that maps each formula to a set of neurons.
 def interpret (net : Net) : Formula → Set ℕ := fun
 | pᵖ => sorry
+| ⊤ => sorry
 | not ϕ => (interpret net ϕ)ᶜ
 | ϕ and ψ => (interpret net ϕ) ∩ (interpret net ψ)
 | ⟨K⟩ ϕ => reachable net (interpret net ϕ)
@@ -50,16 +53,26 @@ def satisfies (net : Net) (ϕ : Formula) (n : ℕ) : Prop :=
   n ∈ interpret net ϕ
 notation:35 net:40 ", " n:40 " ⊩ " ϕ:40 => satisfies net ϕ n
 
--- Relation for "net models ϕ" (at *all* points!)
+-- A net models a *formula* ϕ iff n ⊩ ϕ for *all* points n ∈ N
 def models (net : Net) (ϕ : Formula) : Prop :=
   ∀ n, (net, n ⊩ ϕ)
-notation:30 net:40 " ⊨ " ϕ:40 => models net ϕ
 
+-- A net models a *list* Γ iff N ⊨ ϕ for all ϕ ∈ Γ 
+def models_list (net : Net) (Γ : List Formula) : Prop :=
+  Γ.All₂ (fun ϕ => models net ϕ)
+
+-- Γ ⊨ ϕ holds if *for all* nets N, if N ⊨ Γ then N ⊨ ϕ.  
+def entails (Γ : List Formula) (ϕ : Formula) : Prop :=
+  ∀ (net : Net), models_list net Γ → models net ϕ 
+notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 
 /-══════════════════════════════════════════════════════════════════
   Proof System
 ══════════════════════════════════════════════════════════════════-/
 
+-- prove ϕ means ϕ is a tautology (we can prove ϕ from nothing).
+-- i.e. ϕ either is an axiom, or follows from other tautologies
+-- by our proof rules.
 inductive prove : Formula → Prop where
 -- Proof rules
 | modpon {ϕ ψ} :
@@ -93,103 +106,38 @@ inductive prove : Formula → Prop where
 | typ_refl   {ϕ} : prove ([T] ϕ ⟶ ϕ)
 | typ_trans  {ϕ} : prove ([T] ϕ ⟶ [T]([T] ϕ))
 
--- Notation for proves
-notation:30 " ⊢ " ϕ:40 => prove ϕ
+-- ⋀ Γ takes a big conjunction of all the formulas in Γ.
+-- (keep in mind that Γ is finite by construction!)
+def conjunction : List Formula → Formula := fun
+| [] => ⊤
+| ϕ :: ϕs => ϕ and (conjunction ϕs)
+prefix:40 "⋀ " => conjunction
 
-/-
-infix 5 ⊢_
-
------------------------------
--- Def: ⊢
------------------------------
-data ⊢_ : Formula → Set where
-  ------------- Prop. logic axioms
-  ∧-I : ∀ {φ ψ}
-    → ⊢ φ ⇒ (ψ ⇒ (φ ∧ ψ))
-  
-
-  ------------- Actual rules of the system
-  -- Modus Ponens
-  modpon : ∀ {φ ψ}
-    → ⊢ φ
-    → ⊢ φ ⇒ ψ
-      ------------
-    → ⊢ ψ
-
-  -- Modal Necessitation
-  necess : ∀ {φ x y}
-    → ⊢ φ
-      ------------
-    → ⊢ [ x , y ] φ
-
-  -- Equational
-  eqn : ∀ {E}
-    → ⊢ⱽ E
-      ------------
-    → ⊢ EQN E
-
-  -- Static Logic Axioms
-  weights : ∀ {w₁ w₂}
-    → ⊢ (weights w₁ ∧ weights w₂) ⇒ EQN (w₁ ≡ⱽ w₂)
-  sol : ∀ {x y₁ y₂}
-    → ⊢ (sol x , y₁ ∧ sol x , y₂) ⇒ EQN (y₁ ≡ᴮ y₂)
-  ex : ∀ {w}
-    → ⊢ ◇ weights_ w
-  -- a generalized version of the previous rule
-  ex-general : ∀ {φ w}
-    → ⊢ (weights_ w ⇒ φ) ⇒ ◇ φ
-  
-  -- NOT SOUND!
-  --∃-uniq : ∀ {φ w}
-  --  → ⊢ (◇ φ ∧ weights_ w) ⇒ (weights_ w ⇒ φ)
-
-  cases : ∀ {x}
-    → ⊢ sol x , bool false ∨ sol x , bool true
-
-  out : ∀ {w x T}
-    → ⊢ (weights_ w ∧ thres T) ⇒ 
-          ((EQN (T <′ w ·ⱽ x) ⇒ sol x , bool true) ∧ (sol x , bool true ⇒ EQN (T <′ w ·ⱽ x)))
-  -- TODO: Need to modify how we syntactically handle T
-
-  -- Dynamic Logic Axioms
-  ∧-dist→ : ∀ {φ ψ x y}
-    → ⊢ [ x , y ] (φ ∧ ψ) ⇒ ([ x , y ] φ ∧ [ x , y ] ψ)
-  ∧-dist← : ∀ {φ ψ x y}
-    → ⊢ ([ x , y ] φ ∧ [ x , y ] ψ) ⇒ [ x , y ] (φ ∧ ψ)
-  ⇒-dist→ : ∀ {φ ψ x y}
-    → ⊢ [ x , y ] (φ ⇒ ψ) ⇒ ([ x , y ] φ ⇒ [ x , y ] ψ)
-  ⇒-dist← : ∀ {φ ψ x y}
-    → ⊢ ([ x , y ] φ ⇒ [ x , y ] ψ) ⇒ [ x , y ] (φ ⇒ ψ)
-  
-  generalize : ∀ {φ x y}
-    → ⊢ [ x , y ] φ ⇒ ◇ φ
-  dual : ∀ {φ x y}
-    -- Note: this is only one direction of what is typically called "dual"
-    → ⊢ ! ([ x , y ] (! φ)) ⇒ ◇ φ
-
-  -- TODO: Handle addition syntactically
-  obs : ∀ {w w⋆ x y y⋆ η}
-    → ⊢ rate η ∧ (sol x , y⋆ ∧ EQN (w⋆ ≡ⱽ w +ⱽ (η *ⱽ (((cast y) -′ (cast y⋆)) *ⱽ x)))) 
-      ⇒ (weights_ w ⇒ [ x , y ] weights_ w⋆)
-
--- I can't define this as a rule in the system
--- because it doesn't conclude ⊢ ...,
--- i.e. it is *actually* a rule about the *equational*
--- system
--- (or more accurately, a metarule about both.)
---
--- As it stands, I can't check the soundness of this rule,
--- since it's being expressed as a metarule...
-postulate
-  eqn₂ : ∀ {E}
-      → ⊢ EQN E
-        ------------
-      → ⊢ⱽ E
--/
+-- Γ ⊢ ϕ holds if there is some sublist Δ ⊆ Γ with ⊢ ⋀ Δ ⟶ ϕ
+-- (ϕ follows from some finite subset of formulas in Γ)
+def follows (Γ : List Formula) (ϕ : Formula) : Prop :=
+  ∃ Δ, List.Sublist Δ Γ ∧ (prove ((⋀ Δ) ⟶ ϕ))
+notation:30 Γ:40 " ⊢ " ϕ:40 => follows Γ ϕ
 
 /-══════════════════════════════════════════════════════════════════
   Soundness
 ══════════════════════════════════════════════════════════════════-/
+
+-- Soundness: If ϕ follows from Γ (by our proof rules),
+-- then Γ entails ϕ (i.e. it holds in every neural net model).
+--------------------------------------------------------------------
+theorem soundness : ∀ (Γ : List Formula) (ϕ : Formula),
+  Γ ⊨ ϕ → Γ ⊢ ϕ := by
+--------------------------------------------------------------------
+  -- induction ϕ
+  sorry
+
+-- We really want to prove *strong soundness*:
+-- Γ ⊢ ϕ  implies  Γ ⊨ ϕ.
+-- I haven't defined either of these things!
+-- 
+-- Right now I can only express *weak soundness*:
+--   ⊢ ϕ  implies  ⊨ ϕ
 
 /-
 soundness : ∀ (φ : Formula) → ⊢ φ → ⊨ φ
