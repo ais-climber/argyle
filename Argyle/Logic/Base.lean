@@ -7,14 +7,14 @@ import Argyle.Operators.Propagate
 ══════════════════════════════════════════════════════════════════-/
 
 inductive Formula : Type where
-  -- Propositional logic
-  | proposition : String → Formula
-  | not : Formula → Formula
-  | and : Formula → Formula → Formula
+-- Propositional logic
+| proposition : String → Formula
+| not : Formula → Formula
+| and : Formula → Formula → Formula
 
-  -- "Possibly knows" and "Possibly finds typical of" modalities
-  | diaKnow : Formula → Formula
-  | diaTyp : Formula → Formula
+-- "Possibly knows" and "Possibly finds typical of" modalities
+| diaKnow : Formula → Formula
+| diaTyp : Formula → Formula
 
 postfix:max "ᵖ"   => Formula.proposition
 prefix:85   "⟨K⟩ " => Formula.diaKnow
@@ -39,11 +39,11 @@ notation:64 ϕ:64 " ⟶ " ψ:65 => (not ϕ) or ψ
 -- Any neural network N has a uniquely determined interpretation
 -- that maps each formula to a set of neurons.
 def interpret (net : Net) : Formula → Set ℕ := fun
-  | pᵖ => sorry
-  | not ϕ => (interpret net ϕ)ᶜ
-  | ϕ and ψ => (interpret net ϕ) ∩ (interpret net ψ)
-  | ⟨K⟩ ϕ => reachable net (interpret net ϕ)
-  | ⟨T⟩ ϕ => propagate net (interpret net ϕ)
+| pᵖ => sorry
+| not ϕ => (interpret net ϕ)ᶜ
+| ϕ and ψ => (interpret net ϕ) ∩ (interpret net ψ)
+| ⟨K⟩ ϕ => reachable net (interpret net ϕ)
+| ⟨T⟩ ϕ => propagate net (interpret net ϕ)
 
 -- Relation for "net satisfies ϕ at point n"
 def satisfies (net : Net) (ϕ : Formula) (n : ℕ) : Prop :=
@@ -59,6 +59,42 @@ notation:30 net:40 " ⊨ " ϕ:40 => models net ϕ
 /-══════════════════════════════════════════════════════════════════
   Proof System
 ══════════════════════════════════════════════════════════════════-/
+
+inductive prove : Formula → Prop where
+-- Proof rules
+| modpon {ϕ ψ} :
+    prove ϕ 
+  → prove (ϕ ⟶ ψ)
+    ----------------
+  → prove ψ
+
+| know_necess {ϕ} :
+    prove ϕ
+    ----------------
+  → prove ([K] ϕ)
+
+| typ_necess {ϕ} :
+    prove ϕ
+    ----------------
+  → prove ([T] ϕ)
+
+-- Propositional Axioms
+| prop_intro {ϕ ψ}   : prove (ϕ ⟶ (ψ ⟶ ϕ))
+| prop_distr {ϕ ψ ρ} : prove ((ϕ ⟶ (ψ ⟶ ρ)) ⟶ ((ϕ ⟶ ψ) ⟶ (ϕ ⟶ ρ)))
+| contrapos  {ϕ ψ}   : prove ((not ϕ ⟶ not ψ) ⟶ (ψ ⟶ ϕ))
+
+-- Axioms for [K]
+| know_distr {ϕ ψ} : prove ([K] (ϕ ⟶ ψ) ⟶ ([K] ϕ ⟶ [K] ψ))
+| know_refl  {ϕ}   : prove ([K] ϕ ⟶ ϕ)
+| know_trans {ϕ}   : prove ([K] ϕ ⟶ [K]([K] ϕ))
+| know_grz   {ϕ}   : prove ([K] ([K] (ϕ ⟶ [K]ϕ) ⟶ ϕ) ⟶ ϕ)
+
+-- Axioms for [T]
+| typ_refl   {ϕ} : prove ([T] ϕ ⟶ ϕ)
+| typ_trans  {ϕ} : prove ([T] ϕ ⟶ [T]([T] ϕ))
+
+-- Notation for proves
+notation:30 " ⊢ " ϕ:40 => prove ϕ
 
 /-
 infix 5 ⊢_
