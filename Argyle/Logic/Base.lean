@@ -1,6 +1,7 @@
 import Argyle.Net
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
+import Mathlib.Data.Finset.Basic
 
 /-══════════════════════════════════════════════════════════════════
   Syntax
@@ -43,43 +44,68 @@ infixl:57   " ⟶ " => Formula.implies
   Semantics
 ══════════════════════════════════════════════════════════════════-/
 
+-- Our models are "interpreted" neural networks, i.e. neural networks
+-- along with a mapping from propositions to sets of neurons.
+structure InterpretedNet where
+  net : Net
+  proposition_map : String → Set ℕ
+
+-- We abbreviate the 'top' state of the net (the set of
+-- all neurons)
+def InterpretedNet.top (Net : InterpretedNet) : Set ℕ :=
+  Net.net.graph.vertices.toFinset
+
 -- Any neural network N has a uniquely determined interpretation
 -- that maps each formula to a set of neurons.
-def interpret (net : Net) : Formula → Set ℕ := fun
-| pᵖ => sorry
-| ⊤ => sorry
-| not ϕ => (interpret net ϕ)ᶜ
-| ϕ and ψ => (interpret net ϕ) ∩ (interpret net ψ)
-| ⟨K⟩ ϕ => reachable net (interpret net ϕ)
-| ⟨T⟩ ϕ => propagate net (interpret net ϕ)
-
+def interpret (Net : InterpretedNet) : Formula → Set ℕ := fun
+| pᵖ => Net.proposition_map p
+| ⊤ => Net.top
+| not ϕ => (interpret Net ϕ)ᶜ
+| ϕ and ψ => (interpret Net ϕ) ∩ (interpret Net ψ)
+| ⟨K⟩ ϕ => reachable Net.net (interpret Net ϕ)
+| ⟨T⟩ ϕ => propagate Net.net (interpret Net ϕ)
+notation:40 "⟦" ϕ:40 "⟧_" Net:40 => interpret Net ϕ
+  
 -- Relation for "net satisfies ϕ at point n"
-def satisfies (net : Net) (ϕ : Formula) (n : ℕ) : Prop :=
-  n ∈ interpret net ϕ
+def satisfies (Net : InterpretedNet) (ϕ : Formula) (n : ℕ) : Prop :=
+  n ∈ (⟦ϕ⟧_Net) -- interpret Net ϕ
 notation:35 net:40 "; " n:40 " ⊩ " ϕ:40 => satisfies net ϕ n
 
 -- A net models a *formula* ϕ iff n ⊩ ϕ for *all* points n ∈ N
-def models (net : Net) (ϕ : Formula) : Prop :=
-  ∀ n, (net; n ⊩ ϕ)
+def models (Net : InterpretedNet) (ϕ : Formula) : Prop :=
+  ∀ n, (Net; n ⊩ ϕ)
 
 -- A net models a *list* Γ iff N ⊨ ϕ for all ϕ ∈ Γ 
-def models_list (net : Net) (Γ : List Formula) : Prop :=
-  ∀ ϕ ∈ Γ, models net ϕ
-
-  -- Γ.All₂ (fun ϕ => models net ϕ)
--- ∀ a ∈ l, p a
+def models_list (Net : InterpretedNet) (Γ : List Formula) : Prop :=
+  ∀ ϕ ∈ Γ, models Net ϕ
 
 -- Γ ⊨ ϕ holds if *for all* nets N, if N ⊨ Γ then N ⊨ ϕ.  
 def entails (Γ : List Formula) (ϕ : Formula) : Prop :=
-  ∀ (net : Net), models_list net Γ → models net ϕ 
+  ∀ (Net : InterpretedNet), models_list Net Γ → models Net ϕ 
 notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 
 -- Lemma: A net models ϕ iff ⟦ϕ⟧ = N.
+-- Note that this lemma is automatically applied by Lean's
+-- simplifier (we almost always want to reason about the term
+-- on the RHS.)
 --------------------------------------------------------------------
-lemma models_interpret (net : Net) (ϕ : Formula) : 
-  models net ϕ ↔ interpret net ϕ = sorry := by
+@[simp]
+lemma models_interpret (Net : InterpretedNet) (ϕ : Formula) : 
+  models Net ϕ ↔ (⟦ϕ⟧_Net) = Net.top := by
 --------------------------------------------------------------------
-  sorry
+  simp only [models]
+  apply Iff.intro
+  
+  -- Forward direction; if ∀ n, (Net; n ⊩ ϕ) then ⟦ϕ⟧ = N  
+  case mp => 
+    intro h₁
+    sorry
+
+  -- Backwards direction; if ⟦ϕ⟧ = N then ∀ n, (Net; n ⊩ ϕ)
+  case mpr => 
+    intro h₁ n
+    simp only [satisfies]
+    sorry
 
 /-══════════════════════════════════════════════════════════════════
   Proof System
@@ -138,33 +164,65 @@ notation:30 Γ:40 " ⊢ " ϕ:40 => follows Γ ϕ
   Soundness
 ══════════════════════════════════════════════════════════════════-/
 
+-- Semantic statement of modus ponens.
+-- (It's convenient to have it as a seperate lemma.)
 --------------------------------------------------------------------
-lemma models_conjunction {net : Net} (Γ : List Formula) :
-  (∀ ϕ ∈ Γ, models net ϕ) → models net (⋀ Γ) := by
+lemma models_modpon {Net : InterpretedNet} {ϕ ψ : Formula} :
+    models Net ϕ
+  → models Net (ϕ ⟶ ψ)
+    ----------------
+  → models Net ψ := by
+--------------------------------------------------------------------
+  -- rw [models_interpret, models_interpret, models_interpret]
+  intro h₁ h₂
+  simp [interpret] at h₂
+  sorry
+
+-- Semantic statement of and-introduction
+--------------------------------------------------------------------
+lemma models_andintro {Net : InterpretedNet} {ϕ ψ : Formula} :
+    models Net ϕ
+  → models Net ψ
+    ----------------
+  → models Net (ϕ and ψ) := by
+--------------------------------------------------------------------
+  intro h₁ h₂
+  simp at h₁
+  simp at h₂
+  simp [interpret, h₁, h₂]
+
+-- Every neural network models ⊤!
+--------------------------------------------------------------------
+lemma models_top {Net : InterpretedNet} :
+    models Net ⊤ := by
+--------------------------------------------------------------------
+  simp [interpret]
+
+
+--------------------------------------------------------------------
+lemma models_conjunction {Net : InterpretedNet} (Γ : List Formula) :
+  (∀ ϕ ∈ Γ, models Net ϕ) → models Net (⋀ Γ) := by
 --------------------------------------------------------------------
   intro h₁
 
   -- By induction on the list of formulas
   induction Γ
-  case nil => sorry
-  case cons ϕ ϕs IH => sorry
-
--- Semantic statement of modus ponens.
--- (It's convenient to have it as a seperate lemma.)
---------------------------------------------------------------------
-lemma models_modpon {net : Net} {ϕ ψ : Formula} :
-    models net ϕ
-  → models net (ϕ ⟶ ψ)
-    ----------------
-  → models net ψ := by
---------------------------------------------------------------------
-  sorry
-
+  case nil => simp only [conjunction, models_top]
+  case cons ψ ψs IH => 
+    simp only [conjunction]
+    
+    have h₂ : ∀ (ϕ : Formula), ϕ ∈ ψs → models Net ϕ := by
+      intro ϕ h₂
+      exact h₁ _ (List.mem_cons_of_mem _ h₂)
+    
+    -- On the left, show ⊨ ψ.  On the right, show ⊨ ⋀ ψs.
+    exact models_andintro (h₁ _ (List.mem_cons_self _ _)) (IH h₂)
+    
 -- Soundness: If we can prove ϕ from nothing (just our proof rules alone),
 -- then ϕ holds in every neural network model.
 --------------------------------------------------------------------
 theorem soundness : ∀ (ϕ : Formula),
-  prove ϕ → ∀ (net : Net), models net ϕ := by
+  prove ϕ → ∀ (Net : InterpretedNet), models Net ϕ := by
 --------------------------------------------------------------------
   intro ϕ h₁ net
   
@@ -172,23 +230,47 @@ theorem soundness : ∀ (ϕ : Formula),
   induction h₁
   -- Proof Rules
   case modpon ϕ ψ h₂ h₃ IH₂ IH₃ => exact models_modpon IH₂ IH₃
-  case know_necess ϕ h IH => sorry
-  case typ_necess ϕ h IH => sorry
+  case know_necess ϕ h IH => 
+    simp
+    simp at IH
+    sorry
+  case typ_necess ϕ h IH => 
+    simp
+    simp at IH
+    sorry
 
   -- Propositional Axioms
-  case prop_intro ϕ ψ => sorry
-  case prop_distr ϕ ψ ρ => sorry
-  case contrapos ϕ ψ => sorry
+  case prop_intro ϕ ψ => 
+    simp [interpret]
+    sorry
+  case prop_distr ϕ ψ ρ => 
+    simp
+    sorry
+  case contrapos ϕ ψ => 
+    simp
+    sorry
 
   -- Axioms for [K]
-  case know_distr ϕ ψ => sorry
-  case know_refl ϕ => sorry
-  case know_trans ϕ => sorry
-  case know_grz ϕ => sorry
+  case know_distr ϕ ψ => 
+    simp
+    sorry
+  case know_refl ϕ => 
+    simp
+    sorry
+  case know_trans ϕ => 
+    simp
+    sorry
+  case know_grz ϕ => 
+    simp
+    sorry
 
   -- Axioms for [T]
-  case typ_refl ϕ => sorry
-  case typ_trans ϕ => sorry
+  case typ_refl ϕ => 
+    simp
+    sorry
+  case typ_trans ϕ => 
+    simp
+    sorry
 
 
 -- Strong Soundness: If ϕ follows from Γ (by our proof rules),
@@ -198,67 +280,16 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
   Γ ⊢ ϕ → Γ ⊨ ϕ := by
 --------------------------------------------------------------------
   simp only [follows, entails, models_list]
-  intro Γ ϕ h₁ net h₂
+  intro Γ ϕ h₁ Net h₂
   
   match h₁ with
   | ⟨Δ, hΔ⟩ => 
     -- We have ⋀ Δ and (⋀ Δ) ⟶ ϕ, so we can apply modus ponens.
-    have h₃ : models net (⋀ Δ) := by
+    have h₃ : models Net (⋀ Δ) := by
       apply models_conjunction Δ
       intro ϕ hϕ
       exact h₂ ϕ (List.Sublist.subset hΔ.1 hϕ)
 
-    have h₄ : models net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
+    have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
     exact models_modpon h₃ h₄
   
-
-/-
-soundness : ∀ (φ : Formula) → ⊢ φ → ⊨ φ
-
----------------------------------------
--- Propositional axioms
----------------------------------------
-soundness (φ ⇒ (ψ ⇒ (φ ∧ ψ))) ∧-I M =
-  {!   !}
-
-
----------------------------------------
--- MODUS PONENS
----------------------------------------
-soundness ψ (modpon {φ} ⊢φ ⊢φ⇒ψ) = 
-  let IH-φ = soundness φ ⊢φ in
-  let IH-φ⇒ψ = soundness (φ ⇒ ψ) ⊢φ⇒ψ in
-  λ M wₘ → IH-φ⇒ψ M wₘ (IH-φ M wₘ)
-
----------------------------------------
--- NECESSITATION
----------------------------------------
-soundness ([ x , y ] φ) (necess ⊢φ) (⟨ η , T ⟩) wₘ = 
-  let IH = soundness φ ⊢φ in
-  ⟨ w⋆ , ⟨ y⋆ , 
-    ⟨ refl , 
-      ⟨ (IH (⟨ η , T ⟩) w⋆) , refl ⟩ ⟩ ⟩ ⟩
-  where
-    y⋆ = bool ⌊ T Data.Float.<? vsm.dot-prod wₘ ⟦ x ⟧ⱽ ⌋
-    w⋆ = vsm.add wₘ (vsm.scalar-mult η (vsm.scalar-mult
-          ((if ⟦ y ⟧ᴮ then 1.0 else 0.0) Data.Float.-
-           (if ⌊ T Data.Float.<? vsm.dot-prod wₘ ⟦ x ⟧ⱽ ⌋ then 1.0 else 0.0))
-          ⟦ x ⟧ⱽ))
-
----------------------------------------
--- EQUATIONAL
----------------------------------------
-soundness (EQN E) (eqn ⊢ⱽE) = 
-  λ M wₘ → vsm-soundness ⊢ⱽE
-
----------------------------------------
--- WEIGHTS UNIQUENESS
----------------------------------------
-soundness (weights_ (vec w₁) ∧ weights_ (vec w₂) ⇒ EQN ((vec w₁) ≡ⱽ (vec w₂))) weights =
-  λ M wₘ wₘ≡w₁×wₘ≡w₂ → vec-lift-lemma w₁ w₂ 
-    (begin
-      vec w₁      ≡⟨ sym (proj₁ wₘ≡w₁×wₘ≡w₂) ⟩
-      vec wₘ      ≡⟨ proj₂ wₘ≡w₁×wₘ≡w₂ ⟩ 
-      vec w₂
-    ∎)
--/
