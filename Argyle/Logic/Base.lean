@@ -28,7 +28,7 @@ infixl:65   " and " => Formula.and
 -- Abbreviations
 def Formula.Know : Formula → Formula := fun ϕ => not ⟨K⟩ (not ϕ)
 def Formula.Typ : Formula → Formula := fun ϕ => not ⟨T⟩ (not ϕ)
-def Formula.or : Formula → Formula → Formula := fun ϕ ψ => not ϕ and not ψ
+def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ϕ) and (not ψ)
 def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
 
 prefix:85   "[K] "  => Formula.Know
@@ -52,8 +52,11 @@ structure InterpretedNet where
 
 -- We abbreviate the 'top' state of the net (the set of
 -- all neurons)
+-- TODO: Update when I make sets finite.  This should really
+-- be Finset.univ (or something like that to make the proofs go through)
 def InterpretedNet.top (Net : InterpretedNet) : Set ℕ :=
-  Net.net.graph.vertices.toFinset
+  Set.univ
+  -- Net.net.graph.vertices.toFinset
 
 -- Any neural network N has a uniquely determined interpretation
 -- that maps each formula to a set of neurons.
@@ -93,19 +96,40 @@ notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 lemma models_interpret (Net : InterpretedNet) (ϕ : Formula) : 
   models Net ϕ ↔ (⟦ϕ⟧_Net) = Net.top := by
 --------------------------------------------------------------------
-  simp only [models]
+  simp only [models, satisfies, InterpretedNet.top]
   apply Iff.intro
   
   -- Forward direction; if ∀ n, (Net; n ⊩ ϕ) then ⟦ϕ⟧ = N  
   case mp => 
     intro h₁
-    sorry
+    exact Set.eq_univ_of_forall h₁
 
   -- Backwards direction; if ⟦ϕ⟧ = N then ∀ n, (Net; n ⊩ ϕ)
   case mpr => 
     intro h₁ n
-    simp only [satisfies]
-    sorry
+    rw [Set.eq_univ_iff_forall] at h₁
+    exact h₁ n
+
+-- This lemma helps us break down the semantics for ⟦ϕ ⟶ ψ⟧:
+--     ⟦ϕ ⟶ ψ⟧ = N   iff   ⟦ϕ⟧ ⊆ ⟦ψ⟧
+--------------------------------------------------------------------
+lemma interpret_implication {Net : InterpretedNet} {ϕ ψ : Formula} :
+  ((⟦ϕ⟧_Net) ⊆ (⟦ψ⟧_Net)) ↔ (⟦ϕ ⟶ ψ⟧_Net) = Net.top := by
+--------------------------------------------------------------------
+  simp only [InterpretedNet.top]
+  apply Iff.intro
+
+  -- Forward direction
+  case mp =>
+    intro h₁
+    simp [interpret]
+    sorry -- Just need to reason about Set.univ
+
+  -- Backwards direction
+  case mpr => 
+    intro h₁
+    simp [interpret] at h₁
+    sorry -- Just need to reason about Set.univ
 
 /-══════════════════════════════════════════════════════════════════
   Proof System
@@ -173,10 +197,13 @@ lemma models_modpon {Net : InterpretedNet} {ϕ ψ : Formula} :
     ----------------
   → models Net ψ := by
 --------------------------------------------------------------------
-  -- rw [models_interpret, models_interpret, models_interpret]
   intro h₁ h₂
-  simp [interpret] at h₂
-  sorry
+  simp at *
+  rw [← interpret_implication] at h₂
+  simp only [InterpretedNet.top] at *
+  rw [h₁] at h₂
+  rw [← Set.univ_subset_iff]
+  exact h₂
 
 -- Semantic statement of and-introduction
 --------------------------------------------------------------------
@@ -217,7 +244,8 @@ lemma models_conjunction {Net : InterpretedNet} (Γ : List Formula) :
     
     -- On the left, show ⊨ ψ.  On the right, show ⊨ ⋀ ψs.
     exact models_andintro (h₁ _ (List.mem_cons_self _ _)) (IH h₂)
-    
+
+
 -- Soundness: If we can prove ϕ from nothing (just our proof rules alone),
 -- then ϕ holds in every neural network model.
 --------------------------------------------------------------------
@@ -230,47 +258,88 @@ theorem soundness : ∀ (ϕ : Formula),
   induction h₁
   -- Proof Rules
   case modpon ϕ ψ h₂ h₃ IH₂ IH₃ => exact models_modpon IH₂ IH₃
+
   case know_necess ϕ h IH => 
     simp
     simp at IH
     sorry
+
   case typ_necess ϕ h IH => 
     simp
     simp at IH
     sorry
 
   -- Propositional Axioms
+  -- Since Lean's simp includes boolean algebra on sets,
+  -- these are straightforward.
   case prop_intro ϕ ψ => 
-    simp [interpret]
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [Formula.implies]
+    simp only [interpret]
+    sorry -- something went wrong here...
+
   case prop_distr ϕ ψ ρ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [Formula.implies]
+    simp only [interpret]
+    sorry -- hard to see what's going on
+
   case contrapos ϕ ψ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp [interpret]
 
   -- Axioms for [K]
   case know_distr ϕ ψ => 
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [interpret]
+    rw [← Set.compl_subset_compl]
+    rw [Set.compl_inter]
+    rw [Set.compl_inter]
     simp
-    sorry
+    exact ⟨sorry, sorry⟩
+
   case know_refl ϕ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [interpret]
+    rw [← Set.compl_subset_compl]
+    rw [compl_compl]
+    exact reach_is_extens _ _
+
   case know_trans ϕ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [interpret]
+    rw [← Set.compl_subset_compl]
+    rw [compl_compl]
+    rw [compl_compl]
+    rw [← reach_is_idempotent _ _]
+
   case know_grz ϕ => 
     simp
     sorry
 
   -- Axioms for [T]
   case typ_refl ϕ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [interpret]
+    rw [← Set.compl_subset_compl]
+    rw [compl_compl]
+    exact propagate_is_extens _ _
+
   case typ_trans ϕ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp only [interpret]
+    rw [← Set.compl_subset_compl]
+    rw [compl_compl]
+    rw [compl_compl]
+    rw [← propagate_is_idempotent _ _]
 
 
 -- Strong Soundness: If ϕ follows from Γ (by our proof rules),

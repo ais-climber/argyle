@@ -40,7 +40,6 @@ termination_by propagate_acc net S n L => layer net n
 decreasing_by exact layer_preds net m n (get!_mem preds i)
 
 -- Set variation of propagate
-@[simp]
 def propagate (net : Net) (S : Set ℕ) : Set ℕ :=
   fun n => propagate_acc net S n (layer net n)
 
