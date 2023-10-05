@@ -25,10 +25,15 @@ prefix:75   "not "  => Formula.not
 infixl:65   " and " => Formula.and
 
 -- Abbreviations
-notation:85 "[K] " ϕ:86 => not ⟨K⟩ (not ϕ)
-notation:85 "[T] " ϕ:86 => not ⟨T⟩ (not ϕ)
-notation:65 ϕ:65 " or " ψ:66 => not ϕ and not ψ
-notation:64 ϕ:64 " ⟶ " ψ:65 => (not ϕ) or ψ
+def Formula.Know : Formula → Formula := fun ϕ => not ⟨K⟩ (not ϕ)
+def Formula.Typ : Formula → Formula := fun ϕ => not ⟨T⟩ (not ϕ)
+def Formula.or : Formula → Formula → Formula := fun ϕ ψ => not ϕ and not ψ
+def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
+
+prefix:85   "[K] "  => Formula.Know
+prefix:85   "[T] "  => Formula.Typ
+infixl:60   " or " => Formula.or
+infixl:57   " ⟶ " => Formula.implies
 
 -- Some sanity checks
 #check [K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ
@@ -51,20 +56,30 @@ def interpret (net : Net) : Formula → Set ℕ := fun
 -- Relation for "net satisfies ϕ at point n"
 def satisfies (net : Net) (ϕ : Formula) (n : ℕ) : Prop :=
   n ∈ interpret net ϕ
-notation:35 net:40 ", " n:40 " ⊩ " ϕ:40 => satisfies net ϕ n
+notation:35 net:40 "; " n:40 " ⊩ " ϕ:40 => satisfies net ϕ n
 
 -- A net models a *formula* ϕ iff n ⊩ ϕ for *all* points n ∈ N
 def models (net : Net) (ϕ : Formula) : Prop :=
-  ∀ n, (net, n ⊩ ϕ)
+  ∀ n, (net; n ⊩ ϕ)
 
 -- A net models a *list* Γ iff N ⊨ ϕ for all ϕ ∈ Γ 
 def models_list (net : Net) (Γ : List Formula) : Prop :=
-  Γ.All₂ (fun ϕ => models net ϕ)
+  ∀ ϕ ∈ Γ, models net ϕ
+
+  -- Γ.All₂ (fun ϕ => models net ϕ)
+-- ∀ a ∈ l, p a
 
 -- Γ ⊨ ϕ holds if *for all* nets N, if N ⊨ Γ then N ⊨ ϕ.  
 def entails (Γ : List Formula) (ϕ : Formula) : Prop :=
   ∀ (net : Net), models_list net Γ → models net ϕ 
 notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
+
+-- Lemma: A net models ϕ iff ⟦ϕ⟧ = N.
+--------------------------------------------------------------------
+lemma models_interpret (net : Net) (ϕ : Formula) : 
+  models net ϕ ↔ interpret net ϕ = sorry := by
+--------------------------------------------------------------------
+  sorry
 
 /-══════════════════════════════════════════════════════════════════
   Proof System
@@ -123,21 +138,79 @@ notation:30 Γ:40 " ⊢ " ϕ:40 => follows Γ ϕ
   Soundness
 ══════════════════════════════════════════════════════════════════-/
 
--- Soundness: If ϕ follows from Γ (by our proof rules),
--- then Γ entails ϕ (i.e. it holds in every neural net model).
 --------------------------------------------------------------------
-theorem soundness : ∀ (Γ : List Formula) (ϕ : Formula),
-  Γ ⊨ ϕ → Γ ⊢ ϕ := by
+lemma models_conjunction {net : Net} (Γ : List Formula) :
+  (∀ ϕ ∈ Γ, models net ϕ) → models net (⋀ Γ) := by
 --------------------------------------------------------------------
-  -- induction ϕ
+  intro h₁
+
+  -- By induction on the list of formulas
+  induction Γ
+  case nil => sorry
+  case cons ϕ ϕs IH => sorry
+
+-- Semantic statement of modus ponens.
+-- (It's convenient to have it as a seperate lemma.)
+--------------------------------------------------------------------
+lemma models_modpon {net : Net} {ϕ ψ : Formula} :
+    models net ϕ
+  → models net (ϕ ⟶ ψ)
+    ----------------
+  → models net ψ := by
+--------------------------------------------------------------------
   sorry
 
--- We really want to prove *strong soundness*:
--- Γ ⊢ ϕ  implies  Γ ⊨ ϕ.
--- I haven't defined either of these things!
--- 
--- Right now I can only express *weak soundness*:
---   ⊢ ϕ  implies  ⊨ ϕ
+-- Soundness: If we can prove ϕ from nothing (just our proof rules alone),
+-- then ϕ holds in every neural network model.
+--------------------------------------------------------------------
+theorem soundness : ∀ (ϕ : Formula),
+  prove ϕ → ∀ (net : Net), models net ϕ := by
+--------------------------------------------------------------------
+  intro ϕ h₁ net
+  
+  -- We case on each of our proof rules and axioms
+  induction h₁
+  -- Proof Rules
+  case modpon ϕ ψ h₂ h₃ IH₂ IH₃ => exact models_modpon IH₂ IH₃
+  case know_necess ϕ h IH => sorry
+  case typ_necess ϕ h IH => sorry
+
+  -- Propositional Axioms
+  case prop_intro ϕ ψ => sorry
+  case prop_distr ϕ ψ ρ => sorry
+  case contrapos ϕ ψ => sorry
+
+  -- Axioms for [K]
+  case know_distr ϕ ψ => sorry
+  case know_refl ϕ => sorry
+  case know_trans ϕ => sorry
+  case know_grz ϕ => sorry
+
+  -- Axioms for [T]
+  case typ_refl ϕ => sorry
+  case typ_trans ϕ => sorry
+
+
+-- Strong Soundness: If ϕ follows from Γ (by our proof rules),
+-- then Γ entails ϕ (i.e. it holds in every neural net model).
+--------------------------------------------------------------------
+theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
+  Γ ⊢ ϕ → Γ ⊨ ϕ := by
+--------------------------------------------------------------------
+  simp only [follows, entails, models_list]
+  intro Γ ϕ h₁ net h₂
+  
+  match h₁ with
+  | ⟨Δ, hΔ⟩ => 
+    -- We have ⋀ Δ and (⋀ Δ) ⟶ ϕ, so we can apply modus ponens.
+    have h₃ : models net (⋀ Δ) := by
+      apply models_conjunction Δ
+      intro ϕ hϕ
+      exact h₂ ϕ (List.Sublist.subset hΔ.1 hϕ)
+
+    have h₄ : models net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
+    exact models_modpon h₃ h₄
+  
 
 /-
 soundness : ∀ (φ : Formula) → ⊢ φ → ⊨ φ

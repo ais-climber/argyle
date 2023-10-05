@@ -100,7 +100,7 @@ theorem reach_is_extens (net : Net) : ∀ (B : Set ℕ),
 --------------------------------------------------------------------
   intro B n h₁
   exact ⟨n, ⟨h₁, Graph.Path.trivial⟩⟩
-
+  
 
 --------------------------------------------------------------------
 theorem reach_is_idempotent (net : Net) : ∀ (B : Set ℕ),
