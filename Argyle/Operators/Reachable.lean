@@ -70,6 +70,28 @@ lemma reach_layer_zero (net : Net) : ∀ (B : Set ℕ) (n : ℕ),
       
       exact absurd h₁ (Nat.not_eq_zero_of_lt h₃)
 
+--------------------------------------------------------------------
+theorem reach_empty (net : Net) :
+  reachable net ∅ = ∅ := by
+--------------------------------------------------------------------
+  apply ext
+  intro n
+  apply Iff.intro
+
+  -- This direction is impossible
+  case mp => 
+    intro h₁
+    match h₁ with
+    | ⟨m, hm⟩ => 
+      -- We have some m ∈ ∅, which is absurd!
+      exact absurd hm.1 (Set.not_mem_empty m)
+
+  -- This direction is trivial
+  case mpr => 
+    intro h₁
+    exact ⟨n, ⟨h₁, Graph.Path.trivial⟩⟩
+    
+
 -- If A ∩ B is empty, then there are no nodes reachable
 -- from B within A.
 -- (This does *not* follow from [reach_is_extens]!)

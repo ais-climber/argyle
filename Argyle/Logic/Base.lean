@@ -260,13 +260,25 @@ theorem soundness : ∀ (ϕ : Formula),
   case modpon ϕ ψ h₂ h₃ IH₂ IH₃ => exact models_modpon IH₂ IH₃
 
   case know_necess ϕ h IH => 
+    rw [models_interpret]
+    rw [models_interpret] at IH
+    simp only [interpret, InterpretedNet.top]
+    simp only [InterpretedNet.top] at IH
+    
+    -- We substitute in ⟦ϕ⟧ = N
+    rw [IH]
     simp
-    simp at IH
-    sorry
+    exact reach_empty _
 
   case typ_necess ϕ h IH => 
+    rw [models_interpret]
+    rw [models_interpret] at IH
+    simp only [interpret, InterpretedNet.top]
+    simp only [InterpretedNet.top] at IH
+    
+    -- We substitute in ⟦ϕ⟧ = N
+    rw [IH]
     simp
-    simp at IH
     sorry
 
   -- Propositional Axioms
