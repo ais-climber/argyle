@@ -3,6 +3,8 @@ import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 import Mathlib.Data.Finset.Basic
 
+import Mathlib.Tactic.LibrarySearch
+
 /-══════════════════════════════════════════════════════════════════
   Syntax
 ══════════════════════════════════════════════════════════════════-/
@@ -28,7 +30,7 @@ infixl:65   " and " => Formula.and
 -- Abbreviations
 def Formula.Know : Formula → Formula := fun ϕ => not ⟨K⟩ (not ϕ)
 def Formula.Typ : Formula → Formula := fun ϕ => not ⟨T⟩ (not ϕ)
-def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ϕ) and (not ψ)
+def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ((not ϕ) and (not ψ)))
 def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
 
 prefix:85   "[K] "  => Formula.Know
@@ -67,12 +69,12 @@ def interpret (Net : InterpretedNet) : Formula → Set ℕ := fun
 | ϕ and ψ => (interpret Net ϕ) ∩ (interpret Net ψ)
 | ⟨K⟩ ϕ => reachable Net.net (interpret Net ϕ)
 | ⟨T⟩ ϕ => propagate Net.net (interpret Net ϕ)
-notation:40 "⟦" ϕ:40 "⟧_" Net:40 => interpret Net ϕ
-  
+notation:40 "⟦" ϕ "⟧_" Net => interpret Net ϕ
+
 -- Relation for "net satisfies ϕ at point n"
 def satisfies (Net : InterpretedNet) (ϕ : Formula) (n : ℕ) : Prop :=
   n ∈ (⟦ϕ⟧_Net) -- interpret Net ϕ
-notation:35 net:40 "; " n:40 " ⊩ " ϕ:40 => satisfies net ϕ n
+notation:35 net "; " n " ⊩ " ϕ => satisfies net ϕ n
 
 -- A net models a *formula* ϕ iff n ⊩ ϕ for *all* points n ∈ N
 def models (Net : InterpretedNet) (ϕ : Formula) : Prop :=
@@ -118,18 +120,35 @@ lemma interpret_implication {Net : InterpretedNet} {ϕ ψ : Formula} :
 --------------------------------------------------------------------
   simp only [InterpretedNet.top]
   apply Iff.intro
-
+  
   -- Forward direction
   case mp =>
     intro h₁
     simp [interpret]
-    sorry -- Just need to reason about Set.univ
+    rw [← Set.subset_empty_iff]
+    rw [← Set.inter_compl_self (⟦ψ⟧_Net)]
+    exact Set.inter_subset_inter_left _ h₁
 
   -- Backwards direction
   case mpr => 
     intro h₁
     simp [interpret] at h₁
-    sorry -- Just need to reason about Set.univ
+    rw [← Set.subset_empty_iff] at h₁
+
+    have h₂ : (⟦ϕ⟧_Net) ∩ (⟦ψ⟧_Net)ᶜ ∪ (⟦ψ⟧_Net) ⊆ ∅ ∪ (⟦ψ⟧_Net) :=
+      Set.union_subset_union_left _ h₁
+    sorry
+    
+    -- rw [Set.inter_assoc] at h₂
+    -- conv at h₂ => lhs; arg 2; rw [Set.inter_comm]
+    -- rw [Set.inter_compl_self (⟦ψ⟧_Net)] at h₂
+    -- simp at h₂
+    -- sorry
+    -- rw [← Set.subset_empty_iff] at h₁
+    -- rw [← Set.inter_compl_self (⟦ψ⟧_Net)] at h₁
+    -- sorry
+
+    -- apply Set.inter_subset_inter_left (⟦ψ⟧_Net)ᶜ
 
 /-══════════════════════════════════════════════════════════════════
   Proof System
@@ -287,37 +306,35 @@ theorem soundness : ∀ (ϕ : Formula),
   case prop_intro ϕ ψ => 
     rw [models_interpret]
     rw [← interpret_implication]
-    simp only [Formula.implies]
-    simp only [interpret]
-    sorry -- something went wrong here...
-
+    rw [← Set.compl_subset_compl]
+    simp [interpret]
+    
   case prop_distr ϕ ψ ρ => 
     rw [models_interpret]
     rw [← interpret_implication]
-    simp only [Formula.implies]
-    simp only [interpret]
-    sorry -- hard to see what's going on
+    simp [interpret]
+    exact ⟨sorry, ⟨sorry, sorry⟩⟩
 
   case contrapos ϕ ψ => 
     rw [models_interpret]
     rw [← interpret_implication]
     simp [interpret]
-
+    
   -- Axioms for [K]
   case know_distr ϕ ψ => 
     rw [models_interpret]
     rw [← interpret_implication]
-    simp only [interpret]
-    rw [← Set.compl_subset_compl]
-    rw [Set.compl_inter]
-    rw [Set.compl_inter]
-    simp
-    exact ⟨sorry, sorry⟩
+    simp [interpret]
+    conv => 
+      rhs 
+      rw [← compl_compl (⟦ϕ⟧_net)]
+      rw [← Set.compl_union]
+    sorry -- I'm a bit stuck here...
 
   case know_refl ϕ => 
     rw [models_interpret]
     rw [← interpret_implication]
-    simp only [interpret]
+    simp [interpret]
     rw [← Set.compl_subset_compl]
     rw [compl_compl]
     exact reach_is_extens _ _
