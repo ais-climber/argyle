@@ -207,4 +207,36 @@ theorem reach_inter (net : Net) : ∀ (A B : Set ℕ),
       exact absurd ⟨m, ⟨h, hm.2⟩⟩ h₁.1
     
     exact ⟨m, ⟨⟨h₂, hm.1⟩, hm.2⟩⟩
-    
+
+
+/-
+reachable net.net (reachable net.net ((⟦ϕ⟧_net) ∩ reachable net.net ((⟦ϕ⟧_net)ᶜ))ᶜ ∩ (⟦ϕ⟧_net)ᶜ)ᶜ ⊆ (⟦ϕ⟧_net)
+
+Reach(Reach(A ∩ Reach(Aᶜ))ᶜ ∩ Aᶜ)ᶜ ⊆ A
+-/
+
+-- This is essentially the 'grz' axiom for Reach.
+-- TODO: This *might* follow from the other properties. I should
+--     look into this. 
+--------------------------------------------------------------------
+theorem reach_grz (net : Net) : ∀ (A : Set ℕ),
+  (reachable net ((reachable net (A ∩ reachable net (Aᶜ)))ᶜ ∩ Aᶜ))ᶜ ⊆ A := by
+--------------------------------------------------------------------
+  intro A n
+  contrapose
+  intro h₁
+  simp
+
+  have h₂ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
+    -- Goal: n ∈ Reach(A ∩ Reach(Aᶜ))ᶜ
+    -- Plan: Because of monotonicity, 
+    --    Reach(Reach(Aᶜ))ᶜ ⊆ Reach(A ∩ Reach(Aᶜ))ᶜ
+    -- And by idempotence, the LHS is just
+    --    Reach(Aᶜ)
+    -- and so we have our goal by inclusion (we have n ∈ Aᶜ) 
+    sorry
+
+
+
+  exact reach_is_extens _ _ ⟨h₂, h₁⟩
+

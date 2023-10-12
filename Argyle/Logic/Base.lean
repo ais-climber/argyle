@@ -369,8 +369,10 @@ theorem soundness : ∀ (ϕ : Formula),
     rw [← reach_is_idempotent _ _]
 
   case know_grz ϕ => 
-    simp
-    sorry
+    rw [models_interpret]
+    rw [← interpret_implication]
+    simp [interpret]
+    exact reach_grz _ _
 
   -- Axioms for [T]
   case typ_refl ϕ => 
