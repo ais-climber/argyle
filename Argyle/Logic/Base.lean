@@ -133,23 +133,19 @@ lemma interpret_implication {Net : InterpretedNet} {ϕ ψ : Formula} :
   case mpr => 
     intro h₁
     simp [interpret] at h₁
-    rw [← Set.subset_empty_iff] at h₁
-
-    have h₂ : (⟦ϕ⟧_Net) ∩ (⟦ψ⟧_Net)ᶜ ∪ (⟦ψ⟧_Net) ⊆ ∅ ∪ (⟦ψ⟧_Net) :=
-      Set.union_subset_union_left _ h₁
-    sorry
-    
-    -- rw [Set.inter_assoc] at h₂
-    -- conv at h₂ => lhs; arg 2; rw [Set.inter_comm]
-    -- rw [Set.inter_compl_self (⟦ψ⟧_Net)] at h₂
-    -- simp at h₂
-    -- sorry
     -- rw [← Set.subset_empty_iff] at h₁
-    -- rw [← Set.inter_compl_self (⟦ψ⟧_Net)] at h₁
-    -- sorry
 
-    -- apply Set.inter_subset_inter_left (⟦ψ⟧_Net)ᶜ
-
+    -- We show ⟦ϕ⟧ ⊆ ⟦ψ⟧ by contradiction;
+    -- If some n ∈ ⟦ϕ⟧ but n ∉ ⟦ψ⟧, then n ∈ ⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ = ∅
+    apply by_contradiction
+    intro h
+    rw [Set.not_subset] at h
+    match h with
+    | ⟨n, hn⟩ => 
+      have h₂ : n ∈ (⟦ϕ⟧_Net) ∩ (⟦ψ⟧_Net)ᶜ := hn
+      rw [h₁] at h₂
+      exact absurd h₂ (Set.not_mem_empty n)
+    
 /-══════════════════════════════════════════════════════════════════
   Proof System
 ══════════════════════════════════════════════════════════════════-/
@@ -176,6 +172,7 @@ inductive prove : Formula → Prop where
   → prove ([T] ϕ)
 
 -- Propositional Axioms
+| prop_self  {ϕ}     : prove (ϕ ⟶ ϕ)
 | prop_intro {ϕ ψ}   : prove (ϕ ⟶ (ψ ⟶ ϕ))
 | prop_distr {ϕ ψ ρ} : prove ((ϕ ⟶ (ψ ⟶ ρ)) ⟶ ((ϕ ⟶ ψ) ⟶ (ϕ ⟶ ρ)))
 | contrapos  {ϕ ψ}   : prove ((not ϕ ⟶ not ψ) ⟶ (ψ ⟶ ϕ))
@@ -298,11 +295,15 @@ theorem soundness : ∀ (ϕ : Formula),
     -- We substitute in ⟦ϕ⟧ = N
     rw [IH]
     simp
-    sorry
+    exact prop_empty net.net
 
   -- Propositional Axioms
   -- Since Lean's simp includes boolean algebra on sets,
   -- these are straightforward.
+  case prop_self ϕ =>
+    rw [models_interpret]
+    rw [← interpret_implication]
+
   case prop_intro ϕ ψ => 
     rw [models_interpret]
     rw [← interpret_implication]
@@ -313,7 +314,29 @@ theorem soundness : ∀ (ϕ : Formula),
     rw [models_interpret]
     rw [← interpret_implication]
     simp [interpret]
-    exact ⟨sorry, ⟨sorry, sorry⟩⟩
+    apply And.intro
+    -- Show (⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ)ᶜ ∩ (⟦ϕ⟧ ∩ ⟦ρ⟧ᶜ) ⊆ ⟦ϕ⟧
+    apply by_contradiction
+    intro h
+    rw [Set.not_subset] at h
+    match h with
+    | ⟨n, hn⟩ => exact absurd hn.1.2.1 hn.2
+
+    apply And.intro
+    -- Show (⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ)ᶜ ∩ (⟦ϕ⟧ ∩ ⟦ρ⟧ᶜ) ⊆ ⟦ψ⟧
+    apply by_contradiction
+    intro h
+    rw [Set.not_subset] at h
+    rw [Set.compl_inter] at h
+    rw [compl_compl] at h
+    sorry
+    
+    -- Show (⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ)ᶜ ∩ (⟦ϕ⟧ ∩ ⟦ρ⟧ᶜ) ⊆ ⟦ρ⟧ᶜ
+    apply by_contradiction
+    intro h
+    rw [Set.not_subset] at h
+    match h with
+    | ⟨n, hn⟩ => exact absurd hn.1.2.2 hn.2
 
   case contrapos ϕ ψ => 
     rw [models_interpret]
@@ -325,11 +348,8 @@ theorem soundness : ∀ (ϕ : Formula),
     rw [models_interpret]
     rw [← interpret_implication]
     simp [interpret]
-    conv => 
-      rhs 
-      rw [← compl_compl (⟦ϕ⟧_net)]
-      rw [← Set.compl_union]
-    sorry -- I'm a bit stuck here...
+    conv => rhs; enter [n, 2, 1]; rw [← compl_compl (⟦ϕ⟧_net)]
+    exact reach_inter _ _ _
 
   case know_refl ϕ => 
     rw [models_interpret]

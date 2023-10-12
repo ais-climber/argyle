@@ -186,3 +186,25 @@ theorem reach_union (net : Net) : ∀ (A B : Set ℕ),
       cases hm.1
       case inl h₂ => exact Or.inl ⟨m, ⟨h₂, hm.2⟩⟩
       case inr h₂ => exact Or.inr ⟨m, ⟨h₂, hm.2⟩⟩
+
+-- Reach and intersection interaction
+-- TODO: This should follow from either monotonicity or reach_union.
+--   Otherwise, what is the point of having the other two properties??
+--   But I can't seem to figure out how it follows...
+--------------------------------------------------------------------
+theorem reach_inter (net : Net) : ∀ (A B : Set ℕ),
+  (reachable net A)ᶜ ∩ (reachable net B) ⊆ reachable net (Aᶜ ∩ B) := by
+--------------------------------------------------------------------
+  intro A B n h₁
+  
+  match h₁.2 with
+  | ⟨m, hm⟩ =>
+    -- m ∈ Aᶜ because, otherwise, there would be a path from A to n.  
+    have h₂ : m ∈ Aᶜ := by
+      apply by_contradiction
+      intro h
+      simp at h
+      exact absurd ⟨m, ⟨h, hm.2⟩⟩ h₁.1
+    
+    exact ⟨m, ⟨⟨h₂, hm.1⟩, hm.2⟩⟩
+    
