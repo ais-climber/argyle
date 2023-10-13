@@ -5,6 +5,8 @@ import Mathlib.Data.Finset.Basic
 
 import Mathlib.Tactic.LibrarySearch
 
+namespace NeuralBase
+
 /-══════════════════════════════════════════════════════════════════
   Syntax
 ══════════════════════════════════════════════════════════════════-/
@@ -422,3 +424,4 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
     have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
     exact models_modpon h₃ h₄
   
+end NeuralBase

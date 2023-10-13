@@ -141,7 +141,7 @@ def is_connected (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
   ∨ (g.successors u = g.successors v
       ∧ g.predecessors u = g.predecessors v)
 
-
+end Graph
 
 /-
 TODO for later:  Make 'Path' computable so that we can execute
