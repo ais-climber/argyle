@@ -147,6 +147,27 @@ theorem reach_is_idempotent (net : Net) : ∀ (B : Set ℕ),
       match hm.1 with
       | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, Graph.Path_trans _ hx.2 hm.2⟩⟩
 
+
+-- Reach is asymmetric
+-- (corresponds to our graphs being acyclic)
+--------------------------------------------------------------------
+theorem reach_asymm (net : Net) : ∀ (m n : ℕ),
+  m ∈ reachable net {n} → n ∉ reachable net {m} := by
+--------------------------------------------------------------------
+  intro m n h₁ h₂
+  
+  match h₁ with
+  | ⟨x, hx⟩ => 
+    have h₃ : x = n := Set.eq_of_mem_singleton hx.1
+
+    match h₂ with
+    | ⟨y, hy⟩ => 
+      have h₄ : y = m := Set.eq_of_mem_singleton hy.1
+
+      rw [← h₃] at hy
+      rw [← h₄] at hx
+      exact net.acyclic _ _ hx.2 hy.2
+
 --------------------------------------------------------------------
 theorem reach_is_monotone (net : Net) : ∀ (A B : Set ℕ),
   A ⊆ B → reachable net A ⊆ reachable net B := by
@@ -208,16 +229,10 @@ theorem reach_inter (net : Net) : ∀ (A B : Set ℕ),
     
     exact ⟨m, ⟨⟨h₂, hm.1⟩, hm.2⟩⟩
 
-
-/-
-reachable net.net (reachable net.net ((⟦ϕ⟧_net) ∩ reachable net.net ((⟦ϕ⟧_net)ᶜ))ᶜ ∩ (⟦ϕ⟧_net)ᶜ)ᶜ ⊆ (⟦ϕ⟧_net)
-
-Reach(Reach(A ∩ Reach(Aᶜ))ᶜ ∩ Aᶜ)ᶜ ⊆ A
--/
-
 -- This is essentially the 'grz' axiom for Reach.
--- TODO: This *might* follow from the other properties. I should
---     look into this. 
+-- TODO: This *should* follow from the other properties. I should
+--     look into this.
+-- WARNING: I suspect that this is actually unsound!
 --------------------------------------------------------------------
 theorem reach_grz (net : Net) : ∀ (A : Set ℕ),
   (reachable net ((reachable net (A ∩ reachable net (Aᶜ)))ᶜ ∩ Aᶜ))ᶜ ⊆ A := by
@@ -226,17 +241,40 @@ theorem reach_grz (net : Net) : ∀ (A : Set ℕ),
   contrapose
   intro h₁
   simp
+  
+  have h₂ : (reachable net (reachable net (Aᶜ)))ᶜ ⊆ (reachable net (A ∩ reachable net (Aᶜ)))ᶜ := by
+    intro n
+    contrapose
+    simp
+    intro h₁
+    exact reach_is_monotone _ _ _ (Set.inter_subset_right _ _) h₁
 
-  have h₂ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
+  have h₃ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
+    apply by_contradiction
+    intro h
+    simp at h
+
+    match h with
+    | ⟨m, hm⟩ => 
+      sorry
+    -- apply h₂
+    -- sorry -- the claim is false!!
+
+  exact ⟨n, ⟨⟨h₃, h₁⟩, Graph.Path.trivial⟩⟩ 
+
+  /-
+  -/
+  /-
+  have h₃ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
     -- Goal: n ∈ Reach(A ∩ Reach(Aᶜ))ᶜ
     -- Plan: Because of monotonicity, 
     --    Reach(Reach(Aᶜ))ᶜ ⊆ Reach(A ∩ Reach(Aᶜ))ᶜ
     -- And by idempotence, the LHS is just
     --    Reach(Aᶜ)
     -- and so we have our goal by inclusion (we have n ∈ Aᶜ) 
+    apply h₂
+    rw [← reach_is_idempotent]
     sorry
-
-
-
-  exact reach_is_extens _ _ ⟨h₂, h₁⟩
-
+    -- apply reach_is_monotone _ _ _
+  exact reach_is_extens _ _ ⟨h₃, h₁⟩
+  -/

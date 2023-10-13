@@ -273,8 +273,8 @@ theorem soundness : ∀ (ϕ : Formula),
   -- We case on each of our proof rules and axioms
   induction h₁
   -- Proof Rules
-  case modpon ϕ ψ h₂ h₃ IH₂ IH₃ => exact models_modpon IH₂ IH₃
-
+  case modpon ϕ ψ _ _ IH₂ IH₃ => exact models_modpon IH₂ IH₃
+  
   case know_necess ϕ h IH => 
     rw [models_interpret]
     rw [models_interpret] at IH
@@ -315,21 +315,28 @@ theorem soundness : ∀ (ϕ : Formula),
     rw [← interpret_implication]
     simp [interpret]
     apply And.intro
+    
     -- Show (⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ)ᶜ ∩ (⟦ϕ⟧ ∩ ⟦ρ⟧ᶜ) ⊆ ⟦ϕ⟧
     apply by_contradiction
     intro h
     rw [Set.not_subset] at h
     match h with
     | ⟨n, hn⟩ => exact absurd hn.1.2.1 hn.2
-
-    apply And.intro
+    
     -- Show (⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ)ᶜ ∩ (⟦ϕ⟧ ∩ ⟦ρ⟧ᶜ) ⊆ ⟦ψ⟧
+    apply And.intro
     apply by_contradiction
     intro h
     rw [Set.not_subset] at h
     rw [Set.compl_inter] at h
     rw [compl_compl] at h
-    sorry
+    match h with
+    | ⟨n, hn⟩ => 
+      -- Since n ∈ ⟦ϕ⟧ᶜ ∪ ⟦ψ⟧, either n ∈ ⟦ϕ⟧ᶜ or n ∈ ⟦ψ⟧.
+      -- In either case we get a contradiction. 
+      cases hn.1.1
+      case inl h₁ => exact absurd hn.1.2.1 h₁
+      case inr h₁ => exact absurd h₁ hn.2
     
     -- Show (⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ)ᶜ ∩ (⟦ϕ⟧ ∩ ⟦ρ⟧ᶜ) ⊆ ⟦ρ⟧ᶜ
     apply by_contradiction
