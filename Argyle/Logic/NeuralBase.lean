@@ -32,11 +32,13 @@ def Formula.Know : Formula → Formula := fun ϕ => not ⟨K⟩ (not ϕ)
 def Formula.Typ : Formula → Formula := fun ϕ => not ⟨T⟩ (not ϕ)
 def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ((not ϕ) and (not ψ)))
 def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
+def Formula.iff : Formula → Formula → Formula := fun ϕ ψ => (implies ϕ ψ) and (implies ψ ϕ)
 
 prefix:85   "[K] "  => Formula.Know
 prefix:85   "[T] "  => Formula.Typ
 infixl:60   " or " => Formula.or
 infixl:57   " ⟶ " => Formula.implies
+infixl:55   " ⟷ " => Formula.implies
 
 -- Some sanity checks
 #check [K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ
