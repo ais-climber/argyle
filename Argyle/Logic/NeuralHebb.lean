@@ -228,12 +228,6 @@ inductive prove : Formula → Prop where
     ----------------
   → prove ϕ.lift
 
--- Necessitation for ⟨ϕ⟩_Hebb
-| hebb_necess {P ϕ} :
-    prove ϕ
-    ----------------
-  → prove (⟨P⟩_Hebb ϕ)
-
 -- Reduction Axioms
 | hebb_prop  {P p}   : 
   prove ((⟨P⟩_Hebb pᵖ) ⟷ pᵖ)
@@ -279,14 +273,6 @@ theorem soundness : ∀ (ϕ : Formula),
   case hebb_lift ϕ h => 
     rw [← models_lift _ _]
     exact NeuralBase.soundness _ h _
-
-  case hebb_necess P ϕ h IH => 
-    rw [models_interpret]
-    rw [models_interpret] at IH
-    simp only [interpret, InterpretedNet.top]
-    simp only [InterpretedNet.top] at IH
-
-    sorry
 
   -- Reduction Axioms
   case hebb_prop P p => 
