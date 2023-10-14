@@ -55,7 +55,7 @@ prefix:85   "[K] "  => Formula.Know
 prefix:85   "[T] "  => Formula.Typ
 infixl:60   " or " => Formula.or
 infixl:57   " ⟶ " => Formula.implies
-infixl:55   " ⟷ " => Formula.implies
+infixl:55   " ⟷ " => Formula.iff
 
 -- An example, as a sanity check
 #check (⟨"a"ᵖ and "b"ᵖ⟩_Hebb ([K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ)) ⟶ "a"ᵖ
@@ -120,8 +120,7 @@ notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 
 
 -- These are the same two semantic lemmas that we have for
--- the base logic.  Instead of interpret_implication, we use 
--- interpret_iff (because of the form of our reduction axioms).
+-- the base logic.
 
 -- Lemma: A net models ϕ iff ⟦ϕ⟧ = N.
 --------------------------------------------------------------------
@@ -143,14 +142,10 @@ lemma models_interpret (Net : InterpretedNet) (ϕ : Formula) :
     rw [Set.eq_univ_iff_forall] at h₁
     exact h₁ n
 
--- This lemma helps us break down the semantics for ⟦ϕ ⟷ ψ⟧:
---     ⟦ϕ ⟷ ψ⟧ = N   iff   ⟦ϕ⟧ = ⟦ψ⟧
 --------------------------------------------------------------------
-lemma interpret_iff {Net : InterpretedNet} {ϕ ψ : Formula} :
-  ((⟦ϕ⟧_Net) = (⟦ψ⟧_Net)) ↔ (⟦ϕ ⟷ ψ⟧_Net) = Net.top := by
+lemma interpret_implication {Net : InterpretedNet} {ϕ ψ : Formula} :
+  ((⟦ϕ⟧_Net) ⊆ (⟦ψ⟧_Net)) ↔ (⟦ϕ ⟶ ψ⟧_Net) = Net.top := by
 --------------------------------------------------------------------
-  sorry
-  /-
   simp only [InterpretedNet.top]
   apply Iff.intro
   
@@ -166,7 +161,6 @@ lemma interpret_iff {Net : InterpretedNet} {ϕ ψ : Formula} :
   case mpr => 
     intro h₁
     simp [interpret] at h₁
-    -- rw [← Set.subset_empty_iff] at h₁
 
     -- We show ⟦ϕ⟧ ⊆ ⟦ψ⟧ by contradiction;
     -- If some n ∈ ⟦ϕ⟧ but n ∉ ⟦ψ⟧, then n ∈ ⟦ϕ⟧ ∩ ⟦ψ⟧ᶜ = ∅
@@ -178,7 +172,35 @@ lemma interpret_iff {Net : InterpretedNet} {ϕ ψ : Formula} :
       have h₂ : n ∈ (⟦ϕ⟧_Net) ∩ (⟦ψ⟧_Net)ᶜ := hn
       rw [h₁] at h₂
       exact absurd h₂ (Set.not_mem_empty n)
-  -/
+
+-- The next two lemmas are new.
+
+-- This lemma helps us break down the semantics for ⟦ϕ ⟷ ψ⟧:
+--     ⟦ϕ ⟷ ψ⟧ = N   iff   ⟦ϕ⟧ = ⟦ψ⟧
+--------------------------------------------------------------------
+lemma interpret_iff {Net : InterpretedNet} {ϕ ψ : Formula} :
+  ((⟦ϕ⟧_Net) = (⟦ψ⟧_Net)) ↔ (⟦ϕ ⟷ ψ⟧_Net) = Net.top := by
+--------------------------------------------------------------------
+  simp only [InterpretedNet.top]
+  apply Iff.intro
+  
+  -- Forward direction
+  case mp =>
+    intro h₁
+    simp [interpret]
+    simp [h₁]
+    
+  case mpr =>
+    intro h₁
+    simp only [Formula.iff] at h₁
+    rw [Set.Subset.antisymm_iff]
+    rw [interpret_implication, InterpretedNet.top]
+    rw [interpret_implication, InterpretedNet.top]
+
+    unfold interpret at h₁
+    rw [Set.eq_univ_iff_forall, Set.eq_univ_iff_forall]
+    rw [Set.eq_univ_iff_forall] at h₁
+    exact ⟨fun x => (h₁ x).1, fun x => (h₁ x).2⟩
 
 -- This lemma bridges our base logic semantics with our dynamic
 -- logic semantics.
@@ -210,6 +232,8 @@ lemma models_lift (Net : InterpretedNet) (ϕ : NeuralBase.Formula) :
     sorry
   case diaKnow ϕ IH => 
     simp only [NeuralBase.Formula.lift]
+    simp [models, satisfies, interpret]
+    simp [models, satisfies, interpret] at IH
     sorry
   case diaTyp ϕ IH => 
     simp only [NeuralBase.Formula.lift]
@@ -259,6 +283,61 @@ notation:30 Γ:40 " ⊢ " ϕ:40 => follows Γ ϕ
 /-══════════════════════════════════════════════════════════════════
   Soundness
 ══════════════════════════════════════════════════════════════════-/
+-- We have the same lemmas we had before for the base logic.
+
+-- Semantic statement of modus ponens.
+-- (It's convenient to have it as a seperate lemma.)
+--------------------------------------------------------------------
+lemma models_modpon {Net : InterpretedNet} {ϕ ψ : Formula} :
+    models Net ϕ
+  → models Net (ϕ ⟶ ψ)
+    ----------------
+  → models Net ψ := by
+--------------------------------------------------------------------
+  intro h₁ h₂
+  simp at *
+  rw [← interpret_implication] at h₂
+  simp only [InterpretedNet.top] at *
+  rw [h₁] at h₂
+  rw [← Set.univ_subset_iff]
+  exact h₂
+
+--------------------------------------------------------------------
+lemma models_andintro {Net : InterpretedNet} {ϕ ψ : Formula} :
+    models Net ϕ
+  → models Net ψ
+    ----------------
+  → models Net (ϕ and ψ) := by
+--------------------------------------------------------------------
+  intro h₁ h₂
+  simp at h₁
+  simp at h₂
+  simp [interpret, h₁, h₂]
+
+--------------------------------------------------------------------
+lemma models_top {Net : InterpretedNet} :
+    models Net ⊤ := by
+--------------------------------------------------------------------
+  simp [interpret]
+
+--------------------------------------------------------------------
+lemma models_conjunction {Net : InterpretedNet} (Γ : List Formula) :
+  (∀ ϕ ∈ Γ, models Net ϕ) → models Net (⋀ Γ) := by
+--------------------------------------------------------------------
+  intro h₁
+
+  -- By induction on the list of formulas
+  induction Γ
+  case nil => simp only [conjunction, models_top]
+  case cons ψ ψs IH => 
+    simp only [conjunction]
+    
+    have h₂ : ∀ (ϕ : Formula), ϕ ∈ ψs → models Net ϕ := by
+      intro ϕ h₂
+      exact h₁ _ (List.mem_cons_of_mem _ h₂)
+    
+    -- On the left, show ⊨ ψ.  On the right, show ⊨ ⋀ ψs.
+    exact models_andintro (h₁ _ (List.mem_cons_self _ _)) (IH h₂)
 
 -- Soundness: If we can prove ϕ from nothing (just our proof rules alone),
 -- then ϕ holds in every neural network model.
@@ -318,19 +397,12 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
   | ⟨Δ, hΔ⟩ => 
     -- We have ⋀ Δ and (⋀ Δ) ⟶ ϕ, so we can apply modus ponens.
     have h₃ : models Net (⋀ Δ) := by
-      sorry
-      -- apply models_conjunction Δ
-      -- intro ϕ hϕ
-      -- exact h₂ ϕ (List.Sublist.subset hΔ.1 hϕ)
+      apply models_conjunction Δ
+      intro ϕ hϕ
+      exact h₂ ϕ (List.Sublist.subset hΔ.1 hϕ)
     
-    sorry
-    -- have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
-    -- exact models_modpon h₃ h₄
-
-
-
-
-
+    have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
+    exact models_modpon h₃ h₄
 
 end NeuralHebb
 
