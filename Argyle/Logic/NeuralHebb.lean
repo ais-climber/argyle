@@ -4,8 +4,10 @@ import Argyle.Operators.Propagate
 import Argyle.Operators.Hebb
 import Argyle.Logic.NeuralBase
 import Mathlib.Data.Finset.Basic
-
 import Mathlib.Tactic.LibrarySearch
+
+-- TODO: How can I just refer to 'InterpretedNet'?
+-- open NeuralBase.InterpretedNet
 
 namespace NeuralHebb
 
@@ -86,14 +88,6 @@ def NeuralBase.Formula.lift : NeuralBase.Formula → NeuralHebb.Formula := fun
 -- interpretation function to interpret the ⟨ϕ⟩_Hebb operator. 
 
 namespace NeuralHebb
-
--- Interpreted neural networks
-structure InterpretedNet where
-  net : Net
-  proposition_map : String → Set ℕ
-
-def InterpretedNet.top (Net : InterpretedNet) : Set ℕ :=
-  Set.univ
 
 -- The uniquely determined interpretation function.
 -- ⟨ϕ⟩_Hebb ψ says "interpret ψ in a new, Hebb-updated net."
@@ -186,6 +180,40 @@ lemma interpret_iff {Net : InterpretedNet} {ϕ ψ : Formula} :
       exact absurd h₂ (Set.not_mem_empty n)
   -/
 
+-- This lemma bridges our base logic semantics with our dynamic
+-- logic semantics.
+--------------------------------------------------------------------
+lemma models_lift (Net : InterpretedNet) (ϕ : NeuralBase.Formula) :
+  NeuralBase.models Net ϕ ↔ models Net ϕ.lift := by
+--------------------------------------------------------------------
+  -- By induction on ϕ
+  induction ϕ
+  case proposition p =>
+    simp only [NeuralBase.Formula.lift]
+    simp only [models, satisfies, interpret]
+    simp only [NeuralBase.models, NeuralBase.satisfies, NeuralBase.interpret]
+  case top => 
+    simp only [NeuralBase.Formula.lift]
+    simp only [models, satisfies]
+    simp only [NeuralBase.models, NeuralBase.satisfies]
+    exact ⟨fun h x => h x, fun h x => h x⟩  
+  case _ ϕ IH => 
+    simp only [NeuralBase.Formula.lift]
+    simp only [models, satisfies, interpret]
+    simp only [NeuralBase.models, NeuralBase.satisfies, NeuralBase.interpret]
+    simp only [models, satisfies, interpret] at IH
+    simp only [NeuralBase.models, NeuralBase.satisfies, NeuralBase.interpret] at IH
+    sorry
+    -- This is getting away from me a bit...
+  case _ ϕ ψ IH₁ IH₂ => 
+    simp only [NeuralBase.Formula.lift]
+    sorry
+  case diaKnow ϕ IH => 
+    simp only [NeuralBase.Formula.lift]
+    sorry
+  case diaTyp ϕ IH => 
+    simp only [NeuralBase.Formula.lift]
+    sorry
 
 /-══════════════════════════════════════════════════════════════════
   Proof System
@@ -221,7 +249,7 @@ inductive prove : Formula → Prop where
 
 | hebb_typ   {P ϕ}   : 
   prove ((⟨P⟩_Hebb ⟨T⟩ ϕ) ⟷ 
-    ⟨T⟩ (⟨ϕ⟩_Hebb ψ or (⟨T⟩ ϕ and ⟨K⟩ (⟨T⟩ ϕ and ⟨T⟩ ⟨ϕ⟩_Hebb ψ))))
+    ⟨T⟩ ((⟨P⟩_Hebb ϕ) or (⟨T⟩ P and ⟨K⟩ (⟨T⟩ P and ⟨T⟩ ⟨P⟩_Hebb ϕ))))
 
 
 def conjunction : List Formula → Formula := fun
@@ -249,29 +277,8 @@ theorem soundness : ∀ (ϕ : Formula),
   
   -- We case on each of our proof rules and axioms
   case hebb_lift ϕ h => 
-    -- This we prove by induction on the formula
-    -- TODO: Put into its own lemma!!!
-    induction ϕ
-    case proposition p => 
-      simp only [NeuralBase.Formula.lift]
-      sorry
-      -- Can't apply this yet, I need a semantic bridge!!
-      -- exact NeuralBase.soundness _ _ _
-    case top => 
-      simp only [NeuralBase.Formula.lift]
-      sorry
-    case _ ϕ IH => 
-      simp only [NeuralBase.Formula.lift]
-      sorry
-    case _ ϕ ψ IH => 
-      simp only [NeuralBase.Formula.lift]
-      sorry
-    case diaKnow ϕ IH => 
-      simp only [NeuralBase.Formula.lift]
-      sorry
-    case diaTyp ϕ IH => 
-      simp only [NeuralBase.Formula.lift]
-      sorry
+    rw [← models_lift _ _]
+    exact NeuralBase.soundness _ h _
 
   case hebb_necess P ϕ h IH => 
     rw [models_interpret]
@@ -279,9 +286,6 @@ theorem soundness : ∀ (ϕ : Formula),
     simp only [interpret, InterpretedNet.top]
     simp only [InterpretedNet.top] at IH
 
-    -- This is going to be a property of hebb_star that I
-    -- need to prove.  Essentially:
-    --    ⟦ϕ⟧* = ∅ → ⟦ϕ⟧ = ∅
     sorry
 
   -- Reduction Axioms
@@ -309,9 +313,10 @@ theorem soundness : ∀ (ϕ : Formula),
   case hebb_typ P ϕ => 
     rw [models_interpret]
     rw [← interpret_iff]
-    simp [interpret]
-    sorry
-    -- exact hebb_reduction _ _ _
+    simp only [interpret]
+    rw [← Set.compl_union]
+    rw [compl_compl]
+    exact hebb_reduction _ _ _
 
 
 -- Strong Soundness: If ϕ follows from Γ (by our proof rules),
@@ -335,6 +340,7 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
     sorry
     -- have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
     -- exact models_modpon h₃ h₄
+
 
 
 

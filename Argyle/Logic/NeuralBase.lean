@@ -45,6 +45,7 @@ infixl:55   " ⟷ " => Formula.implies
 -- Some sanity checks
 #check [K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ
 
+end NeuralBase
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
@@ -52,6 +53,8 @@ infixl:55   " ⟷ " => Formula.implies
 
 -- Our models are "interpreted" neural networks, i.e. neural networks
 -- along with a mapping from propositions to sets of neurons.
+-- NOTE: This is global across namespaces!!  InterpretedNets
+--    don't change depending on our logic!
 structure InterpretedNet where
   net : Net
   proposition_map : String → Set ℕ
@@ -63,6 +66,8 @@ structure InterpretedNet where
 def InterpretedNet.top (Net : InterpretedNet) : Set ℕ :=
   Set.univ
   -- Net.net.graph.vertices.toFinset
+
+namespace NeuralBase
 
 -- Any neural network N has a uniquely determined interpretation
 -- that maps each formula to a set of neurons.
