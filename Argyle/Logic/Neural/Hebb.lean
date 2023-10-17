@@ -1,8 +1,8 @@
-import Argyle.Net
+import Argyle.InterpretedNet
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 import Argyle.Operators.Hebb
-import Argyle.Logic.NeuralBase
+import Argyle.Logic.Neural.Base
 import Mathlib.Data.Finset.Basic
 import Mathlib.Tactic.LibrarySearch
 
@@ -60,13 +60,12 @@ infixl:55   " ⟷ " => Formula.iff
 -- An example, as a sanity check
 #check (⟨"a"ᵖ and "b"ᵖ⟩_Hebb ([K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ)) ⟶ "a"ᵖ
 
-end NeuralHebb
-
 /-══════════════════════════════════════════════════════════════════
   Syntactic Extension
 ══════════════════════════════════════════════════════════════════-/
 -- We provide the embedding from the base language to the dynamic one,
 -- which allows us to later inherit rules from the static logic.
+end NeuralHebb
 
 def NeuralBase.Formula.lift : NeuralBase.Formula → NeuralHebb.Formula := fun
 | pᵖ => pᵖ
@@ -77,17 +76,15 @@ def NeuralBase.Formula.lift : NeuralBase.Formula → NeuralHebb.Formula := fun
 | ⟨T⟩ ϕ => ⟨T⟩ (NeuralBase.Formula.lift ϕ)
 
 -- An example of lifting a static formula to the dynamic language.
-#check 
-  let x : NeuralBase.Formula := [K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ
-  x.lift
+#check ([K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ : NeuralBase.Formula).lift
+
+namespace NeuralHebb
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
 ══════════════════════════════════════════════════════════════════-/
 -- Everything is the same as in our base logic, but we extend the
 -- interpretation function to interpret the ⟨ϕ⟩_Hebb operator. 
-
-namespace NeuralHebb
 
 -- The uniquely determined interpretation function.
 -- ⟨ϕ⟩_Hebb ψ says "interpret ψ in a new, Hebb-updated net."
@@ -104,9 +101,9 @@ def interpret (Net : InterpretedNet) : Formula → Set ℕ := fun
   interpret UpdatedNet ψ
 notation:40 "⟦" ϕ "⟧_" Net => interpret Net ϕ
 
-def satisfies (Net : InterpretedNet) (ϕ : Formula) (n : ℕ) : Prop :=
+def satisfies (Net : InterpretedNet) (n : ℕ) (ϕ : Formula) : Prop :=
   n ∈ (⟦ϕ⟧_Net) -- interpret Net ϕ
-notation:35 net "; " n " ⊩ " ϕ => satisfies net ϕ n
+notation:35 net "; " n " ⊩ " ϕ => satisfies net n ϕ
 
 def models (Net : InterpretedNet) (ϕ : Formula) : Prop :=
   ∀ n, (Net; n ⊩ ϕ)

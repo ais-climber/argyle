@@ -1,4 +1,4 @@
-import Argyle.Net
+import Argyle.InterpretedNet
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 import Mathlib.Data.Finset.Basic
@@ -35,39 +35,21 @@ def Formula.Typ : Formula → Formula := fun ϕ => not ⟨T⟩ (not ϕ)
 def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ((not ϕ) and (not ψ)))
 def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
 def Formula.iff : Formula → Formula → Formula := fun ϕ ψ => (implies ϕ ψ) and (implies ψ ϕ)
+def Formula.conditional : Formula → Formula → Formula := fun ϕ ψ => implies (Typ ϕ) ψ
 
 prefix:85   "[K] "  => Formula.Know
 prefix:85   "[T] "  => Formula.Typ
 infixl:60   " or " => Formula.or
 infixl:57   " ⟶ " => Formula.implies
-infixl:55   " ⟷ " => Formula.implies
+infixl:55   " ⟷ " => Formula.iff
+infixl:57   " ⟹ " => Formula.conditional
 
 -- Some sanity checks
-#check [K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ
-
-end NeuralBase
+#check [K] "a"ᵖ ⟹ "b"ᵖ and [T] "c"ᵖ
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
 ══════════════════════════════════════════════════════════════════-/
-
--- Our models are "interpreted" neural networks, i.e. neural networks
--- along with a mapping from propositions to sets of neurons.
--- NOTE: This is global across namespaces!!  InterpretedNets
---    don't change depending on our logic!
-structure InterpretedNet where
-  net : Net
-  proposition_map : String → Set ℕ
-
--- We abbreviate the 'top' state of the net (the set of
--- all neurons)
--- TODO: Update when I make sets finite.  This should really
--- be Finset.univ (or something like that to make the proofs go through)
-def InterpretedNet.top (Net : InterpretedNet) : Set ℕ :=
-  Set.univ
-  -- Net.net.graph.vertices.toFinset
-
-namespace NeuralBase
 
 -- Any neural network N has a uniquely determined interpretation
 -- that maps each formula to a set of neurons.
@@ -81,9 +63,9 @@ def interpret (Net : InterpretedNet) : Formula → Set ℕ := fun
 notation:40 "⟦" ϕ "⟧_" Net => interpret Net ϕ
 
 -- Relation for "net satisfies ϕ at point n"
-def satisfies (Net : InterpretedNet) (ϕ : Formula) (n : ℕ) : Prop :=
+def satisfies (Net : InterpretedNet) (n : ℕ) (ϕ : Formula) : Prop :=
   n ∈ (⟦ϕ⟧_Net) -- interpret Net ϕ
-notation:35 net "; " n " ⊩ " ϕ => satisfies net ϕ n
+notation:35 net "; " n " ⊩ " ϕ => satisfies net n ϕ
 
 -- A net models a *formula* ϕ iff n ⊩ ϕ for *all* points n ∈ N
 def models (Net : InterpretedNet) (ϕ : Formula) : Prop :=
