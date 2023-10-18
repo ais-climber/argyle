@@ -233,34 +233,35 @@ theorem reach_inter (net : Net) : ∀ (A B : Set ℕ),
 -- TODO: This *should* follow from the other properties. I should
 --     look into this.
 -- WARNING: I suspect that this is actually unsound!
---------------------------------------------------------------------
-theorem reach_grz (net : Net) : ∀ (A : Set ℕ),
-  (reachable net ((reachable net (A ∩ reachable net (Aᶜ)))ᶜ ∩ Aᶜ))ᶜ ⊆ A := by
---------------------------------------------------------------------
-  intro A n
-  contrapose
-  intro h₁
-  simp
+-- TODO: Temporarily removing grz because I'm not sure if it's sound
+-- --------------------------------------------------------------------
+-- theorem reach_grz (net : Net) : ∀ (A : Set ℕ),
+--   (reachable net ((reachable net (A ∩ reachable net (Aᶜ)))ᶜ ∩ Aᶜ))ᶜ ⊆ A := by
+-- --------------------------------------------------------------------
+--   intro A n
+--   contrapose
+--   intro h₁
+--   simp
   
-  have h₂ : (reachable net (reachable net (Aᶜ)))ᶜ ⊆ (reachable net (A ∩ reachable net (Aᶜ)))ᶜ := by
-    intro n
-    contrapose
-    simp
-    intro h₁
-    exact reach_is_monotone _ _ _ (Set.inter_subset_right _ _) h₁
+--   have h₂ : (reachable net (reachable net (Aᶜ)))ᶜ ⊆ (reachable net (A ∩ reachable net (Aᶜ)))ᶜ := by
+--     intro n
+--     contrapose
+--     simp
+--     intro h₁
+--     exact reach_is_monotone _ _ _ (Set.inter_subset_right _ _) h₁
 
-  have h₃ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
-    apply by_contradiction
-    intro h
-    simp at h
+--   have h₃ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
+--     apply by_contradiction
+--     intro h
+--     simp at h
 
-    match h with
-    | ⟨m, hm⟩ => 
-      sorry
-    -- apply h₂
-    -- sorry -- the claim is false!!
+--     match h with
+--     | ⟨m, hm⟩ => 
+--       sorry
+--     -- apply h₂
+--     -- sorry -- the claim is false!!
 
-  exact ⟨n, ⟨⟨h₃, h₁⟩, Graph.Path.trivial⟩⟩ 
+--   exact ⟨n, ⟨⟨h₃, h₁⟩, Graph.Path.trivial⟩⟩ 
 
   /-
   -/

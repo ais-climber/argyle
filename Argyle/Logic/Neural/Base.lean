@@ -157,10 +157,14 @@ inductive prove : Formula → Prop where
     ----------------
   → prove ([K] ϕ)
 
-| typ_necess {ϕ} :
-    prove ϕ
-    ----------------
-  → prove ([T] ϕ)
+-- Note that we do *not* have a Typ-Necessitation rule!
+-- This is because there is a bias node in our neural networks
+-- that is *always active*, i.e.
+--    Propagate(∅) = {bias}
+-- whereas we would need
+--    Propagate(∅) = ∅
+-- in order for necessitation to be true.
+-- TODO: Bake in this bias in Propagate.lean!
 
 -- Propositional Axioms
 | prop_self  {ϕ}     : prove (ϕ ⟶ ϕ)
@@ -172,7 +176,8 @@ inductive prove : Formula → Prop where
 | know_distr {ϕ ψ} : prove ([K] (ϕ ⟶ ψ) ⟶ ([K] ϕ ⟶ [K] ψ))
 | know_refl  {ϕ}   : prove ([K] ϕ ⟶ ϕ)
 | know_trans {ϕ}   : prove ([K] ϕ ⟶ [K]([K] ϕ))
-| know_grz   {ϕ}   : prove ([K] ([K] (ϕ ⟶ [K]ϕ) ⟶ ϕ) ⟶ ϕ)
+-- | know_grz   {ϕ}   : prove ([K] ([K] (ϕ ⟶ [K]ϕ) ⟶ ϕ) ⟶ ϕ)
+-- TODO: Temporarily removing grz because I'm not sure if it's sound
 
 -- Axioms for [T]
 | typ_refl   {ϕ} : prove ([T] ϕ ⟶ ϕ)
@@ -277,17 +282,6 @@ theorem soundness : ∀ (ϕ : Formula),
     simp
     exact reach_empty _
 
-  case typ_necess ϕ h IH => 
-    rw [models_interpret]
-    rw [models_interpret] at IH
-    simp only [interpret, InterpretedNet.top]
-    simp only [InterpretedNet.top] at IH
-    
-    -- We substitute in ⟦ϕ⟧ = N
-    rw [IH]
-    simp
-    exact prop_empty net.net
-
   -- Propositional Axioms
   -- Since Lean's simp includes boolean algebra on sets,
   -- these are straightforward.
@@ -366,11 +360,12 @@ theorem soundness : ∀ (ϕ : Formula),
     rw [compl_compl]
     rw [← reach_is_idempotent _ _]
 
-  case know_grz ϕ => 
-    rw [models_interpret]
-    rw [← interpret_implication]
-    simp [interpret]
-    exact reach_grz _ _
+  -- TODO: Temporarily removing grz because I'm not sure if it's sound
+  -- case know_grz ϕ => 
+  --   rw [models_interpret]
+  --   rw [← interpret_implication]
+  --   simp [interpret]
+  --   exact reach_grz _ _
 
   -- Axioms for [T]
   case typ_refl ϕ => 

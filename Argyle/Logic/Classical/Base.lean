@@ -68,12 +68,30 @@ structure PrefModel where
   pref_trans : Transitive pref
   -- ...
 
--- More traditional modal logic notation for the edges and
--- preference relation.
-prefix:40   " ≼ " => PrefModel.pref
+-- w ∈ best(A) iff w ∈ A and w is preferred over any other u ∈ A. 
+def PrefModel.best (M : PrefModel) (A : Set ℕ) : Set ℕ :=
+  fun w => w ∈ A ∧ (∀ u, u ∈ A → M.pref w u)  
 
-def PrefModel.best (model : PrefModel) (A : Set ℕ) : Set ℕ :=
-  sorry
+--------------------------------------------------------------------
+theorem best_inclusion {M : PrefModel} {A : Set ℕ} :
+  M.best A ⊆ A := by
+--------------------------------------------------------------------
+  intro w h₁
+  exact h₁.1
+
+--------------------------------------------------------------------
+theorem best_idempotent {M : PrefModel} {A : Set ℕ} :
+  M.best (M.best A) = M.best A := by
+--------------------------------------------------------------------
+  apply Set.ext
+  intro w
+  apply Iff.intro
+
+  case mp => exact fun h₁ => h₁.1
+  
+  case mpr => 
+    intro h₁
+    exact ⟨h₁, fun u h₂ => h₁.2 _ h₂.1⟩
 
 namespace Classical.Base
 
@@ -134,10 +152,9 @@ inductive prove : Formula → Prop where
     ----------------
   → prove ([K] ϕ)
 
-| typ_necess {ϕ} :
-    prove ϕ
-    ----------------
-  → prove ([T] ϕ)
+-- Note that we do *not* have a Typ-Necessitation rule!
+-- We also do not have the normal modal axiom for [T].
+-- This means that [T] is not a normal modality.
 
 -- Propositional Axioms
 | prop_self  {ϕ}     : prove (ϕ ⟶ ϕ)
@@ -149,7 +166,8 @@ inductive prove : Formula → Prop where
 | know_distr {ϕ ψ} : prove ([K] (ϕ ⟶ ψ) ⟶ ([K] ϕ ⟶ [K] ψ))
 | know_refl  {ϕ}   : prove ([K] ϕ ⟶ ϕ)
 | know_trans {ϕ}   : prove ([K] ϕ ⟶ [K]([K] ϕ))
-| know_grz   {ϕ}   : prove ([K] ([K] (ϕ ⟶ [K]ϕ) ⟶ ϕ) ⟶ ϕ)
+-- | know_grz   {ϕ}   : prove ([K] ([K] (ϕ ⟶ [K]ϕ) ⟶ ϕ) ⟶ ϕ)
+-- TODO: Temporarily removing grz because I'm not sure if it's sound
 
 -- Axioms for [T]
 | typ_refl   {ϕ} : prove ([T] ϕ ⟶ ϕ)
@@ -233,7 +251,7 @@ lemma models_conjunction {M : PrefModel} (Γ : List Formula) :
 theorem soundness : ∀ (ϕ : Formula),
   prove ϕ → ∀ (M : PrefModel), models M ϕ := by
 --------------------------------------------------------------------
-  intro ϕ h₁ net
+  intro ϕ h₁ M
   
   -- We case on each of our proof rules and axioms
   induction h₁
@@ -242,12 +260,7 @@ theorem soundness : ∀ (ϕ : Formula),
   
   case know_necess ϕ h IH =>
     simp only [models, satisfies]
-    exact fun w u h₁ => IH u
-
-  case typ_necess ϕ h IH => 
-    simp only [models, satisfies]
-    intro w
-    sorry -- I need to define 'best' first!
+    exact fun w u _ => IH u
 
   -- Propositional Axioms
   -- Since Lean's simp includes propositional laws ('Prop'),
@@ -256,7 +269,7 @@ theorem soundness : ∀ (ϕ : Formula),
 
   case prop_intro ϕ ψ => 
     simp [models, satisfies]
-    exact fun w h₁ h₂ => h₁
+    exact fun w h₁ _ => h₁
     
   case prop_distr ϕ ψ ρ => 
     simp [models, satisfies]
@@ -272,23 +285,32 @@ theorem soundness : ∀ (ϕ : Formula),
     
   -- Axioms for [K]
   case know_distr ϕ ψ => 
-    sorry
+    simp [models, satisfies]
+    intro w h₁ h₂ u h₃
+    exact h₁ _ (h₂ _ h₃) h₃
 
   case know_refl ϕ => 
-    sorry
+    simp [models, satisfies]
+    intro w h₁
+    exact h₁ w (M.edges_refl w)
 
   case know_trans ϕ => 
-    sorry
-
-  case know_grz ϕ => 
-    sorry
+    simp [models, satisfies]
+    intro w h₁ u h₂ v h₃
+    exact h₁ _ (M.edges_trans h₂ h₃)
 
   -- Axioms for [T]
   case typ_refl ϕ => 
-    sorry
-
+    simp [models, satisfies]
+    intro w h₁
+    have h₂ : w ∈ { u | M; u ⊩ ϕ } := best_inclusion h₁
+    exact h₂
+    
   case typ_trans ϕ => 
-    sorry
+    simp [models, satisfies]
+    intro w h₁
+    rw [best_idempotent]
+    exact h₁
 
 
 -- Strong Soundness: If ϕ follows from Γ (by our proof rules),
