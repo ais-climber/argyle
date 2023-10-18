@@ -1,104 +1,21 @@
+import Argyle.Logic.Syntax
+import Argyle.Logic.PrefModel
 import Mathlib.Data.Finset.Basic
 import Mathlib.Tactic.LibrarySearch
 
+import Argyle.Logic.Syntax
+open Syntax
+
 namespace Classical.Base
-
-/-══════════════════════════════════════════════════════════════════
-  Syntax
-══════════════════════════════════════════════════════════════════-/
-
-inductive Formula : Type where
--- Propositional logic
-| proposition : String → Formula
-| top : Formula
-| not : Formula → Formula
-| and : Formula → Formula → Formula
-
--- "Possibly knows" and "Possibly finds typical of" modalities
-| Know : Formula → Formula
-| Typ : Formula → Formula
-
-postfix:max "ᵖ"     => Formula.proposition
-notation    "⊤"     => Formula.top
-prefix:85   "[K] "  => Formula.Know
-prefix:85   "[T] "  => Formula.Typ
-prefix:75   "not "  => Formula.not
-infixl:65   " and " => Formula.and
-
--- Abbreviations
-def Formula.diaKnow : Formula → Formula := fun ϕ => not [K] (not ϕ)
-def Formula.diaTyp : Formula → Formula := fun ϕ => not [T] (not ϕ)
-def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ((not ϕ) and (not ψ)))
-def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
-def Formula.iff : Formula → Formula → Formula := fun ϕ ψ => (implies ϕ ψ) and (implies ψ ϕ)
-def Formula.conditional : Formula → Formula → Formula := fun ϕ ψ => implies ([T] ϕ) ψ
-
-prefix:85   "⟨K⟩ "  => Formula.diaKnow
-prefix:85   "⟨T⟩ "  => Formula.diaTyp
-infixl:60   " or " => Formula.or
-infixl:57   " ⟶ " => Formula.implies
-infixl:55   " ⟷ " => Formula.iff
-infixl:57   " ⟹ " => Formula.conditional
-
--- Some sanity checks
-#check [K] "a"ᵖ ⟹ "b"ᵖ and [T] "c"ᵖ
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
 ══════════════════════════════════════════════════════════════════-/
-end Classical.Base
-
--- A 'PrefModel' is a preferential possible-worlds model, i.e.
--- a usual possible worlds model with a preference ordering ≼ on worlds.
--- (Think of this as a graph)
--- TODO: How do I enforce 'rel' and 'pref' to be over 'worlds'?
--- TODO: Should I use 'Rel' or 'Relation'?
-structure PrefModel where
-  worlds : Set ℕ
-  edges : ℕ → ℕ → Prop
-  pref : ℕ → ℕ → Prop 
-  proposition_eval : String → Prop
-
-  -- Frame properties for preferential models
-  edges_refl : Reflexive edges
-  edges_trans : Transitive edges
-  -- ...
-
-  pref_refl : Reflexive pref
-  pref_trans : Transitive pref
-  -- ...
-
--- w ∈ best(A) iff w ∈ A and w is preferred over any other u ∈ A. 
-def PrefModel.best (M : PrefModel) (A : Set ℕ) : Set ℕ :=
-  fun w => w ∈ A ∧ (∀ u, u ∈ A → M.pref w u)  
-
---------------------------------------------------------------------
-theorem best_inclusion {M : PrefModel} {A : Set ℕ} :
-  M.best A ⊆ A := by
---------------------------------------------------------------------
-  intro w h₁
-  exact h₁.1
-
---------------------------------------------------------------------
-theorem best_idempotent {M : PrefModel} {A : Set ℕ} :
-  M.best (M.best A) = M.best A := by
---------------------------------------------------------------------
-  apply Set.ext
-  intro w
-  apply Iff.intro
-
-  case mp => exact fun h₁ => h₁.1
-  
-  case mpr => 
-    intro h₁
-    exact ⟨h₁, fun u h₂ => h₁.2 _ h₂.1⟩
-
-namespace Classical.Base
 
 -- Relation for "net satisfies ϕ at point w"
 -- This is the classical version that's mos
 def satisfies (M : PrefModel) (w : ℕ) : Formula → Prop := fun
-| pᵖ => M.proposition_eval p
+| pᵖ => M.proposition_eval p w
 | ⊤ => (⊤ : Prop)
 | not ϕ => ¬ (satisfies M w ϕ)
 | ϕ and ψ => (satisfies M w ϕ) ∧ (satisfies M w ψ)

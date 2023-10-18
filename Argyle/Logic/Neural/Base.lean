@@ -1,51 +1,17 @@
-import Argyle.InterpretedNet
+import Argyle.Logic.InterpretedNet
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 import Mathlib.Data.Finset.Basic
-
 import Mathlib.Tactic.LibrarySearch
 
-namespace NeuralBase
+import Argyle.Logic.Syntax
+open Syntax
+
+namespace Neural.Base
 
 /-══════════════════════════════════════════════════════════════════
   Syntax
 ══════════════════════════════════════════════════════════════════-/
-
-inductive Formula : Type where
--- Propositional logic
-| proposition : String → Formula
-| top : Formula
-| not : Formula → Formula
-| and : Formula → Formula → Formula
-
--- "Possibly knows" and "Possibly finds typical of" modalities
-| diaKnow : Formula → Formula
-| diaTyp : Formula → Formula
-
-postfix:max "ᵖ"     => Formula.proposition
-notation    "⊤"     => Formula.top
-prefix:85   "⟨K⟩ "  => Formula.diaKnow
-prefix:85   "⟨T⟩ "  => Formula.diaTyp
-prefix:75   "not "  => Formula.not
-infixl:65   " and " => Formula.and
-
--- Abbreviations
-def Formula.Know : Formula → Formula := fun ϕ => not ⟨K⟩ (not ϕ)
-def Formula.Typ : Formula → Formula := fun ϕ => not ⟨T⟩ (not ϕ)
-def Formula.or : Formula → Formula → Formula := fun ϕ ψ => (not ((not ϕ) and (not ψ)))
-def Formula.implies : Formula → Formula → Formula := fun ϕ ψ => or (not ϕ) ψ
-def Formula.iff : Formula → Formula → Formula := fun ϕ ψ => (implies ϕ ψ) and (implies ψ ϕ)
-def Formula.conditional : Formula → Formula → Formula := fun ϕ ψ => implies (Typ ϕ) ψ
-
-prefix:85   "[K] "  => Formula.Know
-prefix:85   "[T] "  => Formula.Typ
-infixl:60   " or " => Formula.or
-infixl:57   " ⟶ " => Formula.implies
-infixl:55   " ⟷ " => Formula.iff
-infixl:57   " ⟹ " => Formula.conditional
-
--- Some sanity checks
-#check [K] "a"ᵖ ⟹ "b"ᵖ and [T] "c"ᵖ
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
@@ -58,9 +24,30 @@ def interpret (Net : InterpretedNet) : Formula → Set ℕ := fun
 | ⊤ => Net.top
 | not ϕ => (interpret Net ϕ)ᶜ
 | ϕ and ψ => (interpret Net ϕ) ∩ (interpret Net ψ)
-| ⟨K⟩ ϕ => reachable Net.net (interpret Net ϕ)
-| ⟨T⟩ ϕ => propagate Net.net (interpret Net ϕ)
+| [K] ϕ => (reachable Net.net ((interpret Net ϕ)ᶜ))ᶜ 
+| [T] ϕ => (propagate Net.net ((interpret Net ϕ)ᶜ))ᶜ 
 notation:40 "⟦" ϕ "⟧_" Net => interpret Net ϕ
+
+-- I had to define [K] ϕ as the *dual* of Reachable
+-- and [T] ϕ as the *dual* of Propagate.  So here I
+-- will quickly check that 
+--    ⟨K⟩ ϕ is Reachable, and
+--    ⟨T⟩ ϕ is Propagate
+-- as intended.
+--------------------------------------------------------------------
+theorem interpret_diaKnow {Net : InterpretedNet} {ϕ : Formula} :
+  (⟦⟨K⟩ ϕ⟧_Net) = reachable Net.net (⟦ϕ⟧_Net) := by
+--------------------------------------------------------------------
+  unfold Formula.diaKnow
+  simp [interpret]
+
+--------------------------------------------------------------------
+theorem interpret_diaTyp {Net : InterpretedNet} {ϕ : Formula} :
+  (⟦⟨T⟩ ϕ⟧_Net) = propagate Net.net (⟦ϕ⟧_Net) := by
+--------------------------------------------------------------------
+  unfold Formula.diaTyp
+  simp [interpret]
+  
 
 -- Relation for "net satisfies ϕ at point n"
 def satisfies (Net : InterpretedNet) (n : ℕ) (ϕ : Formula) : Prop :=
@@ -406,4 +393,7 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
     have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
     exact models_modpon h₃ h₄
   
-end NeuralBase
+end Neural.Base
+
+
+

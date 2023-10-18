@@ -1,4 +1,4 @@
-import Argyle.InterpretedNet
+import Argyle.Logic.InterpretedNet
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 import Argyle.Operators.Hebb
@@ -7,9 +7,9 @@ import Mathlib.Data.Finset.Basic
 import Mathlib.Tactic.LibrarySearch
 
 -- TODO: How can I just refer to 'InterpretedNet'?
--- open NeuralBase.InterpretedNet
+-- open Neural.Base.InterpretedNet
 
-namespace NeuralHebb
+namespace Neural.Hebb
 
 /-══════════════════════════════════════════════════════════════════
   Syntax
@@ -17,7 +17,7 @@ namespace NeuralHebb
 
 -- The Logic of Hebbian Learning extends our base language
 -- with a dynamic formula ⟨ϕ⟩_Hebb ψ.  
--- NOTE: There's a lot of redundancy with Argyle.Logic.NeuralBase, 
+-- NOTE: There's a lot of redundancy with Argyle.Logic.Neural.Base, 
 --    but I believe that's unavoidable (we can't *just* inherit 
 --    the static formulas -- we need to be able to apply static 
 --    connectives to dynamic formulas!)
@@ -65,20 +65,20 @@ infixl:55   " ⟷ " => Formula.iff
 ══════════════════════════════════════════════════════════════════-/
 -- We provide the embedding from the base language to the dynamic one,
 -- which allows us to later inherit rules from the static logic.
-end NeuralHebb
+end Neural.Hebb
 
-def NeuralBase.Formula.lift : NeuralBase.Formula → NeuralHebb.Formula := fun
+def Neural.Base.Formula.lift : Neural.Base.Formula → Neural.Hebb.Formula := fun
 | pᵖ => pᵖ
 | ⊤ => ⊤
-| not ϕ => not (NeuralBase.Formula.lift ϕ)
-| ϕ and ψ => (NeuralBase.Formula.lift ϕ) and (NeuralBase.Formula.lift ψ)
-| ⟨K⟩ ϕ => ⟨K⟩ (NeuralBase.Formula.lift ϕ)
-| ⟨T⟩ ϕ => ⟨T⟩ (NeuralBase.Formula.lift ϕ)
+| not ϕ => not (Neural.Base.Formula.lift ϕ)
+| ϕ and ψ => (Neural.Base.Formula.lift ϕ) and (Neural.Base.Formula.lift ψ)
+| ⟨K⟩ ϕ => ⟨K⟩ (Neural.Base.Formula.lift ϕ)
+| ⟨T⟩ ϕ => ⟨T⟩ (Neural.Base.Formula.lift ϕ)
 
 -- An example of lifting a static formula to the dynamic language.
-#check ([K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ : NeuralBase.Formula).lift
+#check ([K] "a"ᵖ ⟶ "b"ᵖ and [T] "c"ᵖ : Neural.Base.Formula).lift
 
-namespace NeuralHebb
+namespace Neural.Hebb
 
 /-══════════════════════════════════════════════════════════════════
   Semantics
@@ -202,38 +202,38 @@ lemma interpret_iff {Net : InterpretedNet} {ϕ ψ : Formula} :
 -- This lemma bridges our base logic semantics with our dynamic
 -- logic semantics.
 --------------------------------------------------------------------
-lemma models_lift (Net : InterpretedNet) (ϕ : NeuralBase.Formula) :
-  NeuralBase.models Net ϕ ↔ models Net ϕ.lift := by
+lemma models_lift (Net : InterpretedNet) (ϕ : Neural.Base.Formula) :
+  Neural.Base.models Net ϕ ↔ models Net ϕ.lift := by
 --------------------------------------------------------------------
   -- By induction on ϕ
   induction ϕ
   case proposition p =>
-    simp only [NeuralBase.Formula.lift]
+    simp only [Neural.Base.Formula.lift]
     simp only [models, satisfies, interpret]
-    simp only [NeuralBase.models, NeuralBase.satisfies, NeuralBase.interpret]
+    simp only [Neural.Base.models, Neural.Base.satisfies, Neural.Base.interpret]
   case top => 
-    simp only [NeuralBase.Formula.lift]
+    simp only [Neural.Base.Formula.lift]
     simp only [models, satisfies]
-    simp only [NeuralBase.models, NeuralBase.satisfies]
+    simp only [Neural.Base.models, Neural.Base.satisfies]
     exact ⟨fun h x => h x, fun h x => h x⟩  
   case _ ϕ IH => 
-    simp only [NeuralBase.Formula.lift]
+    simp only [Neural.Base.Formula.lift]
     simp only [models, satisfies, interpret]
-    simp only [NeuralBase.models, NeuralBase.satisfies, NeuralBase.interpret]
+    simp only [Neural.Base.models, Neural.Base.satisfies, Neural.Base.interpret]
     simp only [models, satisfies, interpret] at IH
-    simp only [NeuralBase.models, NeuralBase.satisfies, NeuralBase.interpret] at IH
+    simp only [Neural.Base.models, Neural.Base.satisfies, Neural.Base.interpret] at IH
     sorry
     -- This is getting away from me a bit...
   case _ ϕ ψ IH₁ IH₂ => 
-    simp only [NeuralBase.Formula.lift]
+    simp only [Neural.Base.Formula.lift]
     sorry
   case diaKnow ϕ IH => 
-    simp only [NeuralBase.Formula.lift]
+    simp only [Neural.Base.Formula.lift]
     simp [models, satisfies, interpret]
     simp [models, satisfies, interpret] at IH
     sorry
   case diaTyp ϕ IH => 
-    simp only [NeuralBase.Formula.lift]
+    simp only [Neural.Base.Formula.lift]
     sorry
 
 /-══════════════════════════════════════════════════════════════════
@@ -244,8 +244,8 @@ lemma models_lift (Net : InterpretedNet) (ϕ : NeuralBase.Formula) :
 -- or follows from other tautologies by our proof rules.
 inductive prove : Formula → Prop where
 -- We lift all base logic tautologies
-| hebb_lift {ϕ : NeuralBase.Formula} :
-    NeuralBase.prove ϕ
+| hebb_lift {ϕ : Neural.Base.Formula} :
+    Neural.Base.prove ϕ
     ----------------
   → prove ϕ.lift
 
@@ -348,7 +348,7 @@ theorem soundness : ∀ (ϕ : Formula),
   -- We case on each of our proof rules and axioms
   case hebb_lift ϕ h => 
     rw [← models_lift _ _]
-    exact NeuralBase.soundness _ h _
+    exact Neural.Base.soundness _ h _
 
   -- Reduction Axioms
   case hebb_prop P p => 
@@ -401,5 +401,5 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
     have h₄ : models Net ((⋀ Δ) ⟶ ϕ) := soundness _ hΔ.2 _
     exact models_modpon h₃ h₄
 
-end NeuralHebb
+end Neural.Hebb
 
