@@ -73,7 +73,7 @@ theorem edge_iff_preds (net : Net) (m n : ℕ) :
   case mpr => 
     intro h₁
     have h₂ : ⟨m, n⟩ ∈ net.graph.edges := Graph.edge_of_hasEdge _ _ _ h₁
-    have h₃ : m ∈ net.graph.get_vertices := by
+    have h₃ : m ∈ net.graph.vertices := by
       exact net.graph.edges_from_vertices_left h₂
 
     apply List.mem_filter_of_mem h₃

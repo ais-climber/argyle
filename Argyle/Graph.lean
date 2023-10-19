@@ -1,4 +1,5 @@
 import Argyle.Helpers
+import Mathlib.Data.Finset.Basic
 open Classical
 
 -------------------------------------------------
@@ -58,18 +59,24 @@ h₇: ∀ (b : ℚ), ¬((m, n), b) ∈ net.graph.weights
 -- hard -- right now it just depends on 'Prop')
 namespace Graph
 
-def get_vertices (g : Graph ℕ ℚ) : List ℕ := g.vertices
+-- Function that gets the vertices as a *finite set*
+def get_vertices (g : Graph ℕ ℚ) : Finset ℕ := g.vertices.toFinset
+
 
 def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
   match List.lookup m g.edges with
   | some v => if v = n then true else false
   | none => false
 
+-- Function that gets the edges as a *relation*
+def hasEdge_Rel (g : Graph ℕ ℚ) : ℕ → ℕ → Prop :=
+  fun m n => ⟨m, n⟩ ∈ g.edges
+
 def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter (fun m => g.hasEdge m n) g.get_vertices
+  List.filter (fun m => g.hasEdge m n) g.vertices
 
 def successors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter (fun m => g.hasEdge n m) g.get_vertices
+  List.filter (fun m => g.hasEdge n m) g.vertices
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
 -- Otherwise we return None.
@@ -77,7 +84,7 @@ def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
   match List.lookup ⟨m, n⟩ g.weights with
   | some weight => weight
   | none => 0
-  
+
 --------------------------------------------------------------------
 theorem edge_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
   g.hasEdge m n → ⟨m, n⟩ ∈ g.edges := by
@@ -100,6 +107,13 @@ theorem edge_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
   case _ _ => 
     intro h₂
     simp at h₂
+
+--------------------------------------------------------------------
+theorem hasEdgeRel_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
+  g.hasEdge m n → g.hasEdge_Rel m n := by
+--------------------------------------------------------------------
+  simp only [hasEdge_Rel]
+  exact edge_of_hasEdge g m n
 
 inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
   | trivial {u : ℕ} :

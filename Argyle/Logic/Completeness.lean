@@ -6,6 +6,7 @@ import Argyle.Logic.Neural.Base
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
 import Mathlib.Data.Finset.Basic
+import Mathlib.Logic.Relation
 import Mathlib.Tactic.LibrarySearch
 
 import Argyle.Logic.Syntax
@@ -15,23 +16,55 @@ open Syntax
   Translating between InterpretedNets and PrefModels
 ══════════════════════════════════════════════════════════════════-/
 
+-- First, a couple of lemmas which establish soundness
+-- for each of our frame properties (it's cleaner to separate
+-- them from the main definition)
+--------------------------------------------------------------------
+lemma connected_toPrefModel {Net : InterpretedNet} :
+  Connected (Relation.ReflTransGen (Graph.hasEdge_Rel Net.net.graph)) := by
+--------------------------------------------------------------------
+  intro x y
+  -- The model is connected because *Net* is connected!
+  cases (Net.net.connected x y)
+  case inl h₁ => 
+    apply Or.inl
+    apply Relation.ReflTransGen.single
+    exact Net.net.graph.hasEdgeRel_of_hasEdge x y h₁
+  case inr h₂ => 
+    cases h₂
+    case inl h₂₁ => 
+      apply Or.inr
+      apply Or.inl
+      apply Relation.ReflTransGen.single
+      exact Net.net.graph.hasEdgeRel_of_hasEdge y x h₂₁
+    case inr h₂₂ =>
+      apply Or.inr
+      apply Or.inr
+      sorry
+
+
 def InterpretedNet.toPrefModel (Net : InterpretedNet) : PrefModel := {
-  worlds := sorry -- Net.net.graph.vertices  (make it a Set!)
-  edges := sorry
+  -- worlds - just neurons in the neural net
+  -- edges  - the reflexive-transitive closure of edges in the neural net
+  worlds := Net.net.graph.get_vertices -- Net.net.graph.vertices  (make it a Set!)
+  edges := Relation.ReflTransGen Net.net.graph.hasEdge_Rel
   pref := sorry
   proposition_eval := fun p w => w ∈ Net.proposition_map p
 
   -- "Soundness" direction for each of the frame properties
-  edges_refl := sorry
-  edges_trans := sorry
+  edges_refl := IsRefl.reflexive
+  edges_trans := Relation.transitive_reflTransGen
+  edges_connected := connected_toPrefModel
+
   pref_refl := sorry
   pref_trans := sorry
 }
 
+noncomputable
 def PrefModel.toNet (M : PrefModel) : InterpretedNet := { 
   net := {
     graph := {
-      vertices := sorry
+      vertices := M.worlds.toList
       edges := sorry
       weights := sorry
 
@@ -79,8 +112,7 @@ lemma propagate_eq_best {M : PrefModel} {A : Set ℕ} :
 -- This corresponds to the *SOUNDNESS* of the neural semantics.
 --------------------------------------------------------------------
 lemma toPrefModel_homomorphism {Net : InterpretedNet} {ϕ : Formula} {n : ℕ} : 
-  Classical.Base.satisfies (Net.toPrefModel) n ϕ ↔ 
-    Neural.Base.satisfies Net n ϕ := by
+  (Net.toPrefModel; n ⊩ ϕ) ↔ (Net; n ⊩ ϕ) := by
 --------------------------------------------------------------------
   induction ϕ
   case proposition p => 
@@ -131,8 +163,7 @@ theorem toPrefModel_models {Net : InterpretedNet} {ϕ : Formula} :
 -- (in other words, this is the hard part!)
 --------------------------------------------------------------------
 lemma toNet_homomorphism {M : PrefModel} {ϕ : Formula} {w : ℕ} : 
-  Neural.Base.satisfies (M.toNet) w ϕ ↔ 
-    Classical.Base.satisfies M w ϕ := by
+  (M.toNet; w ⊩ ϕ) ↔ (M; w ⊩ ϕ) := by
 --------------------------------------------------------------------
   induction ϕ
   
