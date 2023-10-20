@@ -6,7 +6,7 @@ import Mathlib.Tactic.LibrarySearch
 -- are either related, or have exactly the same image
 -- and preimage over R.
 -- TODO: Synthesize the relations pov and the graph implementation!
-def Connected {α : Type} (R : Rel α α) : Prop := 
+def Rel.Connected {α : Type} (R : Rel α α) : Prop := 
   ∀ (x y), (R x y) ∨ (R y x) 
     ∨ (R.image {x} = R.image {y}
         ∧ R.preimage {x} = R.preimage {y})
@@ -25,7 +25,7 @@ structure PrefModel where
   -- Frame properties for preferential models
   edges_refl : Reflexive edges
   edges_trans : Transitive edges
-  edges_connected : Connected edges
+  edges_connected : Rel.Connected edges
   -- ...
 
   pref_refl : Reflexive pref

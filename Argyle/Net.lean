@@ -28,7 +28,7 @@ structure Net where
   
   -- The activation function has a threshold
   threshold : ℚ
-  activ_thres : activation (is_active) = 1
+  activ_thres : activation (threshold) = 1
 
   -- The graph is nonempty, acyclic and fully connected
   nonempty : graph.vertices ≠ []
