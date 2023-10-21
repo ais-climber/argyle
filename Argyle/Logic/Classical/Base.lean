@@ -19,7 +19,7 @@ def satisfies (M : PrefModel) (w : ℕ) : Formula → Prop := fun
 | ⊤ => (⊤ : Prop)
 | not ϕ => ¬ (satisfies M w ϕ)
 | ϕ and ψ => (satisfies M w ϕ) ∧ (satisfies M w ψ)
-| [K] ϕ => ∀ u, M.edges w u → satisfies M u ϕ
+| [K] ϕ => ∀ u, M.Edge w u → satisfies M u ϕ
 | [T] ϕ => w ∈ M.best {u | satisfies M u ϕ}
 notation:35 model "; " w " ⊩ " ϕ => satisfies model w ϕ
 

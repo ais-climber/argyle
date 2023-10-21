@@ -18,23 +18,25 @@ def Rel.Connected {α : Type} (R : Rel α α) : Prop :=
 -- TODO: Should I use 'Rel' or 'Relation'?
 structure PrefModel where
   worlds : Finset ℕ
-  edges : Rel ℕ ℕ 
-  pref : Rel ℕ ℕ
+  Edge : Rel ℕ ℕ 
+  Pref : Rel ℕ ℕ
   proposition_eval : String → ℕ → Prop
 
   -- Frame properties for preferential models
-  edges_refl : Reflexive edges
-  edges_trans : Transitive edges
-  edges_connected : Rel.Connected edges
+  nonempty : worlds.Nonempty
+  edges_refl : Reflexive Edge
+  edges_trans : Transitive Edge
+  edges_connected : Rel.Connected Edge
   -- ...
 
-  pref_refl : Reflexive pref
-  pref_trans : Transitive pref
+  pref_refl : Reflexive Pref
+  pref_trans : Transitive Pref
   -- ...
 
--- w ∈ best(A) iff w ∈ A and w is preferred over any other u ∈ A. 
+-- w ∈ best(A) iff w ∈ A and w is ≼-minimal 
+-- (preferred over any other u ∈ A) 
 def PrefModel.best (M : PrefModel) (A : Set ℕ) : Set ℕ :=
-  fun w => w ∈ A ∧ (∀ u, u ∈ A → M.pref w u)  
+  fun w => w ∈ A ∧ (∀ u, u ∈ A → M.Pref w u)  
 
 --------------------------------------------------------------------
 theorem best_inclusion {M : PrefModel} {A : Set ℕ} :

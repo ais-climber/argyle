@@ -1,5 +1,6 @@
 import Argyle.Helpers
 import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Rel
 open Classical
 
 -------------------------------------------------
@@ -28,9 +29,13 @@ open Classical
 -- from scratch, kindly refrain from creating cycles.
 -------------------------------------------------
 
--- α is the type of the nodes
--- β is the type of the weights
--- We assume that the data is hygenic
+structure testGraph (α : Type) (β : Type) where
+  vertices : Finset α
+  edges : Rel α α
+  weights : Rel (α × α) β
+
+/-
+-- OLD; refactoring now!
 structure Graph (α : Type) (β : Type) where
   vertices : List α
   edges : List (α × α)
@@ -42,6 +47,21 @@ structure Graph (α : Type) (β : Type) where
   -- weights_from_edges : ∀ {x y : α} {w : β}, 
   --   ⟨⟨x, y⟩, w⟩ ∈ weights → ⟨x, y⟩ ∈ edges
 deriving Repr
+-/
+
+-- Finite graphs
+-- k is the size of the graph;
+-- nodes are Fin n, weights are rationals ℚ
+-- We assume that the data is hygenic
+structure Graph (k : ℕ) where
+  vertices : Finset (Fin k)
+  Edge : Rel (Fin k) (Fin k)
+  Weight : Rel ((Fin k) × (Fin k)) ℚ
+
+  -- Constraints to make sure everything is hygenic.
+  edges_from_vertices_left : ∀ {x y}, Edge x y → x ∈ vertices
+  edges_from_vertices_right : ∀ {x y}, Edge x y → y ∈ vertices
+-- deriving Repr
 
 /-
 h₇: ∀ (b : ℚ), ¬((m, n), b) ∈ net.graph.weights
@@ -60,10 +80,10 @@ h₇: ∀ (b : ℚ), ¬((m, n), b) ∈ net.graph.weights
 namespace Graph
 
 -- Function that gets the vertices as a *finite set*
-def get_vertices (g : Graph ℕ ℚ) : Finset ℕ := g.vertices.toFinset
+def get_vertices (g : Graph k) : Finset ℕ := g.vertices.toFinset
 
 
-def hasEdge (g : Graph ℕ ℚ) (m n : ℕ) : Bool :=
+def hasEdge (g : Graph k) (m n : ℕ) : Bool :=
   match List.lookup m g.edges with
   | some v => if v = n then true else false
   | none => false
@@ -107,6 +127,14 @@ theorem edge_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
   case _ _ => 
     intro h₂
     simp at h₂
+
+--------------------------------------------------------------------
+theorem hasEdge_iff_edge (g : Graph ℕ ℚ) (m n : ℕ) :
+  g.hasEdge m n ↔ ⟨m, n⟩ ∈ g.edges  := by
+--------------------------------------------------------------------
+  sorry
+
+
 
 --------------------------------------------------------------------
 theorem hasEdgeRel_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
