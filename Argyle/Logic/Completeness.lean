@@ -18,57 +18,58 @@ open Syntax
   Building InterpretedNets from PrefModels
 ══════════════════════════════════════════════════════════════════-/
 -- In this section, I'm implementing Hannes Leitgeb's construction
--- following his paper 
+-- following his paper
 --     "Nonmonotonic reasoning by inhibition nets" (2001)
--- 
+--
 -- We first construct a special type of net called an
 -- "inhibition net" (has no weights, but inhibitory synapses
 -- control the flow of activation), and then we construct
 -- a traditional ANN from the inhibition net.
--- 
+--
 -- An inhibitory edge connects a node to an excitatory edge, e.g.:
--- 
+--
 --         a --------> b
 --               |
 --               |
 --         c ----⧸
--- 
+--
 -- Additionally, there are no weights or activation functions.
 -- Excitatory edges always go through, unless some inhibitory
 -- edge is currently preventing it from going through.
 
-inductive Rel.Path (R : Rel ℕ ℕ) : ℕ → ℕ → Prop where
-  | trivial {u : ℕ} :
+inductive Rel.Path (R : Rel World World) : World → World → Prop where
+  | trivial {u : World} :
       Path R u u
-  | from_path {u v w : ℕ} : 
+  | from_path {u v w : World} :
       Path R u v → R v w → Path R u w
 
 -- Note that we don't allow reflexive edges at all.
-def Rel.Acyclic (R : Rel ℕ ℕ) : Prop := ∀ (u v : ℕ),
+def Rel.Acyclic (R : Rel World World) : Prop := ∀ (u v : World),
   R.Path u v → ¬ R.Path v u
 
 -- Suprisingly, not included in the standard library!
 -- We simply 'insert' a new element x into a relation R,
 -- along with 'Extens' which specifies how to extend R.
-def Rel.insert (R : Rel ℕ ℕ) (x : ℕ) (Extens : ℕ → Prop) : Rel ℕ ℕ :=
-  fun m n =>
-    if m = x then
-      Extens n
-    else
-      R m n
+def Rel.insert (R : Rel World World) (x : World) (Extens : World → Prop) : Rel World World :=
+  sorry
+  -- fun m n =>
+  --   if m = x then
+  --     Extens n
+  --   else
+  --     R m n
 
-def Rel.toList (R : Rel ℕ ℕ) : List (ℕ × ℕ) :=
+def Rel.toList (R : Rel World World) : List (World × World) :=
   sorry
 
 -- For any w ∈ M.worlds, we index its predecessors u ≼ w as a list
 --     [u₁, u₂, ..., uₖ]
 -- This ordering is arbitrary, but the important thing is that it
 -- is *fixed* once and for all (so that we can reason about the indices).
-def PrefModel.preds (M : PrefModel) (w : ℕ) : List ℕ :=
+def PrefModel.preds (M : PrefModel World) (w : World) : List World :=
   sorry
 
 --------------------------------------------------------------------
-theorem preds_index {M : PrefModel} {u v : ℕ} :
+theorem preds_index {M : PrefModel World} {u v : World} :
   M.Pref u v → ∃ i, u = ((M.preds v).get i) :=
 --------------------------------------------------------------------
   sorry
@@ -80,14 +81,14 @@ theorem preds_index {M : PrefModel} {u v : ℕ} :
 --   - Edge: Do nothing, act as a "skeleton" for excitatory edges.
 --   - Excit: Excitatory edges that always go through, unless inhibited
 --   - Inhib: Inhibitory edges that prevent excitatory edges from going through
-structure InhibitionNet where
-  nodes : Finset ℕ
-  bias : ℕ
-  Edge : Rel ℕ ℕ -- NOTE: Skeleton edges do nothing; they just specify
+structure InhibitionNet (Node : Type) where
+  nodes : Finset Node
+  bias : Node
+  Edge : Rel Node Node -- NOTE: Skeleton edges do nothing; they just specify
                            -- where the excitatory edges can be
-  Excit : Rel ℕ ℕ
-  Inhib : Rel ℕ (ℕ × ℕ) -- need to be connected to excitatory_edges!!!
-  proposition_map : String → Set ℕ
+  Excit : Rel Node Node
+  Inhib : Rel Node (Node × Node) -- need to be connected to excitatory_edges!!!
+  proposition_map : String → Set Node
 
   -- The graph is nonempty, acyclic and fully connected.
   nonempty : nodes.Nonempty
@@ -95,16 +96,17 @@ structure InhibitionNet where
   connected : Rel.Connected Edge
 
   -- The relationships between each of the edge types
-  excit_edge : ∀ (m n), m ∈ nodes → 
+  excit_edge : ∀ (m n), m ∈ nodes →
     Excit m n → Edge m n
-  inhib_excit : ∀ (b m n), 
+  inhib_excit : ∀ (b m n),
     Inhib b ⟨m, n⟩ → Excit m n
 
 -- This is the first part of the construction,
 --    PrefModel --> Inhibition Net
 -- See pages 186, 187 of the (2001) paper.
-def PrefModel.toInhibitionNet (M : PrefModel) : InhibitionNet := 
-  let bias := (M.worlds.max' M.nonempty) + 1 
+def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
+  let bias := sorry
+  -- let bias := (M.worlds.max' M.nonempty) + 1
 { nodes := M.worlds
   bias := bias
 
@@ -134,15 +136,12 @@ def PrefModel.toInhibitionNet (M : PrefModel) : InhibitionNet :=
 --    Inhibition Net --> Interpreted ANN
 -- See page 193 of the (2001) paper.
 noncomputable
-def InhibitionNet.toNet (N : InhibitionNet) : InterpretedNet := { 
+def InhibitionNet.toNet (N : InhibitionNet Node) : InterpretedNet Node := {
   net := {
     graph := {
-      vertices := N.nodes.toList
-      edges := N.Edge.toList
-      weights := sorry
-
-      edges_from_vertices_left := sorry
-      edges_from_vertices_right := sorry
+      Edge := N.Edge
+      Weight := sorry
+      nodes := ⟨sorry, sorry⟩
     }
 
     -- We just use a binary step activation function.
@@ -170,59 +169,63 @@ def InhibitionNet.toNet (N : InhibitionNet) : InterpretedNet := {
 
 -- We put the two parts of the construction together to get our Net!
 noncomputable
-def PrefModel.toNet (M : PrefModel) : InterpretedNet :=
+def PrefModel.toNet (M : PrefModel World) : InterpretedNet World :=
   (M.toInhibitionNet).toNet
 
 
 --------------------------------------------------------------------
-lemma reachable_toNet {M : PrefModel} {S : Set ℕ} {w : ℕ} : 
+lemma reachable_toNet {M : PrefModel World} {S : Set World} {w : World} :
   w ∈ reachable (M.toNet.net) S ↔ ∃ u, u ∈ S ∧ M.Edge w u  := by
 --------------------------------------------------------------------
   apply Iff.intro
-  case mp => 
+  case mp =>
     intro h₁
     match h₁ with
-    | ⟨u, hu⟩ => 
+    | ⟨u, path, hu⟩ =>
       -- There's a path from u to w; so by induction on that path
-      induction hu.2
-      case trivial => 
-        exact ⟨u, ⟨hu.1, M.edges_refl u⟩⟩
-      case from_path x y path_ux edge_xy IH => 
+      induction path
+      case trivial =>
+        sorry
+        -- exact ⟨u, ⟨M.edges_refl u, hu⟩⟩
+      case from_path x y path_ux edge_xy IH =>
         have h₂ : x ∈ reachable (PrefModel.toNet M).net S := by
-          exact ⟨u, ⟨hu.1, path_ux⟩⟩
-        have h₃ : M.Edge y x := by
-          rw [(PrefModel.toNet M).net.graph.hasEdge_iff_edge] at edge_xy
-          simp only [PrefModel.toNet, InhibitionNet.toNet] at edge_xy
-          simp only [Rel.toList] at edge_xy
           sorry
+          -- exact ⟨u, ⟨hu.1, path_ux⟩⟩
+        have h₃ : M.Edge y x := by
+          sorry
+          -- rw [(PrefModel.toNet M).net.graph.hasEdge_iff_edge] at edge_xy
+          -- simp only [PrefModel.toNet, InhibitionNet.toNet] at edge_xy
+          -- simp only [Rel.toList] at edge_xy
+          -- sorry
 
-        -- By IH there exists a v ∈ S with M.Edge 
-        match IH h₂ ⟨hu.1, path_ux⟩ with
-        | ⟨v, hv⟩ => 
-          exact ⟨v, ⟨hv.1, M.edges_trans h₃ hv.2⟩⟩ 
+        -- By IH there exists a v ∈ S with M.Edge
+        match IH h₂ with
+        | ⟨v, hv⟩ =>
+          exact ⟨v, ⟨hv.1, M.edges_trans h₃ hv.2⟩⟩
 
-  case mpr => 
+  case mpr =>
     intro h₁
     match h₁ with
-    | ⟨u, hu⟩ =>
-      have h₂ : Graph.hasEdge (PrefModel.toNet M).net.graph u w := by
-        rw [(PrefModel.toNet M).net.graph.hasEdge_iff_edge]
-        simp only [PrefModel.toNet, InhibitionNet.toNet, Rel.toList]
-        sorry
-      exact ⟨u, ⟨hu.1, Graph.Path.from_path Graph.Path.trivial h₂⟩⟩
+    | ⟨u, path, hu⟩ =>
+      sorry
+      -- have h₂ : Graph.hasEdge (PrefModel.toNet M).net.graph u w := by
+      --   rw [(PrefModel.toNet M).net.graph.hasEdge_iff_edge]
+      --   simp only [PrefModel.toNet, InhibitionNet.toNet, Rel.toList]
+      --   sorry
+      -- exact ⟨u, ⟨hu.1, Graph.Path.from_path Graph.Path.trivial h₂⟩⟩
 
 
 
 
 -- TODO: I need to define the propagation of an Inhibition net first!
 -- --------------------------------------------------------------------
--- lemma propagate_toInhibitionNet {M : PrefModel} {A : Set ℕ} : 
+-- lemma propagate_toInhibitionNet {M : PrefModel} {A : Set ℕ} :
 --   propagate (M.toNet.net) A = (M.best (Aᶜ))ᶜ :=
 -- --------------------------------------------------------------------
 --   sorry
 
 -- --------------------------------------------------------------------
--- lemma propagate_toNet {M : PrefModel} {A : Set ℕ} : 
+-- lemma propagate_toNet {M : PrefModel} {A : Set ℕ} :
 --   propagate (M.toNet.net) A = (M.best (Aᶜ))ᶜ :=
 -- --------------------------------------------------------------------
 --   sorry
@@ -235,53 +238,53 @@ lemma reachable_toNet {M : PrefModel} {S : Set ℕ} {w : ℕ} :
 -- This corresponds to the *COMPLETENESS* of the neural semantics
 -- (in other words, this is the hard part!)
 --------------------------------------------------------------------
-lemma toNet_homomorphism {M : PrefModel} {ϕ : Formula} {w : ℕ} : 
+lemma toNet_homomorphism {M : PrefModel World} {ϕ : Formula} {w : World} :
   (M.toNet; w ⊩ ϕ) ↔ (M; w ⊩ ϕ) := by
 --------------------------------------------------------------------
   induction ϕ generalizing w
-  
-  case proposition p => 
+
+  case proposition p =>
     simp only [Classical.Base.satisfies]
     simp only [Neural.Base.satisfies, Neural.Base.interpret]
     simp [PrefModel.toNet, PrefModel.toInhibitionNet, InhibitionNet.toNet]
-  
-  case top => 
+
+  case top =>
     simp only [Classical.Base.satisfies]
     simp only [Neural.Base.satisfies, Neural.Base.interpret]
     simp [InterpretedNet.top]
     exact trivial
-  
+
   case _ ϕ IH =>
     simp only [Classical.Base.satisfies]
     simp only [Neural.Base.satisfies, Neural.Base.interpret]
     rw [Set.mem_compl_iff]
     rw [not_iff_not]
     exact IH
-  
+
   case _ ϕ ψ IH₁ IH₂ => exact and_congr IH₁ IH₂
-  
-  case Know ϕ IH => 
+
+  case Know ϕ IH =>
     simp only [Classical.Base.satisfies]
     simp [Neural.Base.satisfies, Neural.Base.interpret]
     rw [not_iff_comm]
     simp
-    
+
     apply Iff.intro
-    case mp => 
+    case mp =>
       intro h₁
       match h₁ with
       | ⟨u, hu⟩ => exact ⟨u, ⟨sorry, sorry⟩⟩
 
-    case mpr => 
+    case mpr =>
       sorry
-  
-  case Typ ϕ IH => 
+
+  case Typ ϕ IH =>
     simp only [Classical.Base.satisfies]
     simp only [Neural.Base.satisfies, Neural.Base.interpret]
     sorry
 
 --------------------------------------------------------------------
-theorem toNet_models {M : PrefModel} {ϕ : Formula} : 
+theorem toNet_models {M : PrefModel World} {ϕ : Formula} :
   Neural.Base.models (M.toNet) ϕ ↔ Classical.Base.models M ϕ := by
 --------------------------------------------------------------------
   simp only [Classical.Base.models, Neural.Base.models]
@@ -298,7 +301,7 @@ theorem toNet_models {M : PrefModel} {ϕ : Formula} :
 /-══════════════════════════════════════════════════════════════════
   Completeness for Neural Base Logic
 ══════════════════════════════════════════════════════════════════-/
--- Since we already have model building & completeness for the 
+-- Since we already have model building & completeness for the
 -- base logic, and we can build an InterpretedNet from a PrefModel,
 -- we get model building & completeness for free!
 
@@ -327,13 +330,13 @@ theorem toNet_models {M : PrefModel} {ϕ : Formula} :
 --   intro x y
 --   -- The model is connected because *Net* is connected!
 --   cases (Net.net.connected x y)
---   case inl h₁ => 
+--   case inl h₁ =>
 --     apply Or.inl
 --     apply Relation.ReflTransGen.single
 --     exact Net.net.graph.hasEdgeRel_of_hasEdge x y h₁
---   case inr h₂ => 
+--   case inr h₂ =>
 --     cases h₂
---     case inl h₂₁ => 
+--     case inl h₂₁ =>
 --       apply Or.inr
 --       apply Or.inl
 --       apply Relation.ReflTransGen.single
@@ -361,7 +364,7 @@ theorem toNet_models {M : PrefModel} {ϕ : Formula} :
 --   pref_trans := sorry
 -- }
 
--- -- The following lemmas relate the Propagation in the 
+-- -- The following lemmas relate the Propagation in the
 -- -- InterpretedNet to the 'Best' function in the PrefModel.
 -- -- These were first shown by Hannes Leitgeb (2001).
 -- --------------------------------------------------------------------
@@ -375,44 +378,44 @@ theorem toNet_models {M : PrefModel} {ϕ : Formula} :
 -- -- i.e. preserves the satisfaction relation (and truth as well).
 -- -- This corresponds to the *SOUNDNESS* of the neural semantics.
 -- --------------------------------------------------------------------
--- lemma toPrefModel_homomorphism {Net : InterpretedNet} {ϕ : Formula} {n : ℕ} : 
+-- lemma toPrefModel_homomorphism {Net : InterpretedNet} {ϕ : Formula} {n : ℕ} :
 --   (Net.toPrefModel; n ⊩ ϕ) ↔ (Net; n ⊩ ϕ) := by
 -- --------------------------------------------------------------------
 --   induction ϕ
---   case proposition p => 
+--   case proposition p =>
 --     simp only [Neural.Base.satisfies, Neural.Base.interpret]
 --     simp only [Classical.Base.satisfies]
 --     simp only [InterpretedNet.toPrefModel]
-  
---   case top => 
+
+--   case top =>
 --     simp only [Neural.Base.satisfies, Neural.Base.interpret]
 --     simp only [InterpretedNet.top]
 --     simp [Classical.Base.satisfies]
 --     exact trivial
-  
---   case _ ϕ IH => 
+
+--   case _ ϕ IH =>
 --     simp only [Neural.Base.satisfies, Neural.Base.interpret]
 --     simp only [Classical.Base.satisfies]
 --     rw [Set.mem_compl_iff]
 --     rw [not_iff_not]
 --     exact IH
-  
+
 --   case _ ϕ ψ IH₁ IH₂ => exact and_congr IH₁ IH₂
-  
---   case Know ϕ IH => 
+
+--   case Know ϕ IH =>
 --     simp only [Neural.Base.satisfies, Neural.Base.interpret]
 --     simp only [Classical.Base.satisfies]
 --     sorry
 
-  
---   case Typ ϕ IH => 
+
+--   case Typ ϕ IH =>
 --     simp only [Neural.Base.satisfies, Neural.Base.interpret]
 --     simp only [Classical.Base.satisfies]
 --     rw [best_eq_propagate]
 --     sorry
 
 -- --------------------------------------------------------------------
--- theorem toPrefModel_models {Net : InterpretedNet} {ϕ : Formula} : 
+-- theorem toPrefModel_models {Net : InterpretedNet} {ϕ : Formula} :
 --   Classical.Base.models (Net.toPrefModel) ϕ ↔ Neural.Base.models Net ϕ := by
 -- --------------------------------------------------------------------
 --   simp only [Classical.Base.models, Neural.Base.models]

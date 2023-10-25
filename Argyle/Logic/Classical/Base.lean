@@ -14,7 +14,7 @@ namespace Classical.Base
 
 -- Relation for "net satisfies ϕ at point w"
 -- This is the classical version that's mos
-def satisfies (M : PrefModel) (w : ℕ) : Formula → Prop := fun
+def satisfies (M : PrefModel World) (w : World) : Formula → Prop := fun
 | pᵖ => M.proposition_eval p w
 | ⊤ => (⊤ : Prop)
 | not ϕ => ¬ (satisfies M w ϕ)
@@ -24,16 +24,16 @@ def satisfies (M : PrefModel) (w : ℕ) : Formula → Prop := fun
 notation:35 model "; " w " ⊩ " ϕ => satisfies model w ϕ
 
 -- M models a *formula* ϕ iff w ⊩ ϕ for *all* points w ∈ M.worlds
-def models (M : PrefModel) (ϕ : Formula) : Prop :=
+def models (M : PrefModel World) (ϕ : Formula) : Prop :=
   ∀ w, (M; w ⊩ ϕ)
 
--- M models a *list* Γ iff M ⊨ ϕ for all ϕ ∈ Γ 
-def models_list (M : PrefModel) (Γ : List Formula) : Prop :=
+-- M models a *list* Γ iff M ⊨ ϕ for all ϕ ∈ Γ
+def models_list (M : PrefModel World) (Γ : List Formula) : Prop :=
   ∀ ϕ ∈ Γ, models M ϕ
 
--- Γ ⊨ ϕ holds if *for all* models M, if M ⊨ Γ then M ⊨ ϕ.  
+-- Γ ⊨ ϕ holds if *for all* models M, if M ⊨ Γ then M ⊨ ϕ.
 def entails (Γ : List Formula) (ϕ : Formula) : Prop :=
-  ∀ (M : PrefModel), models_list M Γ → models M ϕ 
+  ∀ {World : Type} (M : PrefModel World), models_list M Γ → models M ϕ
 notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 
 -- This theorem says that the translation of conditionals ϕ ⟹ ψ
@@ -41,8 +41,8 @@ notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 -- of conditionals:
 --    ϕ ⟹ ψ   iff   every best ϕ-world is a ψ-world
 --------------------------------------------------------------------
-theorem conditional_def {M : PrefModel} {ϕ ψ : Formula} :
-  models M (ϕ ⟹ ψ) ↔ 
+theorem conditional_def {M : PrefModel World} {ϕ ψ : Formula} :
+  models M (ϕ ⟹ ψ) ↔
     ∀ w, w ∈ M.best {u | satisfies M u ϕ} → satisfies M w ψ := by
 --------------------------------------------------------------------
   unfold Formula.conditional
@@ -59,7 +59,7 @@ theorem conditional_def {M : PrefModel} {ϕ ψ : Formula} :
 inductive prove : Formula → Prop where
 -- Proof rules
 | modpon {ϕ ψ} :
-    prove ϕ 
+    prove ϕ
   → prove (ϕ ⟶ ψ)
     ----------------
   → prove ψ
@@ -111,7 +111,7 @@ notation:30 Γ:40 " ⊢ " ϕ:40 => follows Γ ϕ
 -- Semantic statement of modus ponens.
 -- (It's convenient to have it as a seperate lemma.)
 --------------------------------------------------------------------
-lemma models_modpon {M : PrefModel} {ϕ ψ : Formula} :
+lemma models_modpon {M : PrefModel World} {ϕ ψ : Formula} :
     models M ϕ
   → models M (ϕ ⟶ ψ)
     ----------------
@@ -124,7 +124,7 @@ lemma models_modpon {M : PrefModel} {ϕ ψ : Formula} :
 
 -- Semantic statement of and-introduction
 --------------------------------------------------------------------
-lemma models_andintro {M : PrefModel} {ϕ ψ : Formula} :
+lemma models_andintro {M : PrefModel World} {ϕ ψ : Formula} :
     models M ϕ
   → models M ψ
     ----------------
@@ -137,22 +137,23 @@ lemma models_andintro {M : PrefModel} {ϕ ψ : Formula} :
 
 -- Every M models ⊤!
 --------------------------------------------------------------------
-lemma models_top {M : PrefModel} :
+lemma models_top {M : PrefModel World} :
     models M ⊤ := by
 --------------------------------------------------------------------
+  intro World
   simp [models, satisfies]
   exact trivial
 
 -- Same proof as in Neural.Base
 --------------------------------------------------------------------
-lemma models_conjunction {M : PrefModel} (Γ : List Formula) :
+lemma models_conjunction {M : PrefModel World} (Γ : List Formula) :
   (∀ ϕ ∈ Γ, models M ϕ) → models M (⋀ Γ) := by
 --------------------------------------------------------------------
   intro h₁
   -- By induction on the list of formulas
   induction Γ
   case nil => simp only [conjunction, models_top]
-  case cons ψ ψs IH => 
+  case cons ψ ψs IH =>
     simp only [conjunction]
 
     have h₂ : ∀ (ϕ : Formula), ϕ ∈ ψs → models M ϕ := by
@@ -166,15 +167,15 @@ lemma models_conjunction {M : PrefModel} (Γ : List Formula) :
 -- then ϕ holds in every neural network model.
 --------------------------------------------------------------------
 theorem soundness : ∀ (ϕ : Formula),
-  prove ϕ → ∀ (M : PrefModel), models M ϕ := by
+  prove ϕ → ∀ (M : PrefModel World), models M ϕ := by
 --------------------------------------------------------------------
   intro ϕ h₁ M
-  
+
   -- We case on each of our proof rules and axioms
   induction h₁
   -- Proof Rules
   case modpon ϕ ψ _ _ IH₂ IH₃ => exact models_modpon IH₂ IH₃
-  
+
   case know_necess ϕ h IH =>
     simp only [models, satisfies]
     exact fun w u _ => IH u
@@ -184,46 +185,46 @@ theorem soundness : ∀ (ϕ : Formula),
   -- these are straightforward.
   case prop_self ϕ => simp [models, satisfies]
 
-  case prop_intro ϕ ψ => 
+  case prop_intro ϕ ψ =>
     simp [models, satisfies]
     exact fun w h₁ _ => h₁
-    
-  case prop_distr ϕ ψ ρ => 
+
+  case prop_distr ϕ ψ ρ =>
     simp [models, satisfies]
     intro w h₁ h₂ h₃
     exact h₁ (h₃ h₂) h₂
 
-  case contrapos ϕ ψ => 
+  case contrapos ϕ ψ =>
     simp [models, satisfies]
     intro w h₁ h₂
     -- Contraposition can be done by contradiction
     apply by_contradiction
     exact fun h => h₁ h h₂
-    
+
   -- Axioms for [K]
-  case know_distr ϕ ψ => 
+  case know_distr ϕ ψ =>
     simp [models, satisfies]
     intro w h₁ h₂ u h₃
     exact h₁ _ (h₂ _ h₃) h₃
 
-  case know_refl ϕ => 
+  case know_refl ϕ =>
     simp [models, satisfies]
     intro w h₁
     exact h₁ w (M.edges_refl w)
 
-  case know_trans ϕ => 
+  case know_trans ϕ =>
     simp [models, satisfies]
     intro w h₁ u h₂ v h₃
     exact h₁ _ (M.edges_trans h₂ h₃)
 
   -- Axioms for [T]
-  case typ_refl ϕ => 
+  case typ_refl ϕ =>
     simp [models, satisfies]
     intro w h₁
     have h₂ : w ∈ { u | M; u ⊩ ϕ } := best_inclusion h₁
     exact h₂
-    
-  case typ_trans ϕ => 
+
+  case typ_trans ϕ =>
     simp [models, satisfies]
     intro w h₁
     rw [best_idempotent]
@@ -237,10 +238,10 @@ theorem strong_soundness : ∀ (Γ : List Formula) (ϕ : Formula),
   Γ ⊢ ϕ → Γ ⊨ ϕ := by
 --------------------------------------------------------------------
   simp only [follows, entails, models_list]
-  intro Γ ϕ h₁ M h₂
-  
+  intro Γ ϕ h₁ World M h₂
+
   match h₁ with
-  | ⟨Δ, hΔ⟩ => 
+  | ⟨Δ, hΔ⟩ =>
     -- We have ⋀ Δ and (⋀ Δ) ⟶ ϕ, so we can apply modus ponens.
     have h₃ : models M (⋀ Δ) := by
       apply models_conjunction Δ
