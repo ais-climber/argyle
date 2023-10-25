@@ -29,47 +29,35 @@ open Classical
 -- from scratch, kindly refrain from creating cycles.
 -------------------------------------------------
 
-
-structure Graph (V : Type) where
-  Edge : V → V → Prop 
-  Weight : V → V → ℚ
-
 -- TODO: Make a computable/evaluatable interface.
 --     But this isn't important right now!
-deriving Repr
+-- deriving Repr
+
+structure Graph (Node : Type) where
+  Edge : Rel Node Node 
+  Weight : Node → Node → ℚ
 
 -------------------------------------------------
 -- Graph functions
 -------------------------------------------------
 
--- TODO: for convenience, define 'map', 'foldl', 'filter',
--- 'find?', 'zip', 'some', 'any', and 'all' over graph vertices.
-
--- TODO: Make graph functions computable! (this shouldn't be
--- hard -- right now it just depends on 'Prop')
+-- TODO: Make graph functions computable!
 namespace Graph
 
-def predecessors (g : Graph k) (n : Fin k) : List (Fin k) :=
-  List.filter (fun m => ⟨m, n⟩ ∈ g.edges) g.vertices
-
-def successors (g : Graph k) (n : Fin k) : List (Fin k) :=
-  List.filter (fun m => ⟨n, m⟩ ∈ g.edges) g.vertices
-
--- Returns the weight of the edge m ⟶ n, if it exists.
--- Otherwise we return None.
-def getEdgeWeight (g : Graph k) (m n : Fin k) : ℚ :=
-  match List.lookup ⟨m, n⟩ g.weights with
-  | some weight => weight
-  | none => 0
-
-inductive Path (g : Graph k) : Fin k → Fin k → Prop where
-  | trivial {u : Fin k} :
+def predecessors (g : Graph Node) (n : Node) : Set Node := 
+  g.Edge.preimage {n}
+  
+def successors (g : Graph Node) (n : Node) : Set Node :=
+  g.Edge.image {n}
+  
+inductive Path (g : Graph Node) : Node → Node → Prop where
+  | trivial {u : Node} :
       Path g u u
-  | from_path {u v w : Fin k} : 
-      Path g u v → ⟨v, w⟩ ∈ g.edges → Path g u w
+  | from_path {u v w : Node} : 
+      Path g u v → g.Edge v w → Path g u w
 
 --------------------------------------------------------------------
-theorem Path_trans {u v w : Fin k} (g : Graph k) :
+theorem Path_trans {u v w : Node} (g : Graph Node) :
   Path g u v → Path g v w → Path g u w := by
 --------------------------------------------------------------------
   intro (h₁ : Path g u v)
@@ -81,28 +69,17 @@ theorem Path_trans {u v w : Fin k} (g : Graph k) :
     exact Path.from_path path_ux edge_xy
 
 
-def is_refl (g : Graph k) : Prop := ∀ (u : Fin k), 
-  u ∈ g.vertices → ⟨u, u⟩ ∈ g.edges
-
-def is_symm (g : Graph k) : Prop := ∀ (u v : Fin k), 
-  ⟨u, v⟩ ∈ g.edges → ⟨v, u⟩ ∈ g.edges
-
-def is_trans (g : Graph k) : Prop := ∀ (u v w : Fin k),
-  ⟨u, v⟩ ∈ g.edges → ⟨v, w⟩ ∈ g.edges → ⟨u, w⟩ ∈ g.edges
+def Connected (g : Graph Node) : Prop := ∀ (x y : Node), 
+  (g.Edge x y) ∨ (g.Edge y x) 
+  ∨ (g.successors x = g.successors y
+      ∧ g.predecessors x = g.predecessors y)
 
 -- Note that we don't allow reflexive edges at all.
-def is_acyclic (g : Graph k) : Prop := ∀ (u v : Fin k),
-  g.Path u v → ¬ g.Path v u
-
--- Fully connected:
--- Either u ⟶ v, v ⟶ u, or u and v have the same
--- predecessors and successors.
-def is_connected (g : Graph k) : Prop := ∀ (u v : Fin k),
-  (⟨u, v⟩ ∈ g.edges) ∨ (⟨v, u⟩ ∈ g.edges) 
-  ∨ (g.successors u = g.successors v
-      ∧ g.predecessors u = g.predecessors v)
+def Acyclic (g : Graph Node) : Prop := ∀ (x y : Node), 
+  g.Path x y → ¬ g.Path y x
 
 end Graph
+
 
 /-
 TODO for later:  Make 'Path' computable so that we can execute
