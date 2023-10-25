@@ -2,27 +2,29 @@ import Argyle.Helpers
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Rel
 import Mathlib.Data.Fintype.Basic
+import Mathlib.Data.Finset.Lattice
+import Mathlib.Logic.Embedding.Basic
 open Classical
 
 -------------------------------------------------
 -- Weighted Directed Graphs
--- 
+--
 -- Since graphs are internally represented by lists,
 -- we can just do induction on this inner list.
--- 
+--
 -- It's common for graph theory proofs to go by
 -- induction on the graph:  "Suppose P holds for the
 -- subgraph, and now add a new node."  In this case
 -- what you probably want is to do induction on
 -- *Graph.vertices.reverse*, so that each new node
 -- can only "see" those nodes that come *before* it.
--- 
+--
 -- NOTE: For hygiene, we expect that the vertices
 -- are natural numbers given in order, i.e. 0, 1, 2, ...
--- In principle, you can pick any other labels for your 
+-- In principle, you can pick any other labels for your
 -- vertices, but I will be relying on the fact that they come
 -- in this order.  My apologies.
--- 
+--
 -- WARNING: We will also assume that graphs are acyclic.
 -- But NOTHING in this file directly enforces that.
 -- Whenever I construct a new graph, I will check that
@@ -40,7 +42,18 @@ structure Graph (Node : Type) where
 
   -- Whatever our nodes are, we need them to be provably finite
   -- and inhabited
-  node_is_finite : Fintype Node
+  nodes : Fintype Node
+  instance node_inhabited : Inhabited Node := sorry
+
+
+instance edge_is_decidable₁ {g : Graph Node} {n : Node} :
+  DecidablePred (g.Edge n) := sorry
+
+instance edge_is_decidable₂ {g : Graph Node} {n : Node} :
+  DecidablePred (fun m => g.Edge m n) := sorry
+
+-- axiom edge_is_decidable {Node : Type} {g : Graph Node} {n : Node} :
+--   DecidablePred fun m => g.Edge m n
 
 -------------------------------------------------
 -- Graph functions
@@ -50,21 +63,38 @@ structure Graph (Node : Type) where
 namespace Graph
 
 noncomputable
-def predecessors (g : Graph Node) (n : Node) : Finset Node := 
-  Finset.filter (fun m => g.Edge m n) g.node_is_finite.elems
+def predecessors (g : Graph Node) (n : Node) : Finset Node :=
+  Finset.filter (fun m => g.Edge m n) g.nodes.elems
 
 noncomputable
 def successors (g : Graph Node) (n : Node) : Finset Node :=
-  Finset.filter (fun m => g.Edge m n) g.node_is_finite.elems
-  
+  Finset.filter (fun m => g.Edge m n) g.nodes.elems
+
 inductive Path (g : Graph Node) : Node → Node → Type where
   | trivial {u : Node} : Path g u u
-  | from_path {u v w : Node} : 
+  | from_path {u v w : Node} :
       Path g u v → g.Edge v w → Path g u w
 
 def Path_length {u v : Node} (g : Graph Node) : g.Path u v → ℕ := fun
 | Path.trivial => 0
-| Path.from_path p _ => 1 + (g.Path_length p) 
+| Path.from_path p _ => 1 + (g.Path_length p)
+
+-- noncomputable def dist (u v : V) : ℕ :=
+--   sInf (Set.range (Walk.length : G.Walk u v → ℕ))
+
+noncomputable
+def distance (g : Graph Node) (u v : Node) : ℕ :=
+  sorry
+  -- Finset.max' (Finset.map ⟨g.Path_length, sorry⟩ _) sorry
+
+-- The distance between u and v is the *maximal* length of any
+-- path between them
+-- def distance (g : Graph Node) (u v : Node) : ℕ :=
+--   sorry
+  -- Set.max ({g.Path_length p u v | }) sorry
+  -- match List.argmax (fun m => sorry) nodes with
+  -- | some M => M
+  -- | none => 0
 
 def Path_IsCycle {u v : Node} (g : Graph Node) : g.Path u v → Prop :=
   sorry
@@ -78,11 +108,11 @@ theorem Path_trans {u v w : Node} (g : Graph Node) :
 
   induction h₂
   case trivial => exact h₁
-  case from_path x y _ edge_xy path_ux => 
+  case from_path x y _ edge_xy path_ux =>
     exact Path.from_path path_ux edge_xy
 
-def Connected (g : Graph Node) : Prop := ∀ (x y : Node), 
-  (g.Edge x y) ∨ (g.Edge y x) 
+def Connected (g : Graph Node) : Prop := ∀ (x y : Node),
+  (g.Edge x y) ∨ (g.Edge y x)
   ∨ (g.successors x = g.successors y
       ∧ g.predecessors x = g.predecessors y)
 
@@ -90,10 +120,10 @@ def Connected (g : Graph Node) : Prop := ∀ (x y : Node),
 -- def IsAcyclic : Prop := ∀ ⦃v : V⦄ (c : G.Walk v v), ¬c.IsCycle
 
 -- Note that we don't allow reflexive edges at all.
--- TODO: FIXME!!
-def Acyclic (g : Graph Node) : Prop := --∀ (x y : Node), 
-  ∀ {x : Node} (path : g.Path x x), ¬ (g.Path_IsCycle path) 
-  -- ∃ (p : g.Path x y), ¬ ∃ (q : g.Path y x), sorry
+-- We do this by simply saying "the type of paths from x to x
+-- is empty."
+def Acyclic (g : Graph Node) : Prop := --∀ (x y : Node),
+  ∀ {x : Node}, IsEmpty (g.Path x x)
 
 end Graph
 
@@ -155,9 +185,9 @@ def list_precedes (lst : List ℕ) (u v : ℕ) : Bool :=
     | List.nil => false
     | List.cons x xs =>
       -- If we find 'u' first, and v is in the rest, true
-      if x = u ∧ v ∈ xs then 
+      if x = u ∧ v ∈ xs then
         true
-      else 
+      else
         list_precedes xs u v
 
 def listA : List ℕ :=

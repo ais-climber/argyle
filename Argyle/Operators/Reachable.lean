@@ -6,7 +6,7 @@ open Set
 ══════════════════════════════════════════════════════════════════-/
 
 --------------------------------------------------------------------
-theorem Path_of_preds {m n : Fin k} (net : Net k) :
+theorem Path_of_preds {m n : Node} (net : Net Node) :
   m ∈ preds net n → net.graph.Path m n := by
 --------------------------------------------------------------------
   intro h₁
@@ -14,16 +14,14 @@ theorem Path_of_preds {m n : Fin k} (net : Net k) :
 
 -- Any nontrivial path can be shortcutted with an edge
 -- (this is because the graph is connected.)
--- TODO: Fix this proof tomorrow,
---   and continue replacing reachable with reachable!
 --------------------------------------------------------------------
-theorem Path_edge {u v : Fin k} (net : Net k) :
-  net.graph.Path u v → u ≠ v → ⟨u, v⟩ ∈ net.graph.edges := by
+theorem Path_edge {u v : Node} (net : Net Node) :
+  net.graph.Path u v → u ≠ v → net.graph.Edge u v := by
 --------------------------------------------------------------------
   intro h₁
-  
+
   induction h₁
-  case trivial => 
+  case trivial =>
     -- This case is impossible (we assumed *nontrivial*)
     exact fun h₂ => absurd rfl h₂
   case from_path x y _ edge_xy IH =>
@@ -35,21 +33,20 @@ theorem Path_edge {u v : Fin k} (net : Net k) :
       rw [h]
       exact edge_xy
     case neg =>
-      have h₄ : layer net u < layer net x := 
+      have h₄ : layer net u < layer net x :=
         layer_preds _ _ _ ((edge_iff_preds _ _ _).mpr (IH h))
-      have h₅ : layer net x < layer net y := 
+      have h₅ : layer net x < layer net y :=
         layer_preds _ _ _ ((edge_iff_preds _ _ _).mpr edge_xy)
-      
-      sorry
-      -- exact layer_connected _ _ _ (lt_trans h₄ h₅)
+
+      exact layer_connected _ _ _ (lt_trans h₄ h₅)
 
 -- Set of nodes reachable from S
-def reachable (net : Net k) (S : Set ℕ) : Set ℕ :=
-  fun (n : ℕ) =>
-    ∃ (m : ℕ), m ∈ S ∧ net.graph.Path m n
+def reachable (net : Net Node) (S : Set Node) : Set Node :=
+  fun (n : Node) =>
+    ∃ (m : Node), ∃ (_ : net.graph.Path m n), m ∈ S
 
 --------------------------------------------------------------------
-lemma reach_layer_zero (net : Net k) : ∀ (B : Set (Fin k)) (n : Fin k),
+lemma reach_layer_zero (net : Net Node) : ∀ (B : Set Node) (n : Node),
   layer net n = 0
   → n ∈ reachable net B
   → n ∈ B := by
@@ -57,22 +54,22 @@ lemma reach_layer_zero (net : Net k) : ∀ (B : Set (Fin k)) (n : Fin k),
   intro B n h₁ h₂
 
   match h₂ with
-  | ⟨m, hm⟩ => 
+  | ⟨m, path, hm⟩ =>
     -- By induction on the length of the path from B to n.
     --   path length = 0 => m ∈ B means n ∈ B
     --   path length ≥ 0 => this case should be impossible,
     --                      because at layer 0 n has *no predecessors*!
-    induction hm.2
-    case trivial => exact hm.1
-    case from_path x y _ edge_xy _ => 
+    induction path
+    case trivial => exact hm
+    case from_path x y _ edge_xy _ =>
       -- Contradiction; y's layer is 0, but there is an edge from x to y!
       have h₃ : layer net x < layer net y :=
         layer_preds net x y ((edge_iff_preds _ _ _).mpr edge_xy)
-      
+
       exact absurd h₁ (Nat.not_eq_zero_of_lt h₃)
 
 --------------------------------------------------------------------
-theorem reach_empty (net : Net k) :
+theorem reach_empty (net : Net Node) :
   reachable net ∅ = ∅ := by
 --------------------------------------------------------------------
   apply ext
@@ -80,30 +77,30 @@ theorem reach_empty (net : Net k) :
   apply Iff.intro
 
   -- This direction is impossible
-  case mp => 
+  case mp =>
     intro h₁
     match h₁ with
-    | ⟨m, hm⟩ => 
+    | ⟨m, _, hm⟩ =>
       -- We have some m ∈ ∅, which is absurd!
-      exact absurd hm.1 (Set.not_mem_empty m)
+      exact absurd hm (Set.not_mem_empty m)
 
   -- This direction is trivial
-  case mpr => 
+  case mpr =>
     intro h₁
-    exact ⟨n, ⟨h₁, Graph.Path.trivial⟩⟩
-    
+    exact ⟨n, ⟨Graph.Path.trivial, h₁⟩⟩
+
 
 -- If A ∩ B is empty, then there are no nodes reachable
 -- from B within A.
 -- (This does *not* follow from [reach_is_extens]!)
 --------------------------------------------------------------------
-theorem reach_empty_of_inter_empty (net : Net k) : ∀ (A B : Set (Fin k)),
+theorem reach_empty_of_inter_empty (net : Net Node) : ∀ (A B : Set Node),
   (A ∩ B) = ∅ → A ∩ reachable net (A ∩ B) = ∅ := by
 --------------------------------------------------------------------
   intro A B
   rw [← Set.not_nonempty_iff_eq_empty]
   rw [← Set.not_nonempty_iff_eq_empty]
-  
+
   -- Start a proof by contraposition, and simplify
   contrapose
   intro h₁
@@ -113,20 +110,20 @@ theorem reach_empty_of_inter_empty (net : Net k) : ∀ (A B : Set (Fin k)),
   -- Since A ∩ Reach(B) is nonempty, we have n ∈ A ∩ Reach(B).
   -- We argue that the m ∈ B that reaches n must be m ∈ A ∩ B.
   match h₁ with
-  | ⟨n, hn⟩ => 
-    match hn.2 with
-    | ⟨m, hm⟩ => exact ⟨m, hm.1⟩
+  | ⟨n, _, hn⟩ =>
+    match hn with
+    | ⟨m, _, hm⟩ => exact ⟨m, hm⟩
 
 --------------------------------------------------------------------
-theorem reach_is_extens (net : Net k) : ∀ (B : Set (Fin k)),
+theorem reach_is_extens (net : Net Node) : ∀ (B : Set Node),
   B ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro B n h₁
-  exact ⟨n, ⟨h₁, Graph.Path.trivial⟩⟩
-  
+  exact ⟨n, ⟨Graph.Path.trivial, h₁⟩⟩
+
 
 --------------------------------------------------------------------
-theorem reach_is_idempotent (net : Net k) : ∀ (B : Set (Fin k)),
+theorem reach_is_idempotent (net : Net Node) : ∀ (B : Set Node),
   reachable net B = reachable net (reachable net B) := by
 --------------------------------------------------------------------
   intro B
@@ -136,52 +133,53 @@ theorem reach_is_idempotent (net : Net k) : ∀ (B : Set (Fin k)),
 
   -- Forward direction
   -- (easy; just apply reach_is_extens)
-  case mp => 
+  case mp =>
     intro h₁
     exact reach_is_extens _ _ h₁
 
   -- Backwards direction
-  case mpr => 
+  case mpr =>
     intro h₁
     match h₁ with
-    | ⟨m, hm⟩ =>
-      match hm.1 with
-      | ⟨x, hx⟩ => exact ⟨x, ⟨hx.1, Graph.Path_trans _ hx.2 hm.2⟩⟩
+    | ⟨m, path_mn, hm⟩ =>
+      match hm with
+      | ⟨x, path_xm, hx⟩ => exact ⟨x, ⟨Graph.Path_trans _ path_xm path_mn, hx⟩⟩
 
 
 -- Reach is asymmetric
 -- (corresponds to our graphs being acyclic)
 --------------------------------------------------------------------
-theorem reach_asymm (net : Net k) : ∀ (m n : (Fin k)),
+theorem reach_asymm (net : Net Node) : ∀ (m n : Node),
   m ∈ reachable net {n} → n ∉ reachable net {m} := by
 --------------------------------------------------------------------
   intro m n h₁ h₂
-  
+
   match h₁ with
-  | ⟨x, hx⟩ => 
-    have h₃ : x = n := Set.eq_of_mem_singleton hx.1
+  | ⟨x, path_xm, hx⟩ =>
+    have h₃ : x = n := Set.eq_of_mem_singleton hx
 
     match h₂ with
-    | ⟨y, hy⟩ => 
-      have h₄ : y = m := Set.eq_of_mem_singleton hy.1
+    | ⟨y, path_yn, hy⟩ =>
+      have h₄ : y = m := Set.eq_of_mem_singleton hy
 
-      rw [← h₃] at hy
-      rw [← h₄] at hx
-      exact net.acyclic _ _ hx.2 hy.2
+      rw [← h₄] at path_xm
+      rw [← h₃] at path_yn
+      exact isEmpty_iff.mp net.acyclic
+        (net.graph.Path_trans path_xm path_yn)
 
 --------------------------------------------------------------------
-theorem reach_is_monotone (net : Net k) : ∀ (A B : Set (Fin k)),
+theorem reach_is_monotone (net : Net Node) : ∀ (A B : Set Node),
   A ⊆ B → reachable net A ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro A B h₁ n h₂
 
   exact match h₂ with
-  | ⟨m, hm⟩ => ⟨m, ⟨(h₁ hm.1), hm.2⟩⟩
+  | ⟨m, path, hm⟩ => ⟨m, ⟨path, h₁ hm⟩⟩
 
 -- Reach is closed under union
 -- (This is really a consequence of monotonicity)
 --------------------------------------------------------------------
-theorem reach_union (net : Net k) : ∀ (A B : Set (Fin k)),
+theorem reach_union (net : Net Node) : ∀ (A B : Set Node),
   reachable net (A ∪ B) = (reachable net A) ∪ (reachable net B) := by
 --------------------------------------------------------------------
   intro A B
@@ -204,31 +202,31 @@ theorem reach_union (net : Net k) : ∀ (A B : Set (Fin k)),
     -- We have a path from m ∈ A ∪ B to n.
     -- In either case, the path from m ⟶ n gives us n ∈ Reach(_).
     match h₁ with
-    | ⟨m, hm⟩ =>
-      cases hm.1
-      case inl h₂ => exact Or.inl ⟨m, ⟨h₂, hm.2⟩⟩
-      case inr h₂ => exact Or.inr ⟨m, ⟨h₂, hm.2⟩⟩
+    | ⟨m, path, hm⟩ =>
+      cases hm
+      case inl h₂ => exact Or.inl ⟨m, ⟨path, h₂⟩⟩
+      case inr h₂ => exact Or.inr ⟨m, ⟨path, h₂⟩⟩
 
 -- Reach and intersection interaction
 -- TODO: This should follow from either monotonicity or reach_union.
 --   Otherwise, what is the point of having the other two properties??
 --   But I can't seem to figure out how it follows...
 --------------------------------------------------------------------
-theorem reach_inter (net : Net k) : ∀ (A B : Set (Fin k)),
+theorem reach_inter (net : Net Node) : ∀ (A B : Set Node),
   (reachable net A)ᶜ ∩ (reachable net B) ⊆ reachable net (Aᶜ ∩ B) := by
 --------------------------------------------------------------------
   intro A B n h₁
-  
+
   match h₁.2 with
-  | ⟨m, hm⟩ =>
-    -- m ∈ Aᶜ because, otherwise, there would be a path from A to n.  
+  | ⟨m, path, hm⟩ =>
+    -- m ∈ Aᶜ because, otherwise, there would be a path from A to n.
     have h₂ : m ∈ Aᶜ := by
       apply by_contradiction
       intro h
       simp at h
-      exact absurd ⟨m, ⟨h, hm.2⟩⟩ h₁.1
-    
-    exact ⟨m, ⟨⟨h₂, hm.1⟩, hm.2⟩⟩
+      exact absurd ⟨m, ⟨path, h⟩⟩ h₁.1
+
+    exact ⟨m, ⟨path, ⟨h₂, hm⟩⟩⟩
 
 -- This is essentially the 'grz' axiom for Reach.
 -- TODO: This *should* follow from the other properties. I should
@@ -243,7 +241,7 @@ theorem reach_inter (net : Net k) : ∀ (A B : Set (Fin k)),
 --   contrapose
 --   intro h₁
 --   simp
-  
+
 --   have h₂ : (reachable net (reachable net (Aᶜ)))ᶜ ⊆ (reachable net (A ∩ reachable net (Aᶜ)))ᶜ := by
 --     intro n
 --     contrapose
@@ -257,23 +255,23 @@ theorem reach_inter (net : Net k) : ∀ (A B : Set (Fin k)),
 --     simp at h
 
 --     match h with
---     | ⟨m, hm⟩ => 
+--     | ⟨m, hm⟩ =>
 --       sorry
 --     -- apply h₂
 --     -- sorry -- the claim is false!!
 
---   exact ⟨n, ⟨⟨h₃, h₁⟩, Graph.Path.trivial⟩⟩ 
+--   exact ⟨n, ⟨⟨h₃, h₁⟩, Graph.Path.trivial⟩⟩
 
   /-
   -/
   /-
   have h₃ : n ∈ reachable net (A ∩ reachable net (Aᶜ))ᶜ := by
     -- Goal: n ∈ Reach(A ∩ Reach(Aᶜ))ᶜ
-    -- Plan: Because of monotonicity, 
+    -- Plan: Because of monotonicity,
     --    Reach(Reach(Aᶜ))ᶜ ⊆ Reach(A ∩ Reach(Aᶜ))ᶜ
     -- And by idempotence, the LHS is just
     --    Reach(Aᶜ)
-    -- and so we have our goal by inclusion (we have n ∈ Aᶜ) 
+    -- and so we have our goal by inclusion (we have n ∈ Aᶜ)
     apply h₂
     rw [← reach_is_idempotent]
     sorry
