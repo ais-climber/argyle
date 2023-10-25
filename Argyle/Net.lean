@@ -1,6 +1,7 @@
 import Argyle.Graph
 import Argyle.Helpers
 import Mathlib.Data.List.MinMax
+import Std.Data.Fin.Lemmas
 
 open Graph
 
@@ -14,8 +15,8 @@ open Graph
 --   - The graph is acyclic
 --   - The graph is fully connected
 -------------------------------------------------
-structure Net where
-  graph : Graph ℕ ℚ
+structure Net (k : ℕ) where
+  graph : Graph k
   activation : ℚ → ℚ
   rate : ℚ  -- learning rate
   rate_pos : rate > 0
@@ -39,7 +40,7 @@ structure Net where
 -- if act(x₁) = 1
 -- then any act(x₂) greater than act(x₁) also = 1
 --------------------------------------------------------------------
-lemma activation_from_inequality (net : Net) (x₁ x₂ : ℚ) :
+lemma activation_from_inequality (net : Net k) (x₁ x₂ : ℚ) :
   net.activation x₁ ≤ net.activation x₂
   → net.activation x₁ = 1 → net.activation x₂ = 1 := by
 --------------------------------------------------------------------
@@ -55,12 +56,12 @@ lemma activation_from_inequality (net : Net) (x₁ x₂ : ℚ) :
 
 -- Just an abbreviation for the predecessors of n in 'net'
 @[simp]
-def preds (net : Net) (n : ℕ): List ℕ :=
+def preds (net : Net k) (n : Fin k): List (Fin k) :=
   net.graph.predecessors n
 
 --------------------------------------------------------------------
-theorem edge_iff_preds (net : Net) (m n : ℕ) :
-  m ∈ preds net n ↔ net.graph.hasEdge m n := by
+theorem edge_iff_preds (net : Net k) (m n : Fin k) :
+  m ∈ preds net n ↔ ⟨m, n⟩ ∈ net.graph.edges := by
 --------------------------------------------------------------------
   simp only [preds, Graph.predecessors]
   apply Iff.intro
@@ -68,21 +69,19 @@ theorem edge_iff_preds (net : Net) (m n : ℕ) :
   case mp => 
     intro h₁
     have h₂ := List.of_mem_filter h₁
-    exact h₂
+    exact of_decide_eq_true h₂
 
   case mpr => 
     intro h₁
-    have h₂ : ⟨m, n⟩ ∈ net.graph.edges := Graph.edge_of_hasEdge _ _ _ h₁
-    have h₃ : m ∈ net.graph.vertices := by
-      exact net.graph.edges_from_vertices_left h₂
+    have h₂ : m ∈ net.graph.vertices := by
+      exact net.graph.edges_from_vertices_left h₁
 
-    apply List.mem_filter_of_mem h₃
-    exact h₁
+    apply List.mem_filter_of_mem h₂
+    exact decide_eq_true h₁
 
-
-def layer_acc (net : Net) (n : ℕ) (vertices : List ℕ) : ℕ :=
+def layer_acc (net : Net k) (n : Fin k) (vertices : List (Fin k)) : Fin k :=
   match vertices with
-  | [] => 0
+  | [] => sorry
   | vertices =>
     -- Call layer on each predecessor of n recursively,
     -- and then take maximum(pred_layers) + 1.
@@ -90,25 +89,26 @@ def layer_acc (net : Net) (n : ℕ) (vertices : List ℕ) : ℕ :=
     let pred_layers := List.map (fun m => 
       layer_acc net m (vertices.erase n)) preds
     
-    match pred_layers.maximum with
-    | some max => max + 1
-    | none => 0
+    sorry
+    -- match pred_layers.maximum with
+    -- | some max => max + 1
+    -- | none => 0
 termination_by layer_acc net n vertices => sizeOf vertices
 decreasing_by
   simp_wf
   
   cases lt_or_eq_of_le (sizeOf_erase vertices n)
-  case inl h₁ => exact h₁
+  case inl h₁ => sorry -- exact h₁
   case inr h₁ => 
     sorry
 
-def layer (net : Net) (n : ℕ) : ℕ :=
+def layer (net : Net k) (n : Fin k) : Fin k :=
   layer_acc net n (net.graph.vertices)
 
 -- The layer relation layer[m] ≤ layer[n] is well-founded
 -- (i.e. it has a least element)
 --------------------------------------------------------------------
-lemma layer_wellfounded (net : Net) : 
+lemma layer_wellfounded (net : Net k) : 
   WellFounded (fun x y => layer net x ≤ layer net y) := by
 --------------------------------------------------------------------
   apply WellFounded.wellFounded_iff_has_min.mpr 
@@ -127,7 +127,7 @@ lemma layer_wellfounded (net : Net) :
 -- Proof idea:
 -- layer(m)  ≤  max({layer(v) | v ∈ preds(n)})  <  layer(n)
 --------------------------------------------------------------------
-lemma layer_preds (net : Net) (m n : ℕ) :
+lemma layer_preds (net : Net k) (m n : Fin k) :
   m ∈ preds net n 
   → layer net m < layer net n := by
 --------------------------------------------------------------------
@@ -199,8 +199,8 @@ lemma layer_preds (net : Net) (m n : ℕ) :
   --       exact IH sorry
 
 --------------------------------------------------------------------
-lemma layer_connected : ∀ (net : Net) (m n : ℕ), 
-  layer net m < layer net n → net.graph.hasEdge m n := by
+lemma layer_connected : ∀ (net : Net k) (m n : Fin k), 
+  layer net m < layer net n → ⟨m, n⟩ ∈ net.graph.edges := by
 --------------------------------------------------------------------
   intro net m n h₁
   apply Classical.by_contradiction
@@ -218,9 +218,14 @@ lemma layer_connected : ∀ (net : Net) (m n : ℕ),
     case inl h₃ => 
       -- Case 2: n ⟶ m
       -- But then layer(n) < layer(m)
-      apply not_lt_of_gt h₁ (layer_preds _ _ _ _)
-      rw [edge_iff_preds]
-      exact h₃
+      rw [← edge_iff_preds] at h₃
+      have h₄ := layer_preds net n m h₃
+      sorry
+      -- exact not_lt_of_gt h₁ h₄
+      -- apply not_lt_of_gt h₁ (layer_preds net n m h₃)
+      -- apply not_lt_of_gt h₁ (layer_preds _ _ _ _)
+      -- rw [edge_iff_preds]
+      -- exact h₃
 
     case inr h₃ =>
       -- Case 3: n and m have the same successors and predecessors.
@@ -235,16 +240,17 @@ lemma layer_connected : ∀ (net : Net) (m n : ℕ),
         -- rw [h₃.2]
         -- sorry
       
-      apply ne_of_lt h₁ h₄
+      sorry
+      -- apply ne_of_lt h₁ h₄
 
 
 -- NOTE: Although 'do' notation might be more readable here,
 --       I avoid it because it's hard to reason about.
 noncomputable
-def activ (net : Net) (prev_activ : List ℚ) (n : ℕ) : Prop :=
+def activ (net : Net k) (prev_activ : List ℚ) (n : Fin k) : Prop :=
   let preds := preds net n
   let weights := List.map (fun i => 
-      let m := preds.get! i
+      let m := sorry -- preds.get! i
       net.graph.getEdgeWeight m n) 
     (List.range preds.length)
   let weight_sum := weighted_sum weights prev_activ

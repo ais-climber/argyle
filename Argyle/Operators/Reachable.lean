@@ -6,7 +6,7 @@ open Set
 ══════════════════════════════════════════════════════════════════-/
 
 --------------------------------------------------------------------
-theorem Path_of_preds {m n : ℕ} (net : Net) :
+theorem Path_of_preds {m n : Fin k} (net : Net k) :
   m ∈ preds net n → net.graph.Path m n := by
 --------------------------------------------------------------------
   intro h₁
@@ -17,8 +17,8 @@ theorem Path_of_preds {m n : ℕ} (net : Net) :
 -- TODO: Fix this proof tomorrow,
 --   and continue replacing reachable with reachable!
 --------------------------------------------------------------------
-theorem Path_edge {u v : ℕ} (net : Net) :
-  net.graph.Path u v → u ≠ v → net.graph.hasEdge u v := by
+theorem Path_edge {u v : Fin k} (net : Net k) :
+  net.graph.Path u v → u ≠ v → ⟨u, v⟩ ∈ net.graph.edges := by
 --------------------------------------------------------------------
   intro h₁
   
@@ -40,15 +40,16 @@ theorem Path_edge {u v : ℕ} (net : Net) :
       have h₅ : layer net x < layer net y := 
         layer_preds _ _ _ ((edge_iff_preds _ _ _).mpr edge_xy)
       
-      exact layer_connected _ _ _ (lt_trans h₄ h₅)
+      sorry
+      -- exact layer_connected _ _ _ (lt_trans h₄ h₅)
 
 -- Set of nodes reachable from S
-def reachable (net : Net) (S : Set ℕ) : Set ℕ :=
+def reachable (net : Net k) (S : Set ℕ) : Set ℕ :=
   fun (n : ℕ) =>
     ∃ (m : ℕ), m ∈ S ∧ net.graph.Path m n
 
 --------------------------------------------------------------------
-lemma reach_layer_zero (net : Net) : ∀ (B : Set ℕ) (n : ℕ),
+lemma reach_layer_zero (net : Net k) : ∀ (B : Set (Fin k)) (n : Fin k),
   layer net n = 0
   → n ∈ reachable net B
   → n ∈ B := by
@@ -71,7 +72,7 @@ lemma reach_layer_zero (net : Net) : ∀ (B : Set ℕ) (n : ℕ),
       exact absurd h₁ (Nat.not_eq_zero_of_lt h₃)
 
 --------------------------------------------------------------------
-theorem reach_empty (net : Net) :
+theorem reach_empty (net : Net k) :
   reachable net ∅ = ∅ := by
 --------------------------------------------------------------------
   apply ext
@@ -96,7 +97,7 @@ theorem reach_empty (net : Net) :
 -- from B within A.
 -- (This does *not* follow from [reach_is_extens]!)
 --------------------------------------------------------------------
-theorem reach_empty_of_inter_empty (net : Net) : ∀ (A B : Set ℕ),
+theorem reach_empty_of_inter_empty (net : Net k) : ∀ (A B : Set (Fin k)),
   (A ∩ B) = ∅ → A ∩ reachable net (A ∩ B) = ∅ := by
 --------------------------------------------------------------------
   intro A B
@@ -117,7 +118,7 @@ theorem reach_empty_of_inter_empty (net : Net) : ∀ (A B : Set ℕ),
     | ⟨m, hm⟩ => exact ⟨m, hm.1⟩
 
 --------------------------------------------------------------------
-theorem reach_is_extens (net : Net) : ∀ (B : Set ℕ),
+theorem reach_is_extens (net : Net k) : ∀ (B : Set (Fin k)),
   B ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro B n h₁
@@ -125,7 +126,7 @@ theorem reach_is_extens (net : Net) : ∀ (B : Set ℕ),
   
 
 --------------------------------------------------------------------
-theorem reach_is_idempotent (net : Net) : ∀ (B : Set ℕ),
+theorem reach_is_idempotent (net : Net k) : ∀ (B : Set (Fin k)),
   reachable net B = reachable net (reachable net B) := by
 --------------------------------------------------------------------
   intro B
@@ -151,7 +152,7 @@ theorem reach_is_idempotent (net : Net) : ∀ (B : Set ℕ),
 -- Reach is asymmetric
 -- (corresponds to our graphs being acyclic)
 --------------------------------------------------------------------
-theorem reach_asymm (net : Net) : ∀ (m n : ℕ),
+theorem reach_asymm (net : Net k) : ∀ (m n : (Fin k)),
   m ∈ reachable net {n} → n ∉ reachable net {m} := by
 --------------------------------------------------------------------
   intro m n h₁ h₂
@@ -169,7 +170,7 @@ theorem reach_asymm (net : Net) : ∀ (m n : ℕ),
       exact net.acyclic _ _ hx.2 hy.2
 
 --------------------------------------------------------------------
-theorem reach_is_monotone (net : Net) : ∀ (A B : Set ℕ),
+theorem reach_is_monotone (net : Net k) : ∀ (A B : Set (Fin k)),
   A ⊆ B → reachable net A ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro A B h₁ n h₂
@@ -180,7 +181,7 @@ theorem reach_is_monotone (net : Net) : ∀ (A B : Set ℕ),
 -- Reach is closed under union
 -- (This is really a consequence of monotonicity)
 --------------------------------------------------------------------
-theorem reach_union (net : Net) : ∀ (A B : Set ℕ),
+theorem reach_union (net : Net k) : ∀ (A B : Set (Fin k)),
   reachable net (A ∪ B) = (reachable net A) ∪ (reachable net B) := by
 --------------------------------------------------------------------
   intro A B
@@ -213,7 +214,7 @@ theorem reach_union (net : Net) : ∀ (A B : Set ℕ),
 --   Otherwise, what is the point of having the other two properties??
 --   But I can't seem to figure out how it follows...
 --------------------------------------------------------------------
-theorem reach_inter (net : Net) : ∀ (A B : Set ℕ),
+theorem reach_inter (net : Net k) : ∀ (A B : Set (Fin k)),
   (reachable net A)ᶜ ∩ (reachable net B) ⊆ reachable net (Aᶜ ∩ B) := by
 --------------------------------------------------------------------
   intro A B n h₁

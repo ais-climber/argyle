@@ -29,44 +29,14 @@ open Classical
 -- from scratch, kindly refrain from creating cycles.
 -------------------------------------------------
 
-structure testGraph (α : Type) (β : Type) where
-  vertices : Finset α
-  edges : Rel α α
-  weights : Rel (α × α) β
 
-/-
--- OLD; refactoring now!
-structure Graph (α : Type) (β : Type) where
-  vertices : List α
-  edges : List (α × α)
-  weights : List ((α × α) × β)
+structure Graph (V : Type) where
+  Edge : V → V → Prop 
+  Weight : V → V → ℚ
 
-  -- Constraints to make sure everything is hygenic.
-  edges_from_vertices_left : ∀ {x y : α}, ⟨x, y⟩ ∈ edges → x ∈ vertices
-  edges_from_vertices_right : ∀ {x y : α}, ⟨x, y⟩ ∈ edges → y ∈ vertices
-  -- weights_from_edges : ∀ {x y : α} {w : β}, 
-  --   ⟨⟨x, y⟩, w⟩ ∈ weights → ⟨x, y⟩ ∈ edges
+-- TODO: Make a computable/evaluatable interface.
+--     But this isn't important right now!
 deriving Repr
--/
-
--- Finite graphs
--- k is the size of the graph;
--- nodes are Fin n, weights are rationals ℚ
--- We assume that the data is hygenic
-structure Graph (k : ℕ) where
-  vertices : Finset (Fin k)
-  Edge : Rel (Fin k) (Fin k)
-  Weight : Rel ((Fin k) × (Fin k)) ℚ
-
-  -- Constraints to make sure everything is hygenic.
-  edges_from_vertices_left : ∀ {x y}, Edge x y → x ∈ vertices
-  edges_from_vertices_right : ∀ {x y}, Edge x y → y ∈ vertices
--- deriving Repr
-
-/-
-h₇: ∀ (b : ℚ), ¬((m, n), b) ∈ net.graph.weights
-⊢ ¬(m, n) ∈ net.graph.edges
--/
 
 -------------------------------------------------
 -- Graph functions
@@ -79,78 +49,27 @@ h₇: ∀ (b : ℚ), ¬((m, n), b) ∈ net.graph.weights
 -- hard -- right now it just depends on 'Prop')
 namespace Graph
 
--- Function that gets the vertices as a *finite set*
-def get_vertices (g : Graph k) : Finset ℕ := g.vertices.toFinset
+def predecessors (g : Graph k) (n : Fin k) : List (Fin k) :=
+  List.filter (fun m => ⟨m, n⟩ ∈ g.edges) g.vertices
 
-
-def hasEdge (g : Graph k) (m n : ℕ) : Bool :=
-  match List.lookup m g.edges with
-  | some v => if v = n then true else false
-  | none => false
-
--- Function that gets the edges as a *relation*
-def hasEdge_Rel (g : Graph ℕ ℚ) : ℕ → ℕ → Prop :=
-  fun m n => ⟨m, n⟩ ∈ g.edges
-
-def predecessors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter (fun m => g.hasEdge m n) g.vertices
-
-def successors (g : Graph ℕ ℚ) (n : ℕ) : List ℕ :=
-  List.filter (fun m => g.hasEdge n m) g.vertices
+def successors (g : Graph k) (n : Fin k) : List (Fin k) :=
+  List.filter (fun m => ⟨n, m⟩ ∈ g.edges) g.vertices
 
 -- Returns the weight of the edge m ⟶ n, if it exists.
 -- Otherwise we return None.
-def getEdgeWeight (g : Graph ℕ ℚ) (m n : ℕ) : ℚ :=
+def getEdgeWeight (g : Graph k) (m n : Fin k) : ℚ :=
   match List.lookup ⟨m, n⟩ g.weights with
   | some weight => weight
   | none => 0
 
---------------------------------------------------------------------
-theorem edge_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
-  g.hasEdge m n → ⟨m, n⟩ ∈ g.edges := by
---------------------------------------------------------------------
-  simp only [Graph.hasEdge]
-  
-  -- Split up the match
-  split 
-  case _ v h₁ => 
-    intro h₂
-    have h₃ : v = n := by
-      apply byContradiction
-      intro hcontr
-      rw [if_neg hcontr] at h₂
-      exact absurd (symm h₂) (Bool.of_decide_false rfl)
-
-    rw [← h₃]
-    exact lookup_mem _ _ _ h₁
-    
-  case _ _ => 
-    intro h₂
-    simp at h₂
-
---------------------------------------------------------------------
-theorem hasEdge_iff_edge (g : Graph ℕ ℚ) (m n : ℕ) :
-  g.hasEdge m n ↔ ⟨m, n⟩ ∈ g.edges  := by
---------------------------------------------------------------------
-  sorry
-
-
-
---------------------------------------------------------------------
-theorem hasEdgeRel_of_hasEdge (g : Graph ℕ ℚ) (m n : ℕ) :
-  g.hasEdge m n → g.hasEdge_Rel m n := by
---------------------------------------------------------------------
-  simp only [hasEdge_Rel]
-  exact edge_of_hasEdge g m n
-
-inductive Path (g : Graph ℕ ℚ) : ℕ → ℕ → Prop where
-  | trivial {u : ℕ} :
+inductive Path (g : Graph k) : Fin k → Fin k → Prop where
+  | trivial {u : Fin k} :
       Path g u u
-  | from_path {u v w : ℕ} : 
-      Path g u v → g.hasEdge v w → Path g u w
+  | from_path {u v w : Fin k} : 
+      Path g u v → ⟨v, w⟩ ∈ g.edges → Path g u w
 
 --------------------------------------------------------------------
-theorem Path_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
+theorem Path_trans {u v w : Fin k} (g : Graph k) :
   Path g u v → Path g v w → Path g u w := by
 --------------------------------------------------------------------
   intro (h₁ : Path g u v)
@@ -162,24 +81,24 @@ theorem Path_trans {u v w : ℕ} (g : Graph ℕ ℚ) :
     exact Path.from_path path_ux edge_xy
 
 
-def is_refl (g : Graph ℕ ℚ) : Prop := ∀ (u : ℕ), 
-  u ∈ g.get_vertices → g.hasEdge u u
+def is_refl (g : Graph k) : Prop := ∀ (u : Fin k), 
+  u ∈ g.vertices → ⟨u, u⟩ ∈ g.edges
 
-def is_symm (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ), 
-  g.hasEdge u v → g.hasEdge v u
+def is_symm (g : Graph k) : Prop := ∀ (u v : Fin k), 
+  ⟨u, v⟩ ∈ g.edges → ⟨v, u⟩ ∈ g.edges
 
-def is_trans (g : Graph ℕ ℚ) : Prop := ∀ (u v w : ℕ),
-  g.hasEdge u v → g.hasEdge v w → g.hasEdge u w
+def is_trans (g : Graph k) : Prop := ∀ (u v w : Fin k),
+  ⟨u, v⟩ ∈ g.edges → ⟨v, w⟩ ∈ g.edges → ⟨u, w⟩ ∈ g.edges
 
 -- Note that we don't allow reflexive edges at all.
-def is_acyclic (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
+def is_acyclic (g : Graph k) : Prop := ∀ (u v : Fin k),
   g.Path u v → ¬ g.Path v u
 
 -- Fully connected:
 -- Either u ⟶ v, v ⟶ u, or u and v have the same
 -- predecessors and successors.
-def is_connected (g : Graph ℕ ℚ) : Prop := ∀ (u v : ℕ),
-  (g.hasEdge u v) ∨ (g.hasEdge v u) 
+def is_connected (g : Graph k) : Prop := ∀ (u v : Fin k),
+  (⟨u, v⟩ ∈ g.edges) ∨ (⟨v, u⟩ ∈ g.edges) 
   ∨ (g.successors u = g.successors v
       ∧ g.predecessors u = g.predecessors v)
 
@@ -232,7 +151,7 @@ everything in this library computable.
 namespace TopologicalSort
 
 -- @[simp]
--- def topol_sort (g : Graph ℕ ℚ) :=
+-- def topol_sort (g : Graph k) :=
 --   (topSortUnsafe g).toList.reverse
 
 -- holds iff u precedes v in array
