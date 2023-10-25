@@ -15,8 +15,8 @@ open Graph
 --   - The graph is acyclic
 --   - The graph is fully connected
 -------------------------------------------------
-structure Net (k : ℕ) where
-  graph : Graph k
+structure Net (Node : Type) where
+  graph : Graph Node
   activation : ℚ → ℚ
   rate : ℚ  -- learning rate
   rate_pos : rate > 0
@@ -32,9 +32,9 @@ structure Net (k : ℕ) where
   activ_thres : activation (threshold) = 1
 
   -- The graph is nonempty, acyclic and fully connected
-  nonempty : graph.vertices ≠ []
-  acyclic : graph.is_acyclic
-  connected : graph.is_connected
+  nonempty : Nonempty Node
+  acyclic : graph.Acyclic
+  connected : graph.Connected
 
 -- Because our activation function is bounded above by 1,
 -- if act(x₁) = 1
@@ -54,61 +54,80 @@ lemma activation_from_inequality (net : Net k) (x₁ x₂ : ℚ) :
     exact absurd h₁ (by native_decide)
 
 
--- Just an abbreviation for the predecessors of n in 'net'
+-- This is not simply an abbreviation for the predecessors --
+-- it also fixes an ordering of the predecessors, for each n!
+-- (we return a list, rather than just a set)
 @[simp]
-def preds (net : Net k) (n : Fin k): List (Fin k) :=
-  net.graph.predecessors n
+noncomputable
+def preds (net : Net Node) (n : Node) : List Node :=
+  (net.graph.predecessors n).toList
 
 --------------------------------------------------------------------
-theorem edge_iff_preds (net : Net k) (m n : Fin k) :
-  m ∈ preds net n ↔ ⟨m, n⟩ ∈ net.graph.edges := by
+theorem edge_iff_preds (net : Net Node) (m n : Node) :
+  m ∈ preds net n ↔ net.graph.Edge m n := by
 --------------------------------------------------------------------
   simp only [preds, Graph.predecessors]
   apply Iff.intro
 
+  -- Since m ∈ Edge.preimage {n}, we have Edge m n.
+  -- (but we have to work to convince Lean of that :) )
   case mp => 
     intro h₁
-    have h₂ := List.of_mem_filter h₁
-    exact of_decide_eq_true h₂
-
-  case mpr => 
-    intro h₁
-    have h₂ : m ∈ net.graph.vertices := by
-      exact net.graph.edges_from_vertices_left h₁
-
-    apply List.mem_filter_of_mem h₂
-    exact decide_eq_true h₁
-
-def layer_acc (net : Net k) (n : Fin k) (vertices : List (Fin k)) : Fin k :=
-  match vertices with
-  | [] => sorry
-  | vertices =>
-    -- Call layer on each predecessor of n recursively,
-    -- and then take maximum(pred_layers) + 1.
-    let preds := net.graph.predecessors n
-    let pred_layers := List.map (fun m => 
-      layer_acc net m (vertices.erase n)) preds
+    sorry
+    -- rw [Rel.mem_preimage] at h₁
     
-    sorry
-    -- match pred_layers.maximum with
-    -- | some max => max + 1
-    -- | none => 0
-termination_by layer_acc net n vertices => sizeOf vertices
-decreasing_by
-  simp_wf
-  
-  cases lt_or_eq_of_le (sizeOf_erase vertices n)
-  case inl h₁ => sorry -- exact h₁
-  case inr h₁ => 
-    sorry
+    -- match h₁ with
+    -- | ⟨x, hx⟩ => 
+    --   have h₂ : x = n := Set.eq_of_mem_singleton hx.1
+    --   rw [symm h₂]
+    --   exact hx.2
 
-def layer (net : Net k) (n : Fin k) : Fin k :=
-  layer_acc net n (net.graph.vertices)
+  -- Similarly, since Edge m n, we have m ∈ Edge.preimage {n}.  
+  case mpr => 
+    intro h₁  
+    sorry
+    -- rw [Rel.mem_preimage]
+    -- exact ⟨n, ⟨rfl, h₁⟩⟩
+
+-- def layer_acc (net : Net Node) (n : Node) (vertices : List (Fin k)) : Fin k :=
+--   match vertices with
+--   | [] => sorry
+--   | vertices =>
+--     -- Call layer on each predecessor of n recursively,
+--     -- and then take maximum(pred_layers) + 1.
+--     let preds := net.graph.predecessors n
+--     let pred_layers := List.map (fun m => 
+--       layer_acc net m (vertices.erase n)) preds
+    
+--     sorry
+--     -- match pred_layers.maximum with
+--     -- | some max => max + 1
+--     -- | none => 0
+-- termination_by layer_acc net n vertices => sizeOf vertices
+-- decreasing_by
+--   simp_wf
+  
+--   cases lt_or_eq_of_le (sizeOf_erase vertices n)
+--   case inl h₁ => sorry -- exact h₁
+--   case inr h₁ => 
+--     sorry
+
+-- The initial layer consists of all nodes that have no
+-- predecessors.
+def initial_layer (net : Net Node) : Set Node :=
+  { n : Node | preds net n = ∅ }
+
+-- TODO: Define layer as we do in the paper!
+-- (much simpler, I don't think we have to worry about well-foundedness)
+def layer (net : Net Node) (n : Node) : ℕ :=
+  sorry
+
+  -- layer_acc net n (net.graph.vertices)
 
 -- The layer relation layer[m] ≤ layer[n] is well-founded
 -- (i.e. it has a least element)
 --------------------------------------------------------------------
-lemma layer_wellfounded (net : Net k) : 
+lemma layer_wellfounded (net : Net Node) : 
   WellFounded (fun x y => layer net x ≤ layer net y) := by
 --------------------------------------------------------------------
   apply WellFounded.wellFounded_iff_has_min.mpr 
@@ -127,7 +146,7 @@ lemma layer_wellfounded (net : Net k) :
 -- Proof idea:
 -- layer(m)  ≤  max({layer(v) | v ∈ preds(n)})  <  layer(n)
 --------------------------------------------------------------------
-lemma layer_preds (net : Net k) (m n : Fin k) :
+lemma layer_preds (net : Net Node) (m n : Node) :
   m ∈ preds net n 
   → layer net m < layer net n := by
 --------------------------------------------------------------------
@@ -199,8 +218,8 @@ lemma layer_preds (net : Net k) (m n : Fin k) :
   --       exact IH sorry
 
 --------------------------------------------------------------------
-lemma layer_connected : ∀ (net : Net k) (m n : Fin k), 
-  layer net m < layer net n → ⟨m, n⟩ ∈ net.graph.edges := by
+lemma layer_connected : ∀ (net : Net Node) (m n : Node), 
+  layer net m < layer net n → net.graph.Edge m n := by
 --------------------------------------------------------------------
   intro net m n h₁
   apply Classical.by_contradiction
@@ -228,31 +247,32 @@ lemma layer_connected : ∀ (net : Net k) (m n : Fin k),
       -- exact h₃
 
     case inr h₃ =>
-      -- Case 3: n and m have the same successors and predecessors.
-      -- But then layer(m) = layer(n.) 
-      have h₄ : layer net m = layer net n := by
-        simp only [layer]
-        
-        induction net.graph.vertices
-        case nil => sorry
-        case cons v vs IH => sorry
-
-        -- rw [h₃.2]
-        -- sorry
-      
       sorry
-      -- apply ne_of_lt h₁ h₄
+      -- -- Case 3: n and m have the same successors and predecessors.
+      -- -- But then layer(m) = layer(n.) 
+      -- have h₄ : layer net m = layer net n := by
+      --   simp only [layer]
+        
+      --   induction net.graph.vertices
+      --   case nil => sorry
+      --   case cons v vs IH => sorry
+
+      --   -- rw [h₃.2]
+      --   -- sorry
+      
+      -- sorry
+      -- -- apply ne_of_lt h₁ h₄
 
 
 -- NOTE: Although 'do' notation might be more readable here,
 --       I avoid it because it's hard to reason about.
 noncomputable
-def activ (net : Net k) (prev_activ : List ℚ) (n : Fin k) : Prop :=
+def activ (net : Net Node) (prev_activ : List ℚ) (n : Node) : Prop :=
   let preds := preds net n
-  let weights := List.map (fun i => 
-      let m := sorry -- preds.get! i
-      net.graph.getEdgeWeight m n) 
-    (List.range preds.length)
+  let weights := List.map (fun (i : Fin (preds.length)) => 
+      let m := preds.get i
+      net.graph.Weight m n) 
+    (List.finRange preds.length)
   let weight_sum := weighted_sum weights prev_activ
   let curr_activ := net.activation weight_sum
   curr_activ = 1

@@ -1,6 +1,7 @@
 import Argyle.Helpers
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Rel
+import Mathlib.Data.Fintype.Basic
 open Classical
 
 -------------------------------------------------
@@ -34,8 +35,12 @@ open Classical
 -- deriving Repr
 
 structure Graph (Node : Type) where
-  Edge : Rel Node Node 
+  Edge : Node → Node → Prop
   Weight : Node → Node → ℚ
+
+  -- Whatever our nodes are, we need them to be provably finite
+  -- and inhabited
+  node_is_finite : Fintype Node
 
 -------------------------------------------------
 -- Graph functions
@@ -44,17 +49,25 @@ structure Graph (Node : Type) where
 -- TODO: Make graph functions computable!
 namespace Graph
 
-def predecessors (g : Graph Node) (n : Node) : Set Node := 
-  g.Edge.preimage {n}
+noncomputable
+def predecessors (g : Graph Node) (n : Node) : Finset Node := 
+  Finset.filter (fun m => g.Edge m n) g.node_is_finite.elems
+
+noncomputable
+def successors (g : Graph Node) (n : Node) : Finset Node :=
+  Finset.filter (fun m => g.Edge m n) g.node_is_finite.elems
   
-def successors (g : Graph Node) (n : Node) : Set Node :=
-  g.Edge.image {n}
-  
-inductive Path (g : Graph Node) : Node → Node → Prop where
-  | trivial {u : Node} :
-      Path g u u
+inductive Path (g : Graph Node) : Node → Node → Type where
+  | trivial {u : Node} : Path g u u
   | from_path {u v w : Node} : 
       Path g u v → g.Edge v w → Path g u w
+
+def Path_length {u v : Node} (g : Graph Node) : g.Path u v → ℕ := fun
+| Path.trivial => 0
+| Path.from_path p _ => 1 + (g.Path_length p) 
+
+def Path_IsCycle {u v : Node} (g : Graph Node) : g.Path u v → Prop :=
+  sorry
 
 --------------------------------------------------------------------
 theorem Path_trans {u v w : Node} (g : Graph Node) :
@@ -68,15 +81,19 @@ theorem Path_trans {u v w : Node} (g : Graph Node) :
   case from_path x y _ edge_xy path_ux => 
     exact Path.from_path path_ux edge_xy
 
-
 def Connected (g : Graph Node) : Prop := ∀ (x y : Node), 
   (g.Edge x y) ∨ (g.Edge y x) 
   ∨ (g.successors x = g.successors y
       ∧ g.predecessors x = g.predecessors y)
 
+
+-- def IsAcyclic : Prop := ∀ ⦃v : V⦄ (c : G.Walk v v), ¬c.IsCycle
+
 -- Note that we don't allow reflexive edges at all.
-def Acyclic (g : Graph Node) : Prop := ∀ (x y : Node), 
-  g.Path x y → ¬ g.Path y x
+-- TODO: FIXME!!
+def Acyclic (g : Graph Node) : Prop := --∀ (x y : Node), 
+  ∀ {x : Node} (path : g.Path x x), ¬ (g.Path_IsCycle path) 
+  -- ∃ (p : g.Path x y), ¬ ∃ (q : g.Path y x), sorry
 
 end Graph
 
