@@ -35,7 +35,7 @@ structure Net (Node : Type) where
   -- The graph is nonempty, acyclic and fully connected
   nonempty : Nonempty Node-- OR TRY: Finset.Nonempty graph.node_fintype.elems
   acyclic : graph.Acyclic
-  connected : graph.Connected
+  connected : Connected graph.Edge
 
 -- Because our activation function is bounded above by 1,
 -- if act(x₁) = 1

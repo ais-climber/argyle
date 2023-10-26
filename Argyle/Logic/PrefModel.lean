@@ -1,32 +1,24 @@
-import Mathlib.Data.Finset.Basic
+import Argyle.Helpers
+import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Rel
 import Mathlib.Tactic.LibrarySearch
 
--- A relation is fully connected iff all elements x y
--- are either related, or have exactly the same image
--- and preimage over R.
--- TODO: Synthesize the relations pov and the graph implementation!
-def Rel.Connected {α : Type} (R : Rel α α) : Prop :=
-  ∀ (x y), (R x y) ∨ (R y x)
-    ∨ (R.image {x} = R.image {y}
-        ∧ R.preimage {x} = R.preimage {y})
-
 -- A 'PrefModel' is a preferential possible-worlds model, i.e.
 -- a usual possible worlds model with a preference ordering ≼ on worlds.
--- (Think of this as a graph)
--- TODO: How do I enforce 'rel' and 'pref' to be over 'worlds'?
--- TODO: Should I use 'Rel' or 'Relation'?
 structure PrefModel (World : Type) where
-  worlds : Finset World
   Edge : Rel World World
   Pref : Rel World World
   proposition_eval : String → World → Prop
 
+  -- Whatever our worlds are, we need them to be provably
+  -- finite and inhabited (nonempty)
+  -- instance world_inhabited : Inhabited World := sorry
+  worlds : Fintype World
+
   -- Frame properties for preferential models
-  nonempty : worlds.Nonempty
   edges_refl : Reflexive Edge
   edges_trans : Transitive Edge
-  edges_connected : Rel.Connected Edge
+  edges_connected : Connected Edge
   -- ...
 
   pref_refl : Reflexive Pref

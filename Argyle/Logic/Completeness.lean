@@ -10,6 +10,7 @@ import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Lattice
 import Mathlib.Logic.Relation
 import Mathlib.Tactic.LibrarySearch
+import Mathlib.Tactic.Contrapose
 
 import Argyle.Logic.Syntax
 open Syntax
@@ -82,24 +83,24 @@ theorem preds_index {M : PrefModel World} {u v : World} :
 --   - Excit: Excitatory edges that always go through, unless inhibited
 --   - Inhib: Inhibitory edges that prevent excitatory edges from going through
 structure InhibitionNet (Node : Type) where
-  nodes : Finset Node
-  bias : Node
   Edge : Rel Node Node -- NOTE: Skeleton edges do nothing; they just specify
                            -- where the excitatory edges can be
   Excit : Rel Node Node
   Inhib : Rel Node (Node × Node) -- need to be connected to excitatory_edges!!!
   proposition_map : String → Set Node
 
+  -- There are finitely many nodes, and there is some node 'bias' ∈ Node.
+  -- (bias is a node which shows up in the propagation of every signal.)
+  nodes : Fintype Node
+  bias : Node
+
   -- The graph is nonempty, acyclic and fully connected.
-  nonempty : nodes.Nonempty
   acyclic : Rel.Acyclic Edge
-  connected : Rel.Connected Edge
+  connected : Connected Edge
 
   -- The relationships between each of the edge types
-  excit_edge : ∀ (m n), m ∈ nodes →
-    Excit m n → Edge m n
-  inhib_excit : ∀ (b m n),
-    Inhib b ⟨m, n⟩ → Excit m n
+  excit_edge : ∀ (m n : Node), Excit m n → Edge m n
+  inhib_excit : ∀ (b m n : Node), Inhib b ⟨m, n⟩ → Excit m n
 
 -- This is the first part of the construction,
 --    PrefModel --> Inhibition Net
@@ -107,29 +108,31 @@ structure InhibitionNet (Node : Type) where
 def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
   let bias := sorry
   -- let bias := (M.worlds.max' M.nonempty) + 1
-{ nodes := M.worlds
-  bias := bias
 
-  -- Edge is just M's Edge, and Excit follows M.Pref, but
+  -- Edge is just the edges of the PrefModel, but with x, y swapped.
+  -- Excit follows M.Pref, but
   -- we extend it so that bias ⟶ n for all nonminimal n.
-  Edge := M.Edge
-  Excit := M.Pref.insert bias (fun n => n ∉ M.best M.worlds)
+{ Edge := M.Edge.swap
+  Excit := M.Pref.insert bias (fun n => n ∉ M.best M.worlds.elems)
   Inhib := sorry
   proposition_map := fun p => { w | M.proposition_eval p w }
 
-  nonempty := M.nonempty
+  nodes := sorry
+  bias := bias
   acyclic := sorry
-  connected := M.edges_connected
+  connected := Rel.swap_connected M.edges_connected
 
   excit_edge := by
-    intro m n h₁ h₂
-    simp only [Rel.insert] at h₂
-    -- The if-statement here is false because m ∈ M.worlds!
     sorry
+    -- intro m n h₁ h₂
+    -- simp only [Rel.insert] at h₂
+    -- -- The if-statement here is false because m ∈ M.worlds!
+    -- sorry
   inhib_excit := by
-    intro b m n h₁
-    simp only [Rel.insert]
     sorry
+    -- intro b m n h₁
+    -- simp only [Rel.insert]
+    -- sorry
 }
 
 -- This is the second part of the construction,
@@ -172,7 +175,6 @@ noncomputable
 def PrefModel.toNet (M : PrefModel World) : InterpretedNet World :=
   (M.toInhibitionNet).toNet
 
-
 --------------------------------------------------------------------
 lemma reachable_toNet {M : PrefModel World} {S : Set World} {w : World} :
   w ∈ reachable (M.toNet.net) S ↔ ∃ u, u ∈ S ∧ M.Edge w u  := by
@@ -184,19 +186,15 @@ lemma reachable_toNet {M : PrefModel World} {S : Set World} {w : World} :
     | ⟨u, path, hu⟩ =>
       -- There's a path from u to w; so by induction on that path
       induction path
-      case trivial =>
-        sorry
-        -- exact ⟨u, ⟨M.edges_refl u, hu⟩⟩
+      case trivial => exact ⟨u, ⟨hu, M.edges_refl u⟩⟩
       case from_path x y path_ux edge_xy IH =>
         have h₂ : x ∈ reachable (PrefModel.toNet M).net S := by
-          sorry
-          -- exact ⟨u, ⟨hu.1, path_ux⟩⟩
+          exact ⟨u, ⟨path_ux, hu⟩⟩
         have h₃ : M.Edge y x := by
-          sorry
-          -- rw [(PrefModel.toNet M).net.graph.hasEdge_iff_edge] at edge_xy
-          -- simp only [PrefModel.toNet, InhibitionNet.toNet] at edge_xy
-          -- simp only [Rel.toList] at edge_xy
-          -- sorry
+          simp only [PrefModel.toNet, PrefModel.toInhibitionNet] at edge_xy
+          simp only [InhibitionNet.toNet] at edge_xy
+          simp only [Rel.swap] at edge_xy
+          exact edge_xy
 
         -- By IH there exists a v ∈ S with M.Edge
         match IH h₂ with
@@ -206,31 +204,15 @@ lemma reachable_toNet {M : PrefModel World} {S : Set World} {w : World} :
   case mpr =>
     intro h₁
     match h₁ with
-    | ⟨u, path, hu⟩ =>
-      sorry
-      -- have h₂ : Graph.hasEdge (PrefModel.toNet M).net.graph u w := by
-      --   rw [(PrefModel.toNet M).net.graph.hasEdge_iff_edge]
-      --   simp only [PrefModel.toNet, InhibitionNet.toNet, Rel.toList]
-      --   sorry
-      -- exact ⟨u, ⟨hu.1, Graph.Path.from_path Graph.Path.trivial h₂⟩⟩
-
-
-
+    | ⟨u, hu⟩ =>
+      exact ⟨u, ⟨Graph.Path.from_path Graph.Path.trivial hu.2, hu.1⟩⟩
 
 -- TODO: I need to define the propagation of an Inhibition net first!
--- --------------------------------------------------------------------
--- lemma propagate_toInhibitionNet {M : PrefModel} {A : Set ℕ} :
---   propagate (M.toNet.net) A = (M.best (Aᶜ))ᶜ :=
--- --------------------------------------------------------------------
---   sorry
-
--- --------------------------------------------------------------------
--- lemma propagate_toNet {M : PrefModel} {A : Set ℕ} :
---   propagate (M.toNet.net) A = (M.best (Aᶜ))ᶜ :=
--- --------------------------------------------------------------------
---   sorry
-
--- TODO: How should I relate Reachability??
+--------------------------------------------------------------------
+lemma propagate_toNet {M : PrefModel World} {S : Set World} (w : World) :
+  propagate (M.toNet.net) S = (M.best (Sᶜ))ᶜ := by
+--------------------------------------------------------------------
+  sorry
 
 
 -- This is the big theorem, which says that
@@ -265,23 +247,32 @@ lemma toNet_homomorphism {M : PrefModel World} {ϕ : Formula} {w : World} :
 
   case Know ϕ IH =>
     simp only [Classical.Base.satisfies]
-    simp [Neural.Base.satisfies, Neural.Base.interpret]
+    simp only [Neural.Base.satisfies, Neural.Base.interpret]
+    conv => lhs; simp
+    simp only [Neural.Base.satisfies, Neural.Base.interpret] at IH
     rw [not_iff_comm]
-    simp
+    rw [reachable_toNet]
+    push_neg
 
-    apply Iff.intro
-    case mp =>
-      intro h₁
-      match h₁ with
-      | ⟨u, hu⟩ => exact ⟨u, ⟨sorry, sorry⟩⟩
+    -- Rephrase our Inductive Hypothesis
+    have IH : (⟦ϕ⟧_PrefModel.toNet M)ᶜ = {u | (M; u ⊩ ϕ)}ᶜ := by
+      apply Set.ext
+      intro w; simp
+      rw [not_iff_not]
+      exact IH
 
-    case mpr =>
-      sorry
+    -- Go in and apply IH to the right-hand side.  Then just swap the ∧!
+    conv => rhs; enter [1, u, 1]; rw [IH]; simp
+    conv => rhs; enter [1, u]; rw [and_comm]
 
   case Typ ϕ IH =>
     simp only [Classical.Base.satisfies]
     simp only [Neural.Base.satisfies, Neural.Base.interpret]
-    sorry
+    rw [propagate_toNet w]
+    simp
+
+    -- Go in and apply IH to the right-hand side
+    conv => rhs; enter [2, w, 2, u, 1, u]; rw [← IH]
 
 --------------------------------------------------------------------
 theorem toNet_models {M : PrefModel World} {ϕ : Formula} :

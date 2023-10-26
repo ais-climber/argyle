@@ -37,11 +37,11 @@ open Classical
 -- deriving Repr
 
 structure Graph (Node : Type) where
-  Edge : Node → Node → Prop
+  Edge : Rel Node Node
   Weight : Node → Node → ℚ
 
-  -- Whatever our nodes are, we need them to be provably finite
-  -- and inhabited
+  -- Whatever our nodes are, we need them to be provably
+  -- finite and inhabited (nonempty)
   nodes : Fintype Node
   instance node_inhabited : Inhabited Node := sorry
 
@@ -111,18 +111,10 @@ theorem Path_trans {u v w : Node} (g : Graph Node) :
   case from_path x y _ edge_xy path_ux =>
     exact Path.from_path path_ux edge_xy
 
-def Connected (g : Graph Node) : Prop := ∀ (x y : Node),
-  (g.Edge x y) ∨ (g.Edge y x)
-  ∨ (g.successors x = g.successors y
-      ∧ g.predecessors x = g.predecessors y)
-
-
--- def IsAcyclic : Prop := ∀ ⦃v : V⦄ (c : G.Walk v v), ¬c.IsCycle
-
 -- Note that we don't allow reflexive edges at all.
 -- We do this by simply saying "the type of paths from x to x
 -- is empty."
-def Acyclic (g : Graph Node) : Prop := --∀ (x y : Node),
+def Acyclic (g : Graph Node) : Prop :=
   ∀ {x : Node}, IsEmpty (g.Path x x)
 
 end Graph
