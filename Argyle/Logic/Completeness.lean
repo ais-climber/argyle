@@ -1,4 +1,5 @@
 import Argyle.Logic.InterpretedNet
+import Argyle.Logic.InhibitionNet
 import Argyle.Logic.PrefModel
 import Argyle.Logic.Classical.Base
 import Argyle.Logic.Neural.Base
@@ -19,34 +20,8 @@ open Syntax
   Building InterpretedNets from PrefModels
 ══════════════════════════════════════════════════════════════════-/
 -- In this section, I'm implementing Hannes Leitgeb's construction
--- following his paper
+-- for completeness, following his paper
 --     "Nonmonotonic reasoning by inhibition nets" (2001)
---
--- We first construct a special type of net called an
--- "inhibition net" (has no weights, but inhibitory synapses
--- control the flow of activation), and then we construct
--- a traditional ANN from the inhibition net.
---
--- An inhibitory edge connects a node to an excitatory edge, e.g.:
---
---         a --------> b
---               |
---               |
---         c ----⧸
---
--- Additionally, there are no weights or activation functions.
--- Excitatory edges always go through, unless some inhibitory
--- edge is currently preventing it from going through.
-
-inductive Rel.Path (R : Rel World World) : World → World → Prop where
-  | trivial {u : World} :
-      Path R u u
-  | from_path {u v w : World} :
-      Path R u v → R v w → Path R u w
-
--- Note that we don't allow reflexive edges at all.
-def Rel.Acyclic (R : Rel World World) : Prop := ∀ (u v : World),
-  R.Path u v → ¬ R.Path v u
 
 -- Suprisingly, not included in the standard library!
 -- We simply 'insert' a new element x into a relation R,
@@ -75,33 +50,6 @@ theorem preds_index {M : PrefModel World} {u v : World} :
 --------------------------------------------------------------------
   sorry
 
--- NOTE: As with InterpretedNets, we add a proposition mapping
--- as well.  We also have a 'bias' node, which occurs in *every*
--- activation.
--- There are three types of edges:
---   - Edge: Do nothing, act as a "skeleton" for excitatory edges.
---   - Excit: Excitatory edges that always go through, unless inhibited
---   - Inhib: Inhibitory edges that prevent excitatory edges from going through
-structure InhibitionNet (Node : Type) where
-  Edge : Rel Node Node -- NOTE: Skeleton edges do nothing; they just specify
-                           -- where the excitatory edges can be
-  Excit : Rel Node Node
-  Inhib : Rel Node (Node × Node) -- need to be connected to excitatory_edges!!!
-  proposition_map : String → Set Node
-
-  -- There are finitely many nodes, and there is some node 'bias' ∈ Node.
-  -- (bias is a node which shows up in the propagation of every signal.)
-  nodes : Fintype Node
-  bias : Node
-
-  -- The graph is nonempty, acyclic and fully connected.
-  acyclic : Rel.Acyclic Edge
-  connected : Connected Edge
-
-  -- The relationships between each of the edge types
-  excit_edge : ∀ (m n : Node), Excit m n → Edge m n
-  inhib_excit : ∀ (b m n : Node), Inhib b ⟨m, n⟩ → Excit m n
-
 -- This is the first part of the construction,
 --    PrefModel --> Inhibition Net
 -- See pages 186, 187 of the (2001) paper.
@@ -117,22 +65,23 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
   Inhib := sorry
   proposition_map := fun p => { w | M.proposition_eval p w }
 
-  nodes := sorry
+  nodes := M.worlds
   bias := bias
-  acyclic := sorry
+  acyclic := by
+    -- Follows from the fact that the PrefModel is reflexive, transitive,
+    -- and antisymmetric, but we have to work a bit for it.
+    simp only [Acyclic]
+    apply by_contradiction
+    intro h
+    push_neg at h
+    conv at h => enter [1, x]; rw [not_isEmpty_iff]; rw [Rel.swap_path]
+
+    match h with
+    | ⟨w, hw⟩ => sorry
   connected := Rel.swap_connected M.edges_connected
 
-  excit_edge := by
-    sorry
-    -- intro m n h₁ h₂
-    -- simp only [Rel.insert] at h₂
-    -- -- The if-statement here is false because m ∈ M.worlds!
-    -- sorry
-  inhib_excit := by
-    sorry
-    -- intro b m n h₁
-    -- simp only [Rel.insert]
-    -- sorry
+  excit_edge := sorry
+  inhib_excit := sorry
 }
 
 -- This is the second part of the construction,
@@ -144,7 +93,7 @@ def InhibitionNet.toNet (N : InhibitionNet Node) : InterpretedNet Node := {
     graph := {
       Edge := N.Edge
       Weight := sorry
-      nodes := ⟨sorry, sorry⟩
+      nodes := N.nodes
     }
 
     -- We just use a binary step activation function.
@@ -162,9 +111,9 @@ def InhibitionNet.toNet (N : InhibitionNet Node) : InterpretedNet Node := {
     threshold := 1
     activ_thres := by simp
 
-    nonempty := sorry
-    acyclic := sorry
-    connected := sorry
+    bias := N.bias
+    acyclic := N.acyclic
+    connected := N.connected
   }
 
   proposition_map := N.proposition_map
@@ -205,22 +154,121 @@ lemma reachable_toNet {M : PrefModel World} {S : Set World} {w : World} :
     intro h₁
     match h₁ with
     | ⟨u, hu⟩ =>
-      exact ⟨u, ⟨Graph.Path.from_path Graph.Path.trivial hu.2, hu.1⟩⟩
+      exact ⟨u, ⟨Rel.Path.from_path Rel.Path.trivial hu.2, hu.1⟩⟩
 
--- TODO: I need to define the propagation of an Inhibition net first!
+--------------------------------------------------------------------
+lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
+  (M.toInhibitionNet).propagate S = (M.best (Sᶜ))ᶜ := by
+--------------------------------------------------------------------
+  apply Set.ext
+  intro w
+  simp only [InhibitionNet.propagate]
+  apply Iff.intro
+
+  ---------------------
+  -- Forward Direction
+  ---------------------
+  case mp =>
+    intro h₁
+    simp only [Membership.mem, Set.Mem] at h₁
+
+    -- By cases on propagation for InhibitionNet
+    cases h₁
+    case inl h₂ =>
+      -- CASE: w ∈ S.  So w ∉ Sᶜ, so by [best_inclusion], w ∉ (best(Sᶜ))ᶜ.
+      apply by_contradiction
+      intro h
+      simp at h
+      have h₃ : w ∈ (Sᶜ) := best_inclusion h
+      exact absurd h₂ h₃
+    case inr h₂ =>
+      cases h₂
+      case inl h₃ =>
+        -- CASE: w is the 'bias' node
+        sorry
+      case inr h₃ =>
+        -- CASE: w is activated by some u
+        -- (and there is no inhibitory edge that stops this)
+        simp only [PrefModel.best]
+        simp only [compl]
+        rw [Set.mem_setOf]
+        rw [Set.mem_setOf]
+        rw [Set.mem_setOf]
+        push_neg
+
+        match h₃ with
+        | ⟨u, hu⟩ =>
+          push_neg at hu
+          intro h₄
+
+          -- We need to show that the node that excites w is not in S,
+          -- and also w is not more preferable than it.
+          have h₅ : u ∉ S := by
+            sorry
+
+          have h₆ : ¬PrefModel.Pref M w u := by
+            sorry
+
+          exact ⟨u, ⟨h₅, h₆⟩⟩
+
+  ---------------------
+  -- Backward Direction
+  ---------------------
+  case mpr =>
+    intro h₁
+    simp [Membership.mem, Set.Mem]
+    simp only [PrefModel.best] at h₁
+    simp only [compl] at h₁
+    rw [Set.mem_setOf] at h₁
+    rw [Set.mem_setOf] at h₁
+    rw [Set.mem_setOf] at h₁
+    push_neg at h₁
+
+    -- Either w ∈ S (and so trivially w is active in the InhibitionNet),
+    -- Or w ∉ S, and so ∃ u∉S such that w is *not* more preferred than u.
+    by_cases w ∈ S
+    case pos => exact Or.inl h
+    case neg =>
+      apply Or.inr
+      apply Or.inr
+      match h₁ h with
+      | ⟨u, hu⟩ =>
+        -- We need to show that u activates w, and there isn't any
+        -- inhibitory edge to stop this.
+        have h₂ : (PrefModel.toInhibitionNet M).Excit u w := by
+          sorry
+
+        have h₃ : ∀ b, ¬(PrefModel.toInhibitionNet M).Inhib b (u, w) := by
+          sorry
+
+        exact ⟨u, ⟨h₂, h₃⟩⟩
+
+--------------------------------------------------------------------
+lemma propagate_toNet_helper₂ {N : InhibitionNet Node} {S : Set Node} :
+  propagate (N.toNet.net) S = N.propagate S := by
+--------------------------------------------------------------------
+  apply Set.ext
+  intro w
+  simp only [InhibitionNet.propagate, Membership.mem, Set.Mem]
+
+  -- We will want to do induction on the layers of the net
+  -- (to split up the ANN propagation)
+  sorry
+
 --------------------------------------------------------------------
 lemma propagate_toNet {M : PrefModel World} {S : Set World} (w : World) :
   propagate (M.toNet.net) S = (M.best (Sᶜ))ᶜ := by
 --------------------------------------------------------------------
-  sorry
-
+  simp only [PrefModel.toNet]
+  rw [propagate_toNet_helper₂]
+  rw [propagate_toNet_helper₁]
 
 -- This is the big theorem, which says that
 -- PrefModel.toNet is a homomorphism.
 -- This corresponds to the *COMPLETENESS* of the neural semantics
 -- (in other words, this is the hard part!)
 --------------------------------------------------------------------
-lemma toNet_homomorphism {M : PrefModel World} {ϕ : Formula} {w : World} :
+theorem toNet_homomorphism {M : PrefModel World} {ϕ : Formula} {w : World} :
   (M.toNet; w ⊩ ϕ) ↔ (M; w ⊩ ϕ) := by
 --------------------------------------------------------------------
   induction ϕ generalizing w

@@ -70,53 +70,6 @@ noncomputable
 def successors (g : Graph Node) (n : Node) : Finset Node :=
   Finset.filter (fun m => g.Edge m n) g.nodes.elems
 
-inductive Path (g : Graph Node) : Node → Node → Type where
-  | trivial {u : Node} : Path g u u
-  | from_path {u v w : Node} :
-      Path g u v → g.Edge v w → Path g u w
-
-def Path_length {u v : Node} (g : Graph Node) : g.Path u v → ℕ := fun
-| Path.trivial => 0
-| Path.from_path p _ => 1 + (g.Path_length p)
-
--- noncomputable def dist (u v : V) : ℕ :=
---   sInf (Set.range (Walk.length : G.Walk u v → ℕ))
-
-noncomputable
-def distance (g : Graph Node) (u v : Node) : ℕ :=
-  sorry
-  -- Finset.max' (Finset.map ⟨g.Path_length, sorry⟩ _) sorry
-
--- The distance between u and v is the *maximal* length of any
--- path between them
--- def distance (g : Graph Node) (u v : Node) : ℕ :=
---   sorry
-  -- Set.max ({g.Path_length p u v | }) sorry
-  -- match List.argmax (fun m => sorry) nodes with
-  -- | some M => M
-  -- | none => 0
-
-def Path_IsCycle {u v : Node} (g : Graph Node) : g.Path u v → Prop :=
-  sorry
-
---------------------------------------------------------------------
-theorem Path_trans {u v w : Node} (g : Graph Node) :
-  Path g u v → Path g v w → Path g u w := by
---------------------------------------------------------------------
-  intro (h₁ : Path g u v)
-  intro (h₂ : Path g v w)
-
-  induction h₂
-  case trivial => exact h₁
-  case from_path x y _ edge_xy path_ux =>
-    exact Path.from_path path_ux edge_xy
-
--- Note that we don't allow reflexive edges at all.
--- We do this by simply saying "the type of paths from x to x
--- is empty."
-def Acyclic (g : Graph Node) : Prop :=
-  ∀ {x : Node}, IsEmpty (g.Path x x)
-
 end Graph
 
 

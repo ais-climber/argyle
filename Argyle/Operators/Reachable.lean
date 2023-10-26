@@ -7,16 +7,16 @@ open Set
 
 --------------------------------------------------------------------
 theorem Path_of_preds {m n : Node} (net : Net Node) :
-  m ∈ preds net n → net.graph.Path m n := by
+  m ∈ preds net n → net.graph.Edge.Path m n := by
 --------------------------------------------------------------------
   intro h₁
-  exact Graph.Path.from_path (Graph.Path.trivial) ((edge_iff_preds _ _ _).mp h₁)
+  exact Rel.Path.from_path (Rel.Path.trivial) ((edge_iff_preds _ _ _).mp h₁)
 
 -- Any nontrivial path can be shortcutted with an edge
 -- (this is because the graph is connected.)
 --------------------------------------------------------------------
 theorem Path_edge {u v : Node} (net : Net Node) :
-  net.graph.Path u v → u ≠ v → net.graph.Edge u v := by
+  net.graph.Edge.Path u v → u ≠ v → net.graph.Edge u v := by
 --------------------------------------------------------------------
   intro h₁
 
@@ -43,7 +43,7 @@ theorem Path_edge {u v : Node} (net : Net Node) :
 -- Set of nodes reachable from S
 def reachable (net : Net Node) (S : Set Node) : Set Node :=
   fun (n : Node) =>
-    ∃ (m : Node), ∃ (_ : net.graph.Path m n), m ∈ S
+    ∃ (m : Node), ∃ (_ : net.graph.Edge.Path m n), m ∈ S
 
 --------------------------------------------------------------------
 lemma reach_layer_zero (net : Net Node) : ∀ (B : Set Node) (n : Node),
@@ -87,7 +87,7 @@ theorem reach_empty (net : Net Node) :
   -- This direction is trivial
   case mpr =>
     intro h₁
-    exact ⟨n, ⟨Graph.Path.trivial, h₁⟩⟩
+    exact ⟨n, ⟨Rel.Path.trivial, h₁⟩⟩
 
 
 -- If A ∩ B is empty, then there are no nodes reachable
@@ -119,7 +119,7 @@ theorem reach_is_extens (net : Net Node) : ∀ (B : Set Node),
   B ⊆ reachable net B := by
 --------------------------------------------------------------------
   intro B n h₁
-  exact ⟨n, ⟨Graph.Path.trivial, h₁⟩⟩
+  exact ⟨n, ⟨Rel.Path.trivial, h₁⟩⟩
 
 
 --------------------------------------------------------------------
@@ -143,7 +143,7 @@ theorem reach_is_idempotent (net : Net Node) : ∀ (B : Set Node),
     match h₁ with
     | ⟨m, path_mn, hm⟩ =>
       match hm with
-      | ⟨x, path_xm, hx⟩ => exact ⟨x, ⟨Graph.Path_trans _ path_xm path_mn, hx⟩⟩
+      | ⟨x, path_xm, hx⟩ => exact ⟨x, ⟨Path_trans _ path_xm path_mn, hx⟩⟩
 
 
 -- Reach is asymmetric
@@ -165,7 +165,7 @@ theorem reach_asymm (net : Net Node) : ∀ (m n : Node),
       rw [← h₄] at path_xm
       rw [← h₃] at path_yn
       exact isEmpty_iff.mp net.acyclic
-        (net.graph.Path_trans path_xm path_yn)
+        (Path_trans _ path_xm path_yn)
 
 --------------------------------------------------------------------
 theorem reach_is_monotone (net : Net Node) : ∀ (A B : Set Node),

@@ -28,7 +28,7 @@ structure PrefModel (World : Type) where
 -- w ∈ best(A) iff w ∈ A and w is ≼-minimal
 -- (preferred over any other u ∈ A)
 def PrefModel.best (M : PrefModel World) (A : Set World) : Set World :=
-  fun w => w ∈ A ∧ (∀ u, u ∈ A → M.Pref w u)
+  { w | w ∈ A ∧ (∀ u, u ∈ A → M.Pref w u) }
 
 --------------------------------------------------------------------
 theorem best_inclusion {M : PrefModel World} {A : Set World} :

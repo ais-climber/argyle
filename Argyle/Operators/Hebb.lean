@@ -1141,7 +1141,7 @@ theorem hebb_activated_by (net : Net) (A B : Set ℕ) :
 -- don't touch Prop(A) ∩ Prop(B), then n is activated in the
 -- updated net iff it was in the original net.
 --------------------------------------------------------------------
-lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
+lemma hebb_before_intersection (net : Net Node) (A B : Set Node) (n : Node) :
   (∀ x, layer net x < layer net n → x ∉ propagate net A ∩ propagate net B)
   → (n ∈ propagate (hebb_star net A) B ↔ n ∈ propagate net B) := by
 --------------------------------------------------------------------
@@ -1291,11 +1291,11 @@ lemma hebb_before_intersection (net : Net) (A B : Set ℕ) (n : ℕ) :
 
 -- The updated propagation at least contains Prop(A) ∩ Prop(B).
 --------------------------------------------------------------------
-theorem hebb_extens (net : Net) (A B : Set ℕ) :
+theorem hebb_extens (net : Net Node) (A B : Set Node) :
   propagate net A ∩ propagate net B
   ⊆ propagate (hebb_star net A) B := by
 --------------------------------------------------------------------
-  intro (n : ℕ)
+  intro (n : Node)
   intro h₁
 
   -- By induction on the layer of the net containing n
@@ -1397,11 +1397,11 @@ theorem hebb_extens (net : Net) (A B : Set ℕ) :
 -- This is the key lemma for the backwards direction of the
 -- reduction; it expresses an upper bound for Reach(Prop(A), Prop(B))
 --------------------------------------------------------------------
-theorem hebb_updated_path (net : Net) (A B : Set ℕ) :
+theorem hebb_updated_path (net : Net Node) (A B : Set Node) :
   propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B))
   ⊆ propagate (hebb_star net A) B := by
 --------------------------------------------------------------------
-  intro (n : ℕ)
+  intro (n : Node)
   intro h₁
 
   -- By induction on the layer of the net containing n
@@ -1481,7 +1481,7 @@ theorem hebb_updated_path (net : Net) (A B : Set ℕ) :
 -- This is the key lemma for the forward direction of the reduction;
 -- it expresses a lower bound for Prop(A) ∩ Reach(Prop(A) ∩ B).
 --------------------------------------------------------------------
-theorem reach_of_hebb_prop (net : Net) (A B : Set ℕ) :
+theorem reach_of_hebb_prop (net : Net Node) (A B : Set Node) :
   propagate net A ∩ propagate (hebb_star net A) B
   ⊆ propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)) := by
 --------------------------------------------------------------------
@@ -1591,12 +1591,12 @@ theorem reach_of_hebb_prop (net : Net) (A B : Set ℕ) :
 ══════════════════════════════════════════════════════════════════-/
 
 --------------------------------------------------------------------
-theorem hebb_reduction (net : Net) (A B : Set ℕ) :
+theorem hebb_reduction (net : Net Node) (A B : Set Node) :
   propagate (hebb_star net A) B =
   propagate net (B ∪ (propagate net A ∩ reachable net ((propagate net A) ∩ (propagate net B)))) := by
 --------------------------------------------------------------------
   apply ext
-  intro (n : ℕ)
+  intro (n : Node)
   simp only [Membership.mem, Set.Mem, propagate]
 
   -- By induction on the layer of the net containing n
@@ -1885,14 +1885,14 @@ theorem hebb_reduction (net : Net) (A B : Set ℕ) :
 -- COROLLARY: If we plug in Prop(A) ∩ Prop(B) = ∅,
 -- then the update has no effect on the propagation!
 --------------------------------------------------------------------
-theorem hebb_reduction_empty (net : Net) (A B : Set ℕ) :
+theorem hebb_reduction_empty (net : Net Node) (A B : Set Node) :
   propagate net A ∩ propagate net B = ∅ →
 
   propagate (hebb_star net A) B = propagate net B := by
 --------------------------------------------------------------------
   intro h₁
   apply ext
-  intro (n : ℕ)
+  intro (n : Node)
 
   -- We apply [reach_empty_of_inter_empty]
   -- to get Prop(A) ∩ Reach(Prop(A) ∩ Prop(B)) = ∅

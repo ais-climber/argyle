@@ -11,7 +11,7 @@ variable (net : Net Node)
 --  to do recursion.)
 --
 -- n ∈ propagate_acc(S) iff either:
---   Base Case (L=0): n ∈ S
+--   Base Case (L=0): n ∈ S or n = bias ('bias' always activates)
 --   Rcrs Case (L≥0): n ∈ S, or the nodes m preceding n activate n.
 --     (We check their activation values via propagate_acc on m)
 --
@@ -27,7 +27,7 @@ variable (net : Net Node)
 @[simp]
 def propagate_acc (net : Net Node) (S : Set Node) (n : Node) (L : ℕ) : Prop :=
   match L with
-  | Nat.zero => n ∈ S
+  | Nat.zero => n ∈ S ∨ (n = net.bias)
   | Nat.succ _ =>
     let preds := preds net n
     let prev_activ := List.map (fun i =>
@@ -118,7 +118,7 @@ lemma activ_agree (net : Net Node) (A B : Set Node) (n : Node) :
 lemma prop_layer_zero (net : Net Node) : ∀ (S : Set Node) (n : Node),
   layer net n = 0
   → n ∈ propagate net S
-  → n ∈ S := by
+  → n ∈ S ∨ (n = net.bias) := by
 --------------------------------------------------------------------
   intro (S : Set Node) (n : Node)
         (hL : layer net n = 0)
@@ -145,7 +145,7 @@ theorem propagate_is_extens :
   -- Base Step
   case zero =>
     simp only [propagate_acc]
-    exact h₁
+    exact Or.inl h₁
 
   -- Inductive Step
   case succ k _ =>
@@ -185,7 +185,7 @@ theorem propagate_is_idempotent :
   case hz =>
     simp only [Membership.mem, Set.Mem, propagate_acc]
     conv in (layer net n) => rw [hL]
-    simp only [propagate_acc]
+    simp [propagate_acc]
     exact ⟨fun x => x, fun x => x⟩
 
   -- Inductive Step
@@ -271,13 +271,20 @@ theorem propagate_is_cumulative :
   case hz =>
     simp only [propagate_acc]
     apply Iff.intro
-    case mp => exact fun h₃ => h₁ h₃
+    case mp =>
+      intro h₃
+      cases h₃
+      case inl h₄ => exact Or.inl (h₁ h₄)
+      case inr h₄ => exact Or.inr h₄
     case mpr =>
       intro h₃
-      have h₄ : propagate_acc net A n (layer net n) := h₂ h₃
-      conv at h₄ in (layer net n) => rw [hL]
-      simp only [propagate_acc] at h₄
-      exact h₄
+      cases h₃
+      case inl h₄ =>
+        have h₅ : propagate_acc net A n (layer net n) := h₂ h₄
+        conv at h₅ in (layer net n) => rw [hL]
+        simp only [propagate_acc] at h₅
+        exact h₅
+      case inr h₄ => exact Or.inr h₄
 
   -- Inductive Step
   case hi k IH =>

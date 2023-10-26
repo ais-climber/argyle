@@ -1,10 +1,46 @@
 import Mathlib.Data.List.Sigma
 import Mathlib.Data.Real.Basic
 import Mathlib.Data.Rel
+set_option checkBinderAnnotations false
 
 -------------------------------------------------
 -- Helper functions and lemmas
 -------------------------------------------------
+
+inductive Rel.Path (R : Rel α α) : α → α → Type where
+  | trivial {u : α} :
+      Path R u u
+  | from_path {u v w : α} :
+      Path R u v → R v w → Path R u w
+
+--------------------------------------------------------------------
+theorem Path_trans {u v w : α} (R : Rel α α) :
+  R.Path u v → R.Path v w → R.Path u w := by
+--------------------------------------------------------------------
+  intro (h₁ : R.Path u v)
+  intro (h₂ : R.Path v w)
+
+  induction h₂
+  case trivial => exact h₁
+  case from_path x y _ edge_xy path_ux =>
+    exact Rel.Path.from_path path_ux edge_xy
+
+-- TODO: Fill these out!!!
+/-
+def Path_length {u v : Node} (g : Graph Node) : g.Path u v → ℕ :=
+  sorry
+
+noncomputable
+def distance (g : Graph Node) (u v : Node) : ℕ :=
+  sorry
+-/
+
+
+-- Note that we don't allow reflexive edges at all.
+-- We do this by simply saying "the type of paths from x to x
+-- is empty."
+def Acyclic (R : Rel α α) : Prop :=
+  ∀ {x : α}, IsEmpty (Rel.Path R x x)
 
 -- Strangely not in the standard library
 -- A relation is fully connected iff all elements x y
@@ -24,7 +60,37 @@ def Rel.swap (R : Rel α α) : Rel α α :=
 theorem Rel.swap_connected {R : Rel α α} :
   Connected R → Connected R.swap := by
 --------------------------------------------------------------------
-  sorry
+  simp only [Connected, swap]
+  intro h₁ x y
+  cases h₁ x y
+
+  -- The first two cases are easy (either R x y or R y x,
+  -- and we just swap whichever is true.)
+  case inl h₂ => exact Or.inr (Or.inl h₂)
+  case inr h₂ =>
+    cases h₂
+    case inl h₃ => exact Or.inl h₃
+    case inr h₃ =>
+      -- In this case, the image of the swapped is the preimage of the
+      -- original, and vice-versa!
+      sorry
+
+-- If we have a path from u to v over R, then we also
+-- have a path from v to u over R.swap
+--------------------------------------------------------------------
+theorem Rel.swap_path {R : Rel α α} {u v : α} :
+  Nonempty (R.swap.Path v u) ↔ Nonempty (R.Path u v) := by
+--------------------------------------------------------------------
+  simp only [swap]
+  apply Iff.intro
+  case mp =>
+    intro h₁
+    match Classical.exists_true_of_nonempty h₁ with
+    | ⟨x, hx⟩ =>
+      sorry
+      -- exact nonempty_of_exists ⟨_, _⟩
+
+  case mpr => sorry
 
 -- This isn't in the standard library, but essentially it says:
 -- If we treat xs like an association list, and we *don't*

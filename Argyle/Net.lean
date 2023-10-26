@@ -32,9 +32,12 @@ structure Net (Node : Type) where
   threshold : ℚ
   activ_thres : activation (threshold) = 1
 
-  -- The graph is nonempty, acyclic and fully connected
-  nonempty : Nonempty Node-- OR TRY: Finset.Nonempty graph.node_fintype.elems
-  acyclic : graph.Acyclic
+  -- There is some 'bias' node that shows up in every activation.
+  -- This also means the graph is nonempty.
+  bias : Node
+
+  -- The graph is acyclic and fully connected
+  acyclic : Acyclic graph.Edge
   connected : Connected graph.Edge
 
 -- Because our activation function is bounded above by 1,
