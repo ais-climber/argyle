@@ -41,6 +41,9 @@ def distance (g : Graph Node) (u v : Node) : ℕ :=
 def Acyclic (R : Rel α α) : Prop :=
   ∀ {x : α}, IsEmpty (Rel.Path R x x)
 
+-- ∀ {x y : α}, IsEmpty (∃ (_ : R.Path x y), ∃ (_ : R.Path x y), ⊤)
+
+
 -- Strangely not in the standard library
 -- A relation is fully connected iff all elements x y
 -- are either related, or have exactly the same image

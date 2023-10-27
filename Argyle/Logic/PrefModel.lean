@@ -75,6 +75,20 @@ structure PrefModel (World : Type) where
 
   instance node_decidable : Decidable World := sorry
 
+-- TODO: NOT TRUE IF Edge IS REFLEXIVE!!
+-- If we know u ⟶ v, then we can't have v ⟶ u.
+-- This follows from irreflexivity and transitivity of Edge.
+-- --------------------------------------------------------------------
+-- theorem PrefModel.not_edge_of_edge {M : PrefModel World} {u v : World} :
+--   M.Edge u v → ¬ M.Edge v u := by
+-- --------------------------------------------------------------------
+--   intro h₁
+--   apply by_contradiction
+--   intro h; simp at h
+
+--   have h₂ : M.Edge u u := M.edges_trans h₁ h
+--   exact absurd h₂ (M.edges_irrefl u)
+
 -- If we know u ≼ v, then we can't have v ≼ u.
 -- This follows from irreflexivity and transitivity of Pref.
 --------------------------------------------------------------------

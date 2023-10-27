@@ -49,10 +49,15 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
   -- let bias := Classical.choose (Classical.exists_true_of_nonempty M.worlds_nonempty)
   let bias := Classical.choose M.upper_bound
 
-  -- Edge is just the edges of the PrefModel, but with x, y swapped.
+  -- Edge is just the edges of the PrefModel, but with x, y swapped
+  -- and all reflexive edges removed.
   -- Excit follows M.Pref, but we extend it so that bias ⟶ n for
   -- all nonminimal n.
-{ Edge := M.Edge.swap
+{ Edge := fun u v =>
+    if u = v then
+      False
+    else
+      M.Edge.swap u v
   Excit := fun u v =>
     if u = bias then
       v ∉ M.Pref.best M.worlds.elems
@@ -71,11 +76,13 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
     apply by_contradiction
     intro h
     push_neg at h
-    conv at h => enter [1, x]; rw [not_isEmpty_iff]; rw [Rel.swap_path]
+    sorry
+    -- conv at h => enter [1, x]; rw [not_isEmpty_iff]; rw [Rel.swap_path]
 
-    match h with
-    | ⟨w, hw⟩ => sorry
-  connected := Rel.swap_connected M.edges_connected
+    -- match h with
+    -- | ⟨w, hw⟩ => sorry
+  connected := sorry -- Now much harder to prove!
+    -- sorry -- Rel.swap_connected M.edges_connected
 
   -- If we have an excitation edge Excit m n,
   -- then we have an "ordinary" edge Edge m n.
@@ -94,7 +101,8 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
     -- Case: Otherwise, we have Excit m n because m ≼ n.
     case neg =>
       rw [if_neg h] at h₁
-      exact M.pref_edges _ _ h₁
+      sorry
+      -- exact M.pref_edges _ _ h₁
 
   inhib_excit := sorry
 }
@@ -158,18 +166,30 @@ lemma reachable_toNet {M : PrefModel World} {S : Set World} {w : World} :
           simp only [PrefModel.toNet, PrefModel.toInhibitionNet] at edge_xy
           simp only [InhibitionNet.toNet] at edge_xy
           simp only [Rel.swap] at edge_xy
-          exact edge_xy
+
+          by_cases x = y
+          case pos => rw [if_pos h] at edge_xy; exact edge_xy.elim
+          case neg => rw [if_neg h] at edge_xy; exact edge_xy
 
         -- By IH there exists a v ∈ S with M.Edge
         match IH h₂ with
-        | ⟨v, hv⟩ =>
-          exact ⟨v, ⟨hv.1, M.edges_trans h₃ hv.2⟩⟩
+        | ⟨v, hv⟩ => exact ⟨v, ⟨hv.1, M.edges_trans h₃ hv.2⟩⟩
 
   case mpr =>
     intro h₁
     match h₁ with
     | ⟨u, hu⟩ =>
-      exact ⟨u, ⟨Rel.Path.from_path Rel.Path.trivial hu.2, hu.1⟩⟩
+      by_cases u = w
+      case pos =>
+        rw [← h]
+        exact reach_is_extens _ _ hu.1
+      case neg =>
+        have h₂ : Graph.Edge (PrefModel.toNet M).net.graph u w := by
+          simp only [PrefModel.toNet, InhibitionNet.toNet]
+          simp only [PrefModel.toInhibitionNet]
+          rw [if_neg h]
+          exact hu.2
+        exact ⟨u, ⟨Rel.Path.from_path Rel.Path.trivial h₂, hu.1⟩⟩
 
 --------------------------------------------------------------------
 lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
@@ -411,7 +431,42 @@ lemma propagate_toNet_helper₂ {N : InhibitionNet Node} {S : Set Node} :
   -- Inductive Step
   ---------------------
   case succ L IH =>
-    sorry
+    apply Iff.intro
+
+    -- Forward direction
+    case mp =>
+      intro h₁
+      simp only [propagate_acc] at h₁
+      cases h₁
+
+      case inl h₂ => exact Or.inl h₂
+      case inr h₂ =>
+        apply Or.inr
+        apply Or.inr
+        sorry
+
+    -- Backward direction
+    -- We have three cases; either
+    --    - n ∈ S
+    --    - n = bias
+    --    - We have Excit m n for some m, and no inhibitory synapse
+    --        stops this activation.
+    case mpr =>
+      simp only [propagate_acc]
+      intro h₁
+      cases h₁
+
+      case inl h₂ => exact Or.inl h₂
+      case inr h₂ =>
+        cases h₂
+        case inl h₃ =>
+          -- TODO: Prove that this case is impossible!
+          -- (n = bias can only be on layer 0!!)
+          sorry
+        case inr h₃ =>
+          -- This is the important case (Excit m n, and no inhibitory
+          -- synapses stop this)
+          sorry
 
 --------------------------------------------------------------------
 lemma propagate_toNet {M : PrefModel World} {S : Set World} :
