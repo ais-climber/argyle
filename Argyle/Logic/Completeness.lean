@@ -44,8 +44,10 @@ theorem preds_index {M : PrefModel World} {u v : World} :
 -- See pages 186, 187 of the (2001) paper.
 noncomputable
 def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
-  -- For the bias node, we just pick an arbitrary world.
-  let bias := Classical.choose (Classical.exists_true_of_nonempty M.worlds_nonempty)
+  -- For the bias node, we just any arbitrary world that
+  -- is less preferred than every other world (may not be unique).
+  -- let bias := Classical.choose (Classical.exists_true_of_nonempty M.worlds_nonempty)
+  let bias := Classical.choose M.upper_bound
 
   -- Edge is just the edges of the PrefModel, but with x, y swapped.
   -- Excit follows M.Pref, but we extend it so that bias ⟶ n for
@@ -56,7 +58,8 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
       v ∉ M.Pref.best M.worlds.elems
     else
       M.Pref u v
-  Inhib := sorry
+  Inhib := fun b ⟨u, v⟩ =>
+    sorry
   proposition_map := fun p => { w | M.proposition_eval p w }
 
   nodes := M.worlds
@@ -74,16 +77,24 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
     | ⟨w, hw⟩ => sorry
   connected := Rel.swap_connected M.edges_connected
 
+  -- If we have an excitation edge Excit m n,
+  -- then we have an "ordinary" edge Edge m n.
   excit_edge := by
     intro m n h₁
     simp only [Rel.swap]
     by_cases m = bias
+
+    -- Case: Excit m n, where m = bias
+    -- (this means that n ∉ Best(N).)
     case pos =>
       rw [if_pos h] at h₁
+      rw [h]
       sorry
+
+    -- Case: Otherwise, we have Excit m n because m ≼ n.
     case neg =>
       rw [if_neg h] at h₁
-      sorry
+      exact M.pref_edges _ _ h₁
 
   inhib_excit := sorry
 }
@@ -187,12 +198,23 @@ lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
       exact absurd h₂ h₃
     case inr h₂ =>
       cases h₂
+
+      -- CASE: w is the 'bias' node
       case inl h₃ =>
-        -- CASE: w is the 'bias' node
-        sorry
+        simp only [PrefModel.toInhibitionNet] at h₃
+        rw [Set.mem_compl_iff]
+        rw [not_best_iff]
+
+        have h₄ : ∀ u, PrefModel.Pref M u w := by
+          rw [h₃]
+          exact Classical.choose_spec M.upper_bound
+        by_cases w ∈ Sᶜ
+        case neg => exact Or.inl h
+        case pos => exact Or.inr ⟨w, ⟨h, M.pref_irrefl w⟩⟩
+
+      -- CASE: w is activated by some u
+      -- (and there is no inhibitory edge that stops this)
       case inr h₃ =>
-        -- CASE: w is activated by some u
-        -- (and there is no inhibitory edge that stops this)
         simp only [Rel.best]
         simp only [compl]
         rw [Set.mem_setOf]
@@ -279,6 +301,7 @@ lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
 
             -- CONSTRUCT INHIBITION EDGE
             have h₅ : ∀ b, ¬(M.toInhibitionNet).Inhib b (u, w) := by
+              intro b
               sorry
 
             exact ⟨u, ⟨h₄, h₅⟩⟩
@@ -321,55 +344,74 @@ lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
 
               -- CONSTRUCT INHIBITION EDGE
               have h₅ : ∀ b, ¬(M.toInhibitionNet).Inhib b (v, w) := by
+                intro b
                 sorry
 
               exact ⟨v, ⟨h₄, h₅⟩⟩
 
-          /-
-          -- We need to show that u activates w, and there isn't any
-          -- inhibitory edge to stop this.
-          have h₃ : (PrefModel.toInhibitionNet M).Excit u w := by
-            simp only [PrefModel.toInhibitionNet]
-
-            -- Now we need to check whether u is the 'bias' node
-            by_cases u = (PrefModel.toInhibitionNet M).bias
-            case pos =>
-              -- If u is the bias, we just need to show that
-              -- w ∉ Best(W)
-              simp only [PrefModel.toInhibitionNet] at h
-              rw [if_pos h]
-              rw [not_best_iff]
-              exact Or.inr ⟨u, ⟨M.worlds.complete u, hu.2⟩⟩
-
-            case neg =>
-              rename_i w_not_in_S
-              -- Otherwise, we need to show that u ≼ w
-              -- (u is more preferred than w)
-              simp only [PrefModel.toInhibitionNet] at h
-              rw [if_neg h]
-
-              -- This is where we use the Smoothness condition
-              -- of the PrefModel!
-              cases M.pref_smooth (Sᶜ) u
-              case inl h₄ => sorry
-              case inr h₄ => sorry
-
-          have h₄ : ∀ b, ¬(PrefModel.toInhibitionNet M).Inhib b (u, w) := by
-            sorry
-
-          exact ⟨u, ⟨h₃, h₄⟩⟩
-          -/
 --------------------------------------------------------------------
 lemma propagate_toNet_helper₂ {N : InhibitionNet Node} {S : Set Node} :
   propagate (N.toNet.net) S = N.propagate S := by
 --------------------------------------------------------------------
   apply Set.ext
-  intro w
+  intro n
   simp only [InhibitionNet.propagate, Membership.mem, Set.Mem]
+  simp only [propagate]
 
-  -- We will want to do induction on the layers of the net
+  -- By induction on the layer of the net containing n
   -- (to split up the ANN propagation)
-  sorry
+  generalize hL : layer N.toNet.net n = L
+  induction L
+
+  ---------------------
+  -- Base Step
+  ---------------------
+  case zero =>
+    -- Most of these cases are trivial (either n ∈ S or n = bias),
+    -- except for the last case which we show is impossible.
+    simp only [propagate_acc]
+    apply Iff.intro
+
+    case mp =>
+      intro h₁
+      simp only [InhibitionNet.toNet] at h₁
+      cases h₁
+      case inl h₂ => exact Or.inl h₂
+      case inr h₂ => exact Or.inr (Or.inl h₂)
+
+    case mpr =>
+      intro h₁
+      simp only [InhibitionNet.toNet]
+      cases h₁
+      case inl h₂ => exact Or.inl h₂
+      case inr h₂ =>
+        cases h₂
+        case inl h₃ => exact Or.inr h₃
+        case inr h₃ =>
+          -- This is the case that we will show is impossible.
+          -- (n can't be at layer 0 *and* have some m ⟶ n)
+          -- Right now the hypothesis gives us an m with Excit m n,
+          -- so we'll match on that m.
+          match h₃ with
+          | ⟨m, hm⟩ =>
+            have h₄ : (InhibitionNet.toNet N).net.graph.Edge m n := by
+              simp only [InhibitionNet.toNet]
+              exact N.excit_edge _ _ hm.1
+
+            have h₅ : layer (InhibitionNet.toNet N).net m < 0 := by
+              simp at hL
+              rw [← hL]
+              apply layer_preds
+              rw [edge_iff_preds]
+              exact h₄
+
+            exact absurd h₅ (Nat.not_lt_zero (layer _ m))
+
+  ---------------------
+  -- Inductive Step
+  ---------------------
+  case succ L IH =>
+    sorry
 
 --------------------------------------------------------------------
 lemma propagate_toNet {M : PrefModel World} {S : Set World} :

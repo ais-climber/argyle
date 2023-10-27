@@ -71,6 +71,8 @@ structure PrefModel (World : Type) where
   pref_smooth : Smoothness Pref
   -- ...
 
+  pref_edges : ∀ m n, Pref m n → Edge n m
+
   instance node_decidable : Decidable World := sorry
 
 -- If we know u ≼ v, then we can't have v ≼ u.
@@ -85,3 +87,20 @@ theorem PrefModel.not_pref_of_pref {M : PrefModel World} {u v : World} :
 
   have h₂ : M.Pref u u := M.pref_trans h₁ h
   exact absurd h₂ (M.pref_irrefl u)
+
+-- There is some "least preferred" element of M, i.e. some w s.t.
+-- ∀ u, u ≼ w.  This is what we will take to be our 'bias' element.
+-- Since ≼ isn't a linear order, this upper bound might not be unique!
+--
+-- TODO: This *should* follow from irreflexivity and transitivity,
+--   i.e. there are no cycles and so we should be able to find an end.
+--------------------------------------------------------------------
+theorem PrefModel.upper_bound {M : PrefModel World} :
+  ∃ w, ∀ u, M.Pref u w := by
+--------------------------------------------------------------------
+  -- Rather than giving an explicit least preferred element, I argue
+  -- by contradiction.
+  apply by_contradiction
+  intro h
+  push_neg at h
+  sorry
