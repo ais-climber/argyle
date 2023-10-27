@@ -20,7 +20,7 @@ def satisfies (M : PrefModel World) (w : World) : Formula → Prop := fun
 | not ϕ => ¬ (satisfies M w ϕ)
 | ϕ and ψ => (satisfies M w ϕ) ∧ (satisfies M w ψ)
 | [K] ϕ => ∀ u, M.Edge w u → satisfies M u ϕ
-| [T] ϕ => w ∈ M.best {u : World | satisfies M u ϕ}
+| [T] ϕ => w ∈ M.Pref.best {u : World | satisfies M u ϕ}
 notation:35 model "; " w " ⊩ " ϕ => satisfies model w ϕ
 
 -- M models a *formula* ϕ iff w ⊩ ϕ for *all* points w ∈ M.worlds
@@ -43,7 +43,7 @@ notation:30 Γ:40 " ⊨ " ϕ:40 => entails Γ ϕ
 --------------------------------------------------------------------
 theorem conditional_def {M : PrefModel World} {ϕ ψ : Formula} :
   models M (ϕ ⟹ ψ) ↔
-    ∀ w, w ∈ M.best {u | satisfies M u ϕ} → satisfies M w ψ := by
+    ∀ w, w ∈ M.Pref.best {u | satisfies M u ϕ} → satisfies M w ψ := by
 --------------------------------------------------------------------
   unfold Formula.conditional
   simp [models, satisfies]

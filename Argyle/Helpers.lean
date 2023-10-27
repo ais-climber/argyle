@@ -35,7 +35,6 @@ def distance (g : Graph Node) (u v : Node) : ℕ :=
   sorry
 -/
 
-
 -- Note that we don't allow reflexive edges at all.
 -- We do this by simply saying "the type of paths from x to x
 -- is empty."
