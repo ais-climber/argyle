@@ -75,6 +75,7 @@ structure PrefModel (World : Type) where
 
   instance node_decidable : Decidable World := sorry
 
+
 -- TODO: NOT TRUE IF Edge IS REFLEXIVE!!
 -- If we know u ⟶ v, then we can't have v ⟶ u.
 -- This follows from irreflexivity and transitivity of Edge.
@@ -109,8 +110,8 @@ theorem PrefModel.not_pref_of_pref {M : PrefModel World} {u v : World} :
 -- TODO: This *should* follow from irreflexivity and transitivity,
 --   i.e. there are no cycles and so we should be able to find an end.
 --------------------------------------------------------------------
-theorem PrefModel.upper_bound {M : PrefModel World} :
-  ∃ w, ∀ u, M.Pref u w := by
+theorem PrefModel.lower_bound {M : PrefModel World} :
+  ∃ w, ∀ u, M.Pref w u := by
 --------------------------------------------------------------------
   -- Rather than giving an explicit least preferred element, I argue
   -- by contradiction.

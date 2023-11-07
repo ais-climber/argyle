@@ -7,6 +7,7 @@ import Argyle.Activation
 
 import Argyle.Operators.Reachable
 import Argyle.Operators.Propagate
+import Argyle.Helpers
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Lattice
 import Mathlib.Logic.Relation
@@ -47,24 +48,26 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
   -- For the bias node, we just any arbitrary world that
   -- is less preferred than every other world (may not be unique).
   -- let bias := Classical.choose (Classical.exists_true_of_nonempty M.worlds_nonempty)
-  let bias := Classical.choose M.upper_bound
+  let bias := Classical.choose M.lower_bound
 
   -- Edge is just the edges of the PrefModel, but with x, y swapped
   -- and all reflexive edges removed.
   -- Excit follows M.Pref, but we extend it so that bias ⟶ n for
   -- all nonminimal n.
 { Edge := fun u v =>
-    if u = v then
-      False
-    else
-      M.Edge.swap u v
-  Excit := fun u v =>
-    if u = bias then
-      v ∉ M.Pref.best M.worlds.elems
-    else
-      M.Pref u v
+    if u = v then False
+    else M.Edge.swap u v
+  Excit := M.Pref
   Inhib := fun b ⟨u, v⟩ =>
-    sorry
+    -- We place inhibition edges as follows:
+    --     preds[k] ⟶ ⟨preds[0], v⟩
+    --     preds[i] ⟶ ⟨preds[i+1], v⟩
+    let preds := (Finset.filter (fun u => M.Pref u v) M.worlds.elems).toList
+    match preds.indexOf? u with
+    | none => False
+    | some Nat.zero => (preds.indexOf b) = (preds.length - 1)
+    | some (Nat.succ i) => (preds.indexOf b) = i
+
   proposition_map := fun p => { w | M.proposition_eval p w }
 
   nodes := M.worlds
@@ -89,22 +92,33 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
   excit_edge := by
     intro m n h₁
     simp only [Rel.swap]
-    by_cases m = bias
+    have h₂ : m ≠ n := by
+      intro hcontr
+      rw [hcontr] at h₁
+      exact absurd h₁ (M.pref_irrefl n)
 
-    -- Case: Excit m n, where m = bias
-    -- (this means that n ∉ Best(N).)
-    case pos =>
-      rw [if_pos h] at h₁
-      rw [h]
-      sorry
+    rw [if_neg h₂]
+    exact M.pref_edges _ _ h₁
 
-    -- Case: Otherwise, we have Excit m n because m ≼ n.
-    case neg =>
-      rw [if_neg h] at h₁
-      sorry
-      -- exact M.pref_edges _ _ h₁
+  inhib_excit := by
+    intro b m n h₁
+    conv at h₁ => simp
+    generalize hpreds : (Finset.filter (fun u => M.Pref u n) M.worlds.elems).toList = preds
+    rw [hpreds] at h₁
 
-  inhib_excit := sorry
+    -- We show that m is a predecessor of n, by cases on
+    -- the index of m in preds(n)
+    have h₂ : m ∈ preds := by
+      split at h₁
+      case _ h₂ => exact h₁.elim
+      case _ h₂ => exact indexOf?_some.mpr ⟨0, h₂⟩
+      case _ i h₂ => exact indexOf?_some.mpr ⟨i + 1, h₂⟩
+
+    -- We can now show that Pref m n by definition of filter
+    rw [← hpreds] at h₂
+    rw [Finset.mem_toList] at h₂
+    rw [Finset.mem_filter] at h₂
+    exact h₂.2
 }
 
 -- This is the second part of the construction,
@@ -198,181 +212,211 @@ lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
   apply Set.ext
   intro w
   simp only [InhibitionNet.propagate]
-  apply Iff.intro
+  simp only [Membership.mem, Set.Mem]
+
+  -- By induction on the layer of 'w' in the *Inhibition Net*
+  generalize hL : (PrefModel.toInhibitionNet M).layer w = L
+  induction L using Nat.case_strong_induction_on generalizing w
 
   ---------------------
-  -- Forward Direction
+  -- Base Step
   ---------------------
-  case mp =>
-    intro h₁
-    simp only [Membership.mem, Set.Mem] at h₁
+  case hz =>
+    simp only [InhibitionNet.propagate_acc]
+    apply Iff.intro
 
-    -- By cases on propagation for InhibitionNet
-    cases h₁
-    case inl h₂ =>
+    case mp =>
+      intro h₁
+      cases h₁
+
       -- CASE: w ∈ S.  So w ∉ Sᶜ, so by [best_inclusion], w ∉ (best(Sᶜ))ᶜ.
-      apply by_contradiction
-      intro h
-      simp at h
-      have h₃ : w ∈ (Sᶜ) := best_inclusion h
-      exact absurd h₂ h₃
-    case inr h₂ =>
-      cases h₂
+      case inl h₂ =>
+        intro h
+        simp at h
+        have h₃ : w ∈ (Sᶜ) := best_inclusion h
+        exact absurd h₂ h₃
 
       -- CASE: w is the 'bias' node
-      case inl h₃ =>
-        simp only [PrefModel.toInhibitionNet] at h₃
+      case inr h₂ =>
+        simp only [PrefModel.toInhibitionNet] at h₂
+        rw [← @Set.mem_def _ _ (Rel.best M.Pref (Sᶜ)ᶜ)]
         rw [Set.mem_compl_iff]
         rw [not_best_iff]
 
-        have h₄ : ∀ u, PrefModel.Pref M u w := by
-          rw [h₃]
-          exact Classical.choose_spec M.upper_bound
         by_cases w ∈ Sᶜ
         case neg => exact Or.inl h
         case pos => exact Or.inr ⟨w, ⟨h, M.pref_irrefl w⟩⟩
 
-      -- CASE: w is activated by some u
-      -- (and there is no inhibitory edge that stops this)
-      case inr h₃ =>
-        simp only [Rel.best]
-        simp only [compl]
-        rw [Set.mem_setOf]
-        rw [Set.mem_setOf]
-        rw [Set.mem_setOf]
-        push_neg
+    case mpr =>
+      -- We apply [prop_layer_zero]
+      intro h₁
+      sorry
+      -- simp only [PrefModel.toInhibitionNet]
 
-        match h₃ with
+
+      -- apply (PrefModel.toInhibitionNet M).prop_layer_zero S w hL
+      -- apply (PrefModel.toInhibitionNet M).propagate_is_extens
+
+      -- rw [← Set.not_mem_compl_iff]
+      -- intro hcontr
+
+  ---------------------
+  -- Inductive Step
+  ---------------------
+  case hi L IH =>
+    simp only [InhibitionNet.propagate_acc]
+    apply Iff.intro
+
+    ---------------------
+    -- Forward Direction
+    ---------------------
+    case mp =>
+      intro h₁
+      cases h₁
+
+      -- CASE : w ∈ S. Again, w ∉ Sᶜ, so by [best_inclusion], w ∉ (best(Sᶜ))ᶜ.
+      case inl h₂ =>
+        intro h
+        simp at h
+        have h₃ : w ∈ (Sᶜ) := best_inclusion h
+        exact absurd h₂ h₃
+
+      -- CASE: w is activated by some u, and there is no inhibitory
+      --   edge that stops this.
+      case inr h₂ =>
+        match h₂ with
         | ⟨u, hu⟩ =>
-          intro h₄
           push_neg at hu
-          simp only [PrefModel.toInhibitionNet] at hu
 
-          -- This is the first use of the Smoothness condition of
-          -- the PrefModel!  Either u ∈ Best(Sᶜ), or there's some
-          -- more preferred v ∈ Best(Sᶜ).
+          -- First, we check whether u is the 'bias' node.
+          -- If so, we immediately have our goal, w ∉ best(Sᶜ).
+          have hedge : M.toInhibitionNet.Excit u w := hu.2.2.1
+          simp only [PrefModel.toInhibitionNet] at hedge
+
+          -- By our Inductive Hypothesis, u ∈ (best(Sᶜ))ᶜ,
+          -- i.e. u ∉ best(Sᶜ).
+          have h₃ : u ∉ M.Pref.best (Sᶜ) := by
+            generalize hLu : M.toInhibitionNet.layer u = Lu
+            rw [hLu] at hu
+            rw [hL] at hu
+            rw [IH Lu (Nat.le_of_lt_succ hu.1) u hLu] at hu
+            exact hu.2.1
+
+          -- This is where we apply the Smoothness condition!
+          -- By smoothness, since u is not the best(Sᶜ), some
+          -- other v ≺ u is the best(Sᶜ).
           cases M.pref_smooth (Sᶜ) u
-
-          -- CASE: u ∈ Best(Sᶜ).  So u ∈ Sᶜ, and u ≼ w (thus w ⋠ u).
-          case inl h₄ =>
-            have h₅ : u ∈ Sᶜ := best_inclusion h₄
-            simp [Rel.best] at h₄
-            exact ⟨u, ⟨h₅, M.not_pref_of_pref (h₄.2 w)⟩⟩
-
-          -- CASE: Some other v ≼ u is v ∈ Best(Sᶜ).  So *this*
-          --   v ∈ Sᶜ, and v ≼ w (thus w ⋠ v).
+          case inl h₄ => exact absurd h₄ h₃
           case inr h₄ =>
             match h₄ with
             | ⟨v, hv⟩ =>
-              have h₅ : v ∈ Sᶜ := best_inclusion hv.2
-              simp [Rel.best] at hv
-              exact ⟨v, ⟨h₅, M.not_pref_of_pref (hv.2.2 w)⟩⟩
+              -- But since v is the best(Sᶜ), w is not the best(Sᶜ)!
+              -- And this is exactly what we needed to show!
+              rw [← @Set.mem_def _ _ (Rel.best M.Pref (Sᶜ)ᶜ)]
+              rw [Set.mem_compl_iff]
+              rw [not_best_iff]
 
-  ---------------------
-  -- Backward Direction
-  ---------------------
-  case mpr =>
-    intro h₁
-    simp [Membership.mem, Set.Mem]
-    rw [Set.mem_compl_iff] at h₁
-    rw [not_best_iff] at h₁
-    simp at h₁
+              have h₅ : M.Pref v w := M.pref_trans hv.1 hedge
+              have h₆ : v ∈ Sᶜ := best_inclusion hv.2
+              exact Or.inr ⟨v, ⟨h₆, (PrefModel.not_pref_of_pref h₅)⟩⟩
+          /-
+          by_cases u = M.toInhibitionNet.bias
+          case pos =>
+            -- CASE: u is the 'bias' node.  We show that this leads
+            -- to a contradiction (this case is impossible.)
+            simp only [PrefModel.toInhibitionNet] at h
+            rw [if_pos h] at hedge
+            rw [not_best_iff] at hedge
+            rw [← @Set.mem_def _ _ (Rel.best M.Pref (Sᶜ)ᶜ)]
+            rw [Set.mem_compl_iff]
+            rw [not_best_iff]
 
-    -- Either w ∈ S (and so trivially w is active in the InhibitionNet),
-    -- Or w ∉ S, and so ∃ u∉S such that w is *not* more preferred than u.
-    by_cases w ∈ S
-    case pos => exact Or.inl h
-    case neg =>
-      cases h₁
-      case inl h₂ => exact absurd h₂ h
-      case inr h₂ =>
-        apply Or.inr
-        apply Or.inr
-        match h₂ with
-        | ⟨u, hu⟩ =>
-          -- This is where we use the Smoothness condition of
-          -- the PrefModel!  Either u ∈ Best(Sᶜ), or there's some
-          -- more preferred v ∈ Best(Sᶜ).
-          cases M.pref_smooth (Sᶜ) u
+            cases hedge
+            case inl h₃ => sorry
+            case inr h₃ =>
+              have h₄ := Classical.choose_spec M.lower_bound
+              rw [← h] at h₄
+              exact Or.inr ⟨u, ⟨sorry, PrefModel.not_pref_of_pref sorry⟩⟩
 
-          -- CASE: u ∈ Best(Sᶜ).  So u is more preferred than any other w ∈ Sᶜ.
-          --   This means we have the edge from u ⟶ w, and that no other
-          --   bias connection prevents this from activating.
-          case inl h₃ =>
-            -- CONSTRUCT EXCITATION EDGE
-            have h₄ : (M.toInhibitionNet).Excit u w := by
-              simp only [PrefModel.toInhibitionNet]
+          case neg =>
+            simp only [PrefModel.toInhibitionNet] at h
+            rw [if_neg h] at hedge
 
-              -- Now we need to check whether u is the 'bias' node
-              by_cases u = (PrefModel.toInhibitionNet M).bias
-              case pos =>
-                -- If u is the bias, we just need to show that w ∉ Best(W)
-                simp only [PrefModel.toInhibitionNet] at h
-                rw [if_pos h]
+            -- By our Inductive Hypothesis, u ∈ (best(Sᶜ))ᶜ,
+            -- i.e. u ∉ best(Sᶜ).
+            have h₃ : u ∉ M.Pref.best (Sᶜ) := by
+              generalize hLu : M.toInhibitionNet.layer u = Lu
+              rw [hLu] at hu
+              rw [hL] at hu
+              rw [IH Lu (Nat.le_of_lt_succ hu.1) u hLu] at hu
+              exact hu.2.1
+
+            -- This is where we apply the Smoothness condition!
+            -- By smoothness, since u is not the best(Sᶜ), some
+            -- other v ≺ u is the best(Sᶜ).
+            cases M.pref_smooth (Sᶜ) u
+            case inl h₄ => exact absurd h₄ h₃
+            case inr h₄ =>
+              match h₄ with
+              | ⟨v, hv⟩ =>
+                -- But since v is the best(Sᶜ), w is not the best(Sᶜ)!
+                -- And this is exactly what we needed to show!
+                rw [← @Set.mem_def _ _ (Rel.best M.Pref (Sᶜ)ᶜ)]
+                rw [Set.mem_compl_iff]
                 rw [not_best_iff]
-                exact Or.inr ⟨u, ⟨M.worlds.complete u, hu.2⟩⟩
 
-              case neg =>
-                -- Otherwise, we need to show that u ≼ w (u is more preferred than w)
-                simp only [PrefModel.toInhibitionNet] at h
-                rw [if_neg h]
-                simp [Rel.best] at h₃
-                exact h₃.2 w
+                have h₅ : M.Pref v w := M.pref_trans hv.1 hedge
+                have h₆ : v ∈ Sᶜ := best_inclusion hv.2
+                exact Or.inr ⟨v, ⟨h₆, (PrefModel.not_pref_of_pref h₅)⟩⟩
+            -/
+    ---------------------
+    -- Backward Direction
+    ---------------------
+    case mpr =>
+      contrapose
+      intro h₁
+      push_neg at h₁
+      rw [← @Set.mem_def _ _ (Rel.best M.Pref (Sᶜ)ᶜ)]
+      rw [Set.mem_compl_iff]
+      simp
 
-            -- CONSTRUCT INHIBITION EDGE
-            have h₅ : ∀ b, ¬(M.toInhibitionNet).Inhib b (u, w) := by
-              intro b
-              sorry
+      -- In fact, *every* predecessor of w will activate.
+      -- Intuitively: These predecessors will each inhibit each
+      -- other, which prevents w from firing!
+      have h₂ : ∀ u, M.toInhibitionNet.layer u < M.toInhibitionNet.layer w →
+        M.toInhibitionNet.Excit u w → u ∈ M.toInhibitionNet.propagate S := by
 
-            exact ⟨u, ⟨h₄, h₅⟩⟩
+        -- Suppose not. Then we have *some* u ⟶ w that is inactive.
+        apply by_contradiction
+        intro hcontr
+        push_neg at hcontr
 
-          -- CASE: There's some better v ≼ u with v ∈ Best(Sᶜ).
-          --   We match on this v; we show that there's an edge from v ⟶ w,
-          --   and that no other bias connection prevents this from activating.
-          case inr h₃ =>
-            match h₃ with
-            | ⟨v, hv⟩ =>
-              -- CONSTRUCT EXCITATION EDGE
-              have h₄ : (PrefModel.toInhibitionNet M).Excit v w := by
-                simp only [PrefModel.toInhibitionNet]
+        match hcontr with
+        | ⟨u, hu⟩ => sorry
 
-                -- Now we need to check whether v is the 'bias' node
-                by_cases v = (M.toInhibitionNet).bias
-                case pos =>
-                  -- If v is the bias, we just need to show that w ∉ Best(W)
-                  -- This is exactly the same check as before.
-                  simp only [PrefModel.toInhibitionNet] at h
-                  rw [if_pos h]
-                  rw [not_best_iff]
-                  simp [Rel.best] at hv
 
-                  -- NOTE: By irreflexivity and transitivity,
-                  --   we have w ⋠ v  (since otherwise w ≼ v and v ≼ w)
-                  have h₄ : ¬ M.Pref w v := by
-                    apply by_contradiction
-                    intro h; simp at h
-                    exact absurd h (M.not_pref_of_pref (hv.2.2 w))
+      -- Applying our Inductive Hypothesis, this says that every
+      -- u ≺ w is NOT a best(Sᶜ)-world!
+      have h₃ : ∀ u, M.Pref u w → u ∉ M.Pref.best (Sᶜ) := by
+        sorry
 
-                  exact Or.inr ⟨v, ⟨M.worlds.complete v, h₄⟩⟩
-                case neg =>
-                  -- Otherwise, we need to show that v ≼ w (v is more preferred than w)
-                  -- But this is true, because v ∈ Best(Sᶜ)!
-                  simp only [PrefModel.toInhibitionNet] at h
-                  rw [if_neg h]
-                  simp [Rel.best] at hv
-                  exact hv.2.2 w
+      -- But by Smoothness, this means we must have w ∈ best(Sᶜ)!
+      -- (We prove by cases, but just rule out the negative case.)
+      cases M.pref_smooth (Sᶜ) w
+      case inl h₄ => exact h₄
+      case inr h₄ =>
+        apply absurd h₄
+        push_neg
+        exact h₃
 
-              -- CONSTRUCT INHIBITION EDGE
-              have h₅ : ∀ b, ¬(M.toInhibitionNet).Inhib b (v, w) := by
-                intro b
-                sorry
 
-              exact ⟨v, ⟨h₄, h₅⟩⟩
 
 --------------------------------------------------------------------
 lemma propagate_toNet_helper₂ {N : InhibitionNet Node} {S : Set Node} :
   propagate (N.toNet.net) S = N.propagate S := by
 --------------------------------------------------------------------
+  sorry
+  /-
   apply Set.ext
   intro n
   simp only [InhibitionNet.propagate, Membership.mem, Set.Mem]
@@ -467,6 +511,7 @@ lemma propagate_toNet_helper₂ {N : InhibitionNet Node} {S : Set Node} :
           -- This is the important case (Excit m n, and no inhibitory
           -- synapses stop this)
           sorry
+  -/
 
 --------------------------------------------------------------------
 lemma propagate_toNet {M : PrefModel World} {S : Set World} :

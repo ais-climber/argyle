@@ -341,6 +341,32 @@ lemma weighted_sum_le (fw₁ fw₂ fx₁ fx₂ : ℕ → ℚ) (ls : List ℕ) :
   intro m _
   exact h₁ m
 
+--------------------------------------------------------------------
+theorem indexOf?_some [BEq α] {ls : List α} {x : α} :
+  x ∈ ls ↔ (∃ (i : ℕ), List.indexOf? x ls = some i) := by
+--------------------------------------------------------------------
+  induction ls
+  case nil => simp [List.indexOf?, List.findIdx?]
+  case cons l ls IH =>
+    simp [List.indexOf?, List.findIdx?]
+    apply Iff.intro
+
+    case mp =>
+      -- Inductively, either x = l or x ∈ ls.
+      intro h₁
+      cases h₁
+      case inl h₂ => sorry
+      case inr h₂ => sorry
+
+    case mpr =>
+      -- We have some i such that ls.index(x) = some i
+      intro h₁
+      match h₁ with
+      | ⟨i, hi⟩ => sorry
+
+
+-- List.indexOf? m (Finset.toList (Finset.filter (fun u => Pref M u n) Fintype.elems)) = some (Nat.succ i)
+
 -- WARNING:
 -- This is actually FALSE!  For infinite sets, l[i] is not provably
 -- in l (as far as I can figure.)
