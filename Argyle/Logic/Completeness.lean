@@ -59,14 +59,17 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
     else M.Edge.swap u v
   Excit := M.Pref
   Inhib := fun b ⟨u, v⟩ =>
-    -- We place inhibition edges as follows:
-    --     preds[k] ⟶ ⟨preds[0], v⟩
-    --     preds[i] ⟶ ⟨preds[i+1], v⟩
+    -- Note that we do the reverse of Leitgeb, and
+    -- place inhibition edges as follows:
+    --     preds[0] ⟶ ⟨preds[k-1], v⟩
+    --     preds[i+1] ⟶ ⟨preds[i], v⟩
+    -- (it's a bit easier to map things backwards in
+    --  a functional programming language)
     let preds := (Finset.filter (fun u => M.Pref u v) M.worlds.elems).toList
-    match preds.indexOf? u with
+    match preds.indexOf? b with
     | none => False
-    | some Nat.zero => (preds.indexOf b) = (preds.length - 1)
-    | some (Nat.succ i) => (preds.indexOf b) = i
+    | some Nat.zero => (preds.indexOf u) = (preds.length - 1)
+    | some (Nat.succ i) => (preds.indexOf u) = i
 
   proposition_map := fun p => { w | M.proposition_eval p w }
 
@@ -109,10 +112,11 @@ def PrefModel.toInhibitionNet (M : PrefModel World) : InhibitionNet World :=
     -- We show that m is a predecessor of n, by cases on
     -- the index of m in preds(n)
     have h₂ : m ∈ preds := by
-      split at h₁
-      case _ h₂ => exact h₁.elim
-      case _ h₂ => exact indexOf?_some.mpr ⟨0, h₂⟩
-      case _ i h₂ => exact indexOf?_some.mpr ⟨i + 1, h₂⟩
+      sorry
+      -- split at h₁
+      -- case _ h₂ => exact h₁.elim
+      -- case _ h₂ => exact indexOf?_some.mpr ⟨0, h₂⟩
+      -- case _ i h₂ => exact indexOf?_some.mpr ⟨i + 1, h₂⟩
 
     -- We can now show that Pref m n by definition of filter
     rw [← hpreds] at h₂
@@ -387,12 +391,171 @@ lemma propagate_toNet_helper₁ {M : PrefModel World} {S : Set World} :
         M.toInhibitionNet.Excit u w → u ∈ M.toInhibitionNet.propagate S := by
 
         -- Suppose not. Then we have *some* u ⟶ w that is inactive.
+        -- By the Well-Ordering principle, we get the one with the *greatest*
+        -- index (so all other uᵢ ⟶ w of smaller index are active).
+        -- (Well-ordering applies in the reverse this way because lists are finite.)
         apply by_contradiction
         intro hcontr
         push_neg at hcontr
 
-        match hcontr with
-        | ⟨u, hu⟩ => sorry
+        generalize hpreds : (Finset.filter (fun u => M.Pref u w) M.worlds.elems).toList = preds
+        let X : Set World := fun u =>
+          M.toInhibitionNet.layer u < M.toInhibitionNet.layer w ∧
+          M.toInhibitionNet.Excit u w ∧ u ∉ M.toInhibitionNet.propagate S
+        have hwf : WellFounded (fun u v => preds.indexOf? u > preds.indexOf? v) := by
+          sorry
+        let u := WellFounded.min hwf X hcontr
+
+        -- Note that u is a predecessor of v, by definition.
+        have hu : u ∈ preds := sorry
+
+        -- By cases on the index of u; either u is preds[0]
+        -- or u is preds[i+1].
+        generalize hindx : preds.indexOf? u = indx
+        cases indx
+        case a.none => exact absurd hu (indexOf?_none.mpr hindx)
+        case a.some val =>
+          cases val
+          case zero =>
+            -- In this case, *none* of the predecessors of w are
+            -- active!  But this is absurd, since 'bias' is always
+            -- a predecessor of every node, and bias ∈ Prop(S)!
+            sorry
+
+          case succ i =>
+            -- We want to look at the "previous" node, i.e. if u is preds[i+1]
+            -- we want to look at that u' at preds[i].
+            generalize hu' : preds.get! i = u'
+
+            /-
+            ∀ (m : World),
+            InhibitionNet.layer (PrefModel.toInhibitionNet M) m < InhibitionNet.layer (PrefModel.toInhibitionNet M) w →
+            InhibitionNet.propagate_acc (PrefModel.toInhibitionNet M) S m
+                (InhibitionNet.layer (PrefModel.toInhibitionNet M) m) →
+              InhibitionNet.Excit (PrefModel.toInhibitionNet M) m w
+            -/
+            have h₃ : M.toInhibitionNet.layer u' < M.toInhibitionNet.layer u := by
+              sorry
+
+            have h₄ : u' ∈ M.toInhibitionNet.propagate S := by
+              sorry
+
+            have h₅ : M.toInhibitionNet.Excit u' w := by
+              sorry
+
+            -- We can finally apply our assumption to u':
+            -- u' is an active predecessor of w, so it has some
+            -- b ⟶ ⟨u', w⟩ inhibiting *it*.  But by matching on
+            -- this b, we see that b = u.
+            match h₁.2 u' h₃ h₄ h₅ with
+            | ⟨b, hb⟩ =>
+              have h₆ := hb.2.2
+              simp only [PrefModel.toInhibitionNet] at h₆
+              split at h₆
+              case _ h₇ => exact h₆
+              case _ h₇ =>
+                rw [hpreds] at h₆
+                rw [hpreds] at h₇
+                sorry
+
+              case _ i h₇ =>
+                rw [hpreds] at h₆
+                rw [hpreds] at h₇
+                sorry
+
+
+
+
+        -- let u' : World :=
+        --   match indx with
+        --   | none => absurd hu (indexOf?_none.mpr hindx)
+        --   | some Nat.zero => preds.get! (preds.length - 1)
+        --   | some (Nat.succ i) => preds.get! i
+
+
+
+        -- match (generalizing := true) preds.indexOf? u with
+        -- | none => sorry
+        -- | some Nat.zero => sorry
+        -- | some (Nat.succ i) => sorry
+
+        -- cases preds.indexOf? u
+        -- case a.none => sorry
+        -- case a.some val =>
+        --   cases val
+        --   case zero => sorry
+        --   case succ i => sorry
+
+        -- match indx with
+        -- | none =>
+        --   have h₃ : u ∈ preds := by
+        --     sorry
+        --   rw [← indexOf?_none] at hindx
+        --   exact absurd h₃ hindx
+
+        -- | some Nat.zero =>
+        --   sorry
+
+        -- | some (Nat.succ i) =>
+        --   let u' := preds.get! (i + 1)
+        --   sorry
+
+        -- We now consider the node immediately after 'u' in the preds,
+        -- i.e. if u is preds[i], this u' is preds[i+1]
+        -- let u' := preds.get! (preds.indexOf? u + 1)
+
+        -- This u is both in the set, and is the smallest such u.
+        -- have hu : u ∈ X ∧ ∀ v, v ∈ X →
+        --   (preds.indexOf? u < preds.indexOf? v) ∨ preds.indexOf? u = preds.indexOf? v :=
+        --   sorry
+          -- ⟨WellFounded.min_mem _ _ _,
+          --   fun v hv => WellFounded.not_lt_min hwf _ _ hv⟩
+
+        -- cases (hu.2 _ _)
+        -- case inl h₂ => sorry
+        -- case inr h₂ => sorry
+
+        -- By the Well-Ordering principle, this u ⟶ w is the *least*
+        -- such one that is inactive.
+
+
+        -- match hcontr with
+        -- | ⟨u, hu⟩ =>
+
+
+          /-
+          -- Using Well-Ordering principle:
+          generalize hS : (propagate net A ∩ propagate net B) = S
+          have hn : n ∈ S := by
+            rw [← hS]
+            exact h₁
+          have h_nonempty : Set.Nonempty S := ⟨n, hn⟩
+          let m := WellFounded.min (layer_wellfounded net) S h_nonempty
+
+          -- This m is both in the set, and is the smallest such m.
+          have hm : m ∈ S ∧ ∀ x, x ∈ S → layer net m ≤ layer net x :=
+            ⟨WellFounded.min_mem _ _ _,
+            fun x hx => le_of_not_le (WellFounded.not_lt_min (layer_wellfounded net) _ _ hx)⟩
+
+          -- Either layer[m] ≤ layer[n]   or  layer[m] = layer[n]
+          cases lt_or_eq_of_le (hm.2 n hn)
+          -/
+
+          /-
+          -- Breaking apart Inhibition edge:
+          intro b m n h₁
+          conv at h₁ => simp
+          generalize hpreds : (Finset.filter (fun u => M.Pref u n) M.worlds.elems).toList = preds
+          rw [hpreds] at h₁
+
+          -- We show that m is a predecessor of n, by cases on
+          -- the index of m in preds(n)
+          have h₂ : m ∈ preds := by
+            split at h₁
+            case _ h₂ => exact h₁.elim
+            case _ h₂ => exact indexOf?_some.mpr ⟨0, h₂⟩
+            case _ i h₂ => exact indexOf?_some.mpr ⟨i + 1, h₂⟩
+          -/
 
 
       -- Applying our Inductive Hypothesis, this says that every

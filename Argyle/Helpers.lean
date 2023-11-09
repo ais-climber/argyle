@@ -364,6 +364,11 @@ theorem indexOf?_some [BEq α] {ls : List α} {x : α} :
       match h₁ with
       | ⟨i, hi⟩ => sorry
 
+--------------------------------------------------------------------
+theorem indexOf?_none [BEq α] {ls : List α} {x : α} :
+  x ∉ ls ↔ List.indexOf? x ls = none := by
+--------------------------------------------------------------------
+  sorry
 
 -- List.indexOf? m (Finset.toList (Finset.filter (fun u => Pref M u n) Fintype.elems)) = some (Nat.succ i)
 
